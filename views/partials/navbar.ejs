@@ -7,6 +7,7 @@
 
       <% if (user) { %>
         <li><a href="/dashboard" class="<%= currentPath === '/dashboard' ? 'active' : '' %>">Dashboard</a></li>
+        <li><a href="/recipes" class="<%= currentPath.startsWith('/recipes') ? 'active' : '' %>">Recipes</a></li>
         <li class="navbar-user">
           <span>Hello, <%= user.user_metadata?.name || user.email %></span>
           <a href="/auth/logout" class="btn btn-outline">Logout</a>

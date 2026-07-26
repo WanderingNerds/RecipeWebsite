@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= title %> | Recipe Website</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="/css/organic.css">
+</head>
+<body class="organic-theme">
+  <% if (success && success.length > 0) { %>
+    <div style="position:fixed;top:20px;right:20px;background:var(--color-accent-2-100);color:var(--color-accent-2-800);padding:var(--space-3) var(--space-4);border-radius:var(--radius-md);box-shadow:var(--shadow-md);z-index:1000;">
+      <%= success %>
+    </div>
+  <% } %>
+
+  <% if (error && error.length > 0) { %>
+    <div style="position:fixed;top:20px;right:20px;background:var(--color-accent-200);color:var(--color-accent-800);padding:var(--space-3) var(--space-4);border-radius:var(--radius-md);box-shadow:var(--shadow-md);z-index:1000;">
+      <%= error %>
+    </div>
+  <% } %>
+
+  <%- body %>
+
+</body>
+</html>

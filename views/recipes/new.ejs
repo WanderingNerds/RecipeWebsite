@@ -1,0 +1,115 @@
+<div class="container" style="max-width: 1000px; margin: 0 auto; padding: 2rem 1rem;">
+
+  <div style="margin-bottom: 2rem;">
+    <span style="display: inline-block; background-color: #f8d7da; color: #721c24; padding: 0.25rem 0.75rem; border-radius: 4px; font-size: 0.875rem; margin-bottom: 1rem;">New recipe</span>
+    <h1 style="margin-bottom: 0.5rem;">Add a recipe to your collection</h1>
+    <p style="color: var(--text-muted); max-width: 600px;">Fill in the details below. Only a title and instructions are required — everything else is optional.</p>
+  </div>
+
+  <form action="/recipes" method="POST" enctype="multipart/form-data">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+    <div style="background: var(--card-background); padding: 2rem; border-radius: var(--radius); box-shadow: var(--shadow);">
+
+      <!-- Two column layout for desktop, single column for mobile -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 2rem;">
+
+        <!-- Left column -->
+        <div style="grid-column: 1 / -1;">
+          <!-- Photo upload -->
+          <div style="margin-bottom: 1.5rem;">
+            <label for="photo" style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Recipe Photo (optional)</label>
+            <input type="file" id="photo" name="photo" accept="image/*" style="display: none;">
+            <div id="photoPreview" style="background: linear-gradient(135deg, #f0f0f0 25%, #e0e0e0 25%, #e0e0e0 50%, #f0f0f0 50%, #f0f0f0 75%, #e0e0e0 75%, #e0e0e0); background-size: 20px 20px; width: 100%; height: 200px; border-radius: var(--radius); display: flex; align-items: center; justify-content: center; cursor: pointer; position: relative; overflow: hidden;">
+              <span id="photoPlaceholder" style="background: white; padding: 0.5rem 1rem; border-radius: 20px; font-size: 0.875rem; color: var(--text-muted);">Click to upload photo of the finished dish</span>
+              <img id="photoImage" style="display: none; width: 100%; height: 100%; object-fit: cover;">
+            </div>
+          </div>
+        </div>
+
+        <!-- Basic Info Section -->
+        <div>
+          <h3 style="font-size: 1.25rem; margin-bottom: 1rem; color: var(--primary-color);">Basic Information</h3>
+
+          <div class="form-group">
+            <label>Title <span style="color: var(--error-color);">*</span></label>
+            <input type="text" name="title" placeholder="e.g. Grandma's Sunday Sauce" required>
+          </div>
+
+          <div class="form-group">
+            <label>Author</label>
+            <input type="text" name="author" placeholder="Your name" value="<%= user.user_metadata?.name || user.email %>">
+          </div>
+
+          <!-- Meta fields grid -->
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="form-group">
+              <label>Prep time</label>
+              <input type="text" name="prepTime" placeholder="15 min">
+            </div>
+            <div class="form-group">
+              <label>Cook time</label>
+              <input type="text" name="cookTime" placeholder="40 min">
+            </div>
+            <div class="form-group">
+              <label>Servings</label>
+              <input type="text" name="servings" placeholder="4">
+            </div>
+            <div class="form-group">
+              <label>Difficulty</label>
+              <select name="difficulty" style="width: 100%; padding: 0.75rem 1rem; border: 1px solid var(--border-color); border-radius: var(--radius); font-size: 1rem;">
+                <option value="Easy">Easy</option>
+                <option value="Medium">Medium</option>
+                <option value="Hard">Hard</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Ingredients Section -->
+        <div>
+          <h3 style="font-size: 1.25rem; margin-bottom: 1rem; color: var(--primary-color);">Ingredients</h3>
+          <div class="form-group">
+            <p style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 0.5rem;">One per line, including measurements</p>
+            <textarea name="ingredients" rows="12" placeholder="2 cups flour&#10;1 tsp salt&#10;3 tbsp olive oil&#10;..." style="width: 100%; padding: 0.75rem 1rem; border: 1px solid var(--border-color); border-radius: var(--radius); font-size: 1rem; font-family: inherit; resize: vertical;"></textarea>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Instructions Section (full width) -->
+      <div style="margin-bottom: 1.5rem;">
+        <h3 style="font-size: 1.25rem; margin-bottom: 1rem; color: var(--primary-color);">Instructions <span style="color: var(--error-color);">*</span></h3>
+        <div class="form-group">
+          <p style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 0.5rem;">Walk through the steps in order</p>
+          <textarea name="instructions" rows="8" required placeholder="1. Preheat the oven to 375°F.&#10;2. In a large bowl, whisk together..." style="width: 100%; padding: 0.75rem 1rem; border: 1px solid var(--border-color); border-radius: var(--radius); font-size: 1rem; font-family: inherit; resize: vertical;"></textarea>
+        </div>
+      </div>
+
+      <!-- Tips & notes -->
+      <div style="background-color: #e8f4f8; border-radius: var(--radius); padding: 1.5rem; margin-bottom: 1.5rem;">
+        <h3 style="font-size: 1.125rem; margin-bottom: 0.5rem; color: var(--text-color);">Tips & notes</h3>
+        <p style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 0.75rem;">Substitutions, storage tips, or anything else worth remembering</p>
+        <textarea name="notes" rows="3" style="background: white; width: 100%; padding: 0.75rem 1rem; border: 1px solid var(--border-color); border-radius: var(--radius); font-size: 1rem; font-family: inherit; resize: vertical;" placeholder="This freezes well for up to 3 months. Swap butter for olive oil for a dairy-free version."></textarea>
+      </div>
+
+      <!-- Submit buttons -->
+      <div style="display: flex; justify-content: flex-end; gap: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
+        <button type="submit" name="action" value="draft" class="btn btn-outline">Save as draft</button>
+        <button type="submit" name="action" value="publish" class="btn btn-primary">Publish recipe</button>
+      </div>
+
+    </div>
+  </form>
+
+</div>
+
+<style>
+  /* Responsive layout - stack on mobile */
+  @media (max-width: 768px) {
+    .container > form > div > div {
+      grid-template-columns: 1fr !important;
+    }
+  }
+</style>
+
+<script src="/js/recipe-form.js"></script>

@@ -40,6 +40,7 @@ export async function requireAuth(req, res, next) {
           });
 
           req.user = refreshData.user;
+          req.accessToken = refreshData.session.access_token; // Attach access token for Supabase client
           res.locals.user = refreshData.user;
           return next();
         }
@@ -50,6 +51,7 @@ export async function requireAuth(req, res, next) {
     }
 
     req.user = user;
+    req.accessToken = accessToken; // Attach access token for Supabase client
     res.locals.user = user;
     next();
   } catch (error) {
