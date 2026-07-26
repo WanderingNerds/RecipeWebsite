@@ -1,0 +1,33 @@
+<section class="hero">
+  <h1>Welcome to Recipe Website</h1>
+  <p>Discover and share delicious recipes from around the world.</p>
+
+  <% if (!user) { %>
+    <div class="hero-actions">
+      <a href="/auth/register" class="btn btn-primary btn-lg">Get Started</a>
+      <a href="/auth/login" class="btn btn-outline btn-lg">Login</a>
+    </div>
+  <% } else { %>
+    <div class="hero-actions">
+      <a href="/dashboard" class="btn btn-primary btn-lg">Go to Dashboard</a>
+    </div>
+  <% } %>
+</section>
+
+<section class="features">
+  <h2>Why Choose Us?</h2>
+  <div class="features-grid">
+    <div class="feature-card">
+      <h3>Easy to Use</h3>
+      <p>Simple and intuitive interface for managing your recipes.</p>
+    </div>
+    <div class="feature-card">
+      <h3>Secure</h3>
+      <p>Your data is protected with industry-standard encryption.</p>
+    </div>
+    <div class="feature-card">
+      <h3>Share & Discover</h3>
+      <p>Connect with other food lovers and discover new recipes.</p>
+    </div>
+  </div>
+</section>

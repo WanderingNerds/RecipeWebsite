@@ -1,0 +1,18 @@
+<section class="dashboard">
+  <h1>Dashboard</h1>
+  <p>Welcome back, <strong><%= user.user_metadata?.name || user.email %></strong>!</p>
+
+  <div class="dashboard-info">
+    <h2>Your Account</h2>
+    <div class="info-card">
+      <p><strong>Email:</strong> <%= user.email %></p>
+      <p><strong>Email Verified:</strong> <%= user.email_confirmed_at ? 'Yes' : 'No' %></p>
+      <p><strong>Member since:</strong> <%= new Date(user.created_at).toLocaleDateString() %></p>
+    </div>
+  </div>
+
+  <div class="dashboard-actions">
+    <h2>Quick Actions</h2>
+    <p>Recipe features coming soon!</p>
+  </div>
+</section>
