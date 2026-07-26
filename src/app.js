@@ -80,7 +80,11 @@ const generalLimiter = rateLimit({
 app.use(generalLimiter);
 
 // CSRF Protection
-const csrfProtection = doubleCsrf({
+const {
+  invalidCsrfTokenError,
+  generateToken,
+  doubleCsrfProtection,
+} = doubleCsrf({
   getSecret: () => process.env.SESSION_SECRET || "dev-secret",
   cookieName: process.env.NODE_ENV === "production"
     ? "__Host-psifi.x-csrf-token"
@@ -95,11 +99,17 @@ const csrfProtection = doubleCsrf({
 });
 
 // Apply CSRF protection
-app.use(csrfProtection.doubleCsrfProtection);
+app.use(doubleCsrfProtection);
 
-// Make CSRF token available to all views
+// Make CSRF token available to all views using a getter
+// This delays token generation until it's actually accessed
 app.use((req, res, next) => {
-  res.locals.csrfToken = csrfProtection.generateToken(req, res);
+  Object.defineProperty(res.locals, 'csrfToken', {
+    get: function() {
+      return generateToken(req, res);
+    },
+    configurable: true,
+  });
   next();
 });
 
