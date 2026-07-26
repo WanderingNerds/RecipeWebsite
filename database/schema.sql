@@ -1,0 +1,38 @@
+-- Supabase Auth handles user authentication tables automatically
+-- This file contains additional tables for the recipe application
+
+-- Note: Supabase creates the auth.users table automatically
+-- You can access user data via auth.users() in RLS policies
+
+-- Example: Future recipe tables (add when implementing recipe features)
+--
+-- CREATE TABLE public.recipes (
+--     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+--     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+--     title TEXT NOT NULL,
+--     description TEXT,
+--     ingredients JSONB NOT NULL,
+--     instructions JSONB NOT NULL,
+--     prep_time INTEGER,
+--     cook_time INTEGER,
+--     servings INTEGER,
+--     image_url TEXT,
+--     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+--     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+-- );
+--
+-- -- Enable Row Level Security
+-- ALTER TABLE public.recipes ENABLE ROW LEVEL SECURITY;
+--
+-- -- Policies
+-- CREATE POLICY "Users can view all recipes" ON public.recipes
+--     FOR SELECT USING (true);
+--
+-- CREATE POLICY "Users can create their own recipes" ON public.recipes
+--     FOR INSERT WITH CHECK (auth.uid() = user_id);
+--
+-- CREATE POLICY "Users can update their own recipes" ON public.recipes
+--     FOR UPDATE USING (auth.uid() = user_id);
+--
+-- CREATE POLICY "Users can delete their own recipes" ON public.recipes
+--     FOR DELETE USING (auth.uid() = user_id);

@@ -1,0 +1,37 @@
+{
+  "name": "recipe-website",
+  "version": "1.0.0",
+  "description": "A recipe website with Supabase authentication",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/WanderingNerds/RecipeWebsite.git"
+  },
+  "keywords": ["recipe", "authentication", "supabase", "express"],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/WanderingNerds/RecipeWebsite/issues"
+  },
+  "homepage": "https://github.com/WanderingNerds/RecipeWebsite#readme",
+  "dependencies": {
+    "express": "^5.0.0",
+    "@supabase/supabase-js": "^2.45.0",
+    "ejs": "^3.1.10",
+    "express-ejs-layouts": "^2.5.1",
+    "dotenv": "^16.4.0",
+    "helmet": "^8.0.0",
+    "cors": "^2.8.5",
+    "connect-flash": "^0.1.1",
+    "express-session": "^1.18.0",
+    "cookie-parser": "^1.4.6"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  }
+}

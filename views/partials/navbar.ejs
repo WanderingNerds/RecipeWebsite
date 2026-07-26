@@ -1,0 +1,20 @@
+<nav class="navbar">
+  <div class="container navbar-container">
+    <a href="/" class="navbar-brand">Recipe Website</a>
+
+    <ul class="navbar-nav">
+      <li><a href="/" class="<%= currentPath === '/' ? 'active' : '' %>">Home</a></li>
+
+      <% if (user) { %>
+        <li><a href="/dashboard" class="<%= currentPath === '/dashboard' ? 'active' : '' %>">Dashboard</a></li>
+        <li class="navbar-user">
+          <span>Hello, <%= user.user_metadata?.name || user.email %></span>
+          <a href="/auth/logout" class="btn btn-outline">Logout</a>
+        </li>
+      <% } else { %>
+        <li><a href="/auth/login" class="<%= currentPath === '/auth/login' ? 'active' : '' %>">Login</a></li>
+        <li><a href="/auth/register" class="btn btn-primary">Sign Up</a></li>
+      <% } %>
+    </ul>
+  </div>
+</nav>
