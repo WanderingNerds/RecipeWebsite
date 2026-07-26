@@ -30,9 +30,16 @@ app.use(helmet({
 }));
 
 app.use(cors({
-  origin: process.env.APP_URL || "http://localhost:3000",
+  origin: process.env.NODE_ENV === "production"
+    ? process.env.APP_URL
+    : "http://localhost:3000",
   credentials: true,
 }));
+
+// Trust proxy for Vercel
+if (process.env.NODE_ENV === "production") {
+  app.set("trust proxy", 1);
+}
 
 // Cookie parser for auth tokens
 app.use(cookieParser());
@@ -43,12 +50,13 @@ app.use(express.urlencoded({ extended: true }));
 
 // Session for flash messages
 app.use(session({
-  secret: process.env.SESSION_SECRET,
+  secret: process.env.SESSION_SECRET || "dev-secret",
   resave: false,
   saveUninitialized: false,
   cookie: {
     secure: process.env.NODE_ENV === "production",
     httpOnly: true,
+    sameSite: "lax",
     maxAge: 1000 * 60 * 60, // 1 hour for flash messages
   },
 }));
