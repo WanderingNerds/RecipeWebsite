@@ -4,6 +4,8 @@
     <p>Join us and start sharing your favorite recipes!</p>
 
     <form action="/auth/register" method="POST" class="auth-form">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+
       <div class="form-group">
         <label for="name">Name</label>
         <input type="text" id="name" name="name" required placeholder="Enter your name">
