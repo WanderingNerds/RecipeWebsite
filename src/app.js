@@ -14,6 +14,9 @@ import routes from "./routes/index.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Use project root for Vercel compatibility
+const projectRoot = process.cwd();
+
 const app = express();
 
 // Security middleware
@@ -63,11 +66,11 @@ app.use(session({
 app.use(flash());
 
 // Static files
-app.use(express.static(path.join(__dirname, "../public")));
+app.use(express.static(path.join(projectRoot, "public")));
 
 // View engine setup
 app.set("view engine", "ejs");
-app.set("views", path.join(__dirname, "../views"));
+app.set("views", path.join(projectRoot, "views"));
 app.use(expressLayouts);
 app.set("layout", "layouts/main");
 
