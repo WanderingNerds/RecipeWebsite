@@ -1,30 +1,97 @@
 # Dependencies
 node_modules/
+.pnp
+.pnp.js
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
 
-# Environment
+# Environment Variables (CRITICAL - Never commit!)
 .env
 .env.local
 .env.*.local
+.env.production
+.env.development
+.env.test
 
 # Logs
 logs/
 *.log
 npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.npm
 
-# OS
+# OS Files
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
+Desktop.ini
 
-# IDE
+# IDE / Editors
 .vscode/
 .idea/
 *.swp
 *.swo
+*.swn
+*~
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
+*.sublime-project
 
 # Build
 dist/
 build/
+out/
+.next/
+.vercel
 
-# Uploads
+# Coverage & Testing
+coverage/
+.nyc_output/
+*.coverage
+.cache
+
+# Uploads (user-generated content)
 public/uploads/*
 !public/uploads/.gitkeep
+
+# Session Data (if using file-based sessions)
+sessions/
+*.session
+
+# Temporary Files
+tmp/
+temp/
+*.tmp
+*.bak
+*.swp
+
+# Security & Secrets (CRITICAL)
+*.pem
+*.key
+*.cert
+*.p12
+*.pfx
+secrets.json
+credentials.json
+
+# Optional - Remove if you want to version these
+package-lock.json  # Some teams version this, some don't
+pnpm-lock.yaml
+yarn.lock
+
+# Security Review Documents (optional - remove if making repo public)
+SECURITY_*.md
+PRE_COMMIT_CHECKLIST.md
+GIT_TROUBLESHOOTING.md

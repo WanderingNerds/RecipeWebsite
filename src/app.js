@@ -7,6 +7,8 @@ import expressLayouts from "express-ejs-layouts";
 import session from "express-session";
 import flash from "connect-flash";
 import cookieParser from "cookie-parser";
+import rateLimit from "express-rate-limit";
+import { doubleCsrf } from "csrf-csrf";
 import { optionalAuth } from "./middleware/authMiddleware.js";
 import { notFoundHandler, errorHandler } from "./middleware/errorHandler.js";
 import routes from "./routes/index.js";
@@ -64,6 +66,40 @@ app.use(session({
   },
 }));
 app.use(flash());
+
+// Rate limiting
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per windowMs
+  message: 'Too many requests from this IP, please try again later.',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Apply general rate limiting to all requests
+app.use(generalLimiter);
+
+// CSRF Protection
+const { doubleCsrfProtection, generateToken } = doubleCsrf({
+  getSecret: () => process.env.SESSION_SECRET || "dev-secret",
+  cookieName: "__Host-psifi.x-csrf-token",
+  cookieOptions: {
+    sameSite: "lax",
+    path: "/",
+    secure: process.env.NODE_ENV === "production",
+  },
+  size: 64,
+  ignoredMethods: ["GET", "HEAD", "OPTIONS"],
+});
+
+// Apply CSRF protection
+app.use(doubleCsrfProtection);
+
+// Make CSRF token available to all views
+app.use((req, res, next) => {
+  res.locals.csrfToken = generateToken(req, res);
+  next();
+});
 
 // Static files
 app.use(express.static(path.join(projectRoot, "public")));

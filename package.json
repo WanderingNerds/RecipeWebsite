@@ -17,7 +17,12 @@
     "type": "git",
     "url": "git+https://github.com/WanderingNerds/RecipeWebsite.git"
   },
-  "keywords": ["recipe", "authentication", "supabase", "express"],
+  "keywords": [
+    "recipe",
+    "authentication",
+    "supabase",
+    "express"
+  ],
   "author": "",
   "license": "ISC",
   "bugs": {
@@ -25,16 +30,21 @@
   },
   "homepage": "https://github.com/WanderingNerds/RecipeWebsite#readme",
   "dependencies": {
-    "express": "^5.0.0",
     "@supabase/supabase-js": "^2.45.0",
-    "ejs": "^3.1.10",
-    "express-ejs-layouts": "^2.5.1",
-    "dotenv": "^16.4.0",
-    "helmet": "^8.0.0",
-    "cors": "^2.8.5",
     "connect-flash": "^0.1.1",
+    "cookie-parser": "^1.4.6",
+    "cors": "^2.8.5",
+    "csrf-csrf": "^4.0.3",
+    "dotenv": "^16.4.0",
+    "ejs": "^3.1.10",
+    "express": "^5.0.0",
+    "express-ejs-layouts": "^2.5.1",
+    "express-rate-limit": "^8.6.0",
     "express-session": "^1.18.0",
-    "cookie-parser": "^1.4.6"
+    "file-type": "^22.0.1",
+    "helmet": "^8.0.0",
+    "multer": "^2.2.0",
+    "sharp": "^0.35.3"
   },
   "devDependencies": {
     "nodemon": "^3.1.0"
