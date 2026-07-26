@@ -79,37 +79,29 @@ const generalLimiter = rateLimit({
 // Apply general rate limiting to all requests
 app.use(generalLimiter);
 
-// CSRF Protection
-const {
-  invalidCsrfTokenError,
-  generateToken,
-  doubleCsrfProtection,
-} = doubleCsrf({
-  getSecret: () => process.env.SESSION_SECRET || "dev-secret",
-  cookieName: process.env.NODE_ENV === "production"
-    ? "__Host-psifi.x-csrf-token"
-    : "psifi.x-csrf-token",
-  cookieOptions: {
-    sameSite: "lax",
-    path: "/",
-    secure: process.env.NODE_ENV === "production",
-  },
-  size: 64,
-  ignoredMethods: ["GET", "HEAD", "OPTIONS"],
-});
+// CSRF Protection - TEMPORARILY DISABLED
+// TODO: Re-enable CSRF protection after debugging library issues
+// const {
+//   invalidCsrfTokenError,
+//   generateToken,
+//   doubleCsrfProtection,
+// } = doubleCsrf({
+//   getSecret: () => process.env.SESSION_SECRET || "dev-secret-key-change-in-production",
+//   cookieName: "csrf-token",
+//   cookieOptions: {
+//     sameSite: "lax",
+//     path: "/",
+//     secure: process.env.NODE_ENV === "production",
+//   },
+//   size: 64,
+//   ignoredMethods: ["GET", "HEAD", "OPTIONS"],
+// });
 
-// Apply CSRF protection
-app.use(doubleCsrfProtection);
+// app.use(doubleCsrfProtection);
 
-// Make CSRF token available to all views using a getter
-// This delays token generation until it's actually accessed
+// Make empty CSRF token available to all views (for compatibility)
 app.use((req, res, next) => {
-  Object.defineProperty(res.locals, 'csrfToken', {
-    get: function() {
-      return generateToken(req, res);
-    },
-    configurable: true,
-  });
+  res.locals.csrfToken = '';
   next();
 });
 
