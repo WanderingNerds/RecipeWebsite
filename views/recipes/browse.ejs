@@ -1,0 +1,47 @@
+<div class="page-narrow">
+
+  <header class="page-header">
+    <h1>Browse Recipes</h1>
+    <p class="page-subtitle">Every published recipe, newest first.</p>
+  </header>
+
+  <form class="search-form" action="/search" method="GET" role="search">
+    <input
+      type="search"
+      name="q"
+      placeholder="Search recipes&hellip;"
+      aria-label="Search recipes"
+      maxlength="100"
+    >
+    <button type="submit" class="btn btn-primary">Search</button>
+  </form>
+
+  <% if (recipes.length === 0) { %>
+
+    <div class="empty-state">
+      <h3>No published recipes yet</h3>
+      <p>Once someone publishes a recipe it will show up here.</p>
+      <% if (user) { %>
+        <a href="/recipes/new" class="btn btn-primary">Add the first recipe</a>
+      <% } else { %>
+        <a href="/auth/register" class="btn btn-primary">Sign up to add one</a>
+      <% } %>
+    </div>
+
+  <% } else { %>
+
+    <p class="result-count">
+      <%= totalCount %> published <%= totalCount === 1 ? "recipe" : "recipes" %>
+    </p>
+
+    <div class="recipe-grid">
+      <% recipes.forEach(recipe => { %>
+        <%- include('../partials/recipe-card', { recipe }) %>
+      <% }); %>
+    </div>
+
+    <%- include('../partials/pagination', { page, totalPages, baseHref: "/browse?" }) %>
+
+  <% } %>
+
+</div>
