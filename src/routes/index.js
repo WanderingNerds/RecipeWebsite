@@ -1,6 +1,7 @@
 import { Router } from "express";
 import authRoutes from "./authRoutes.js";
 import recipeRoutes from "./recipeRoutes.js";
+import publicRoutes from "./publicRoutes.js";
 import { requireAuth } from "../middleware/authMiddleware.js";
 
 const router = Router();
@@ -11,6 +12,9 @@ router.get("/", (req, res) => {
     title: "Recipe Website",
   });
 });
+
+// Public search and browse (no login required)
+router.use("/", publicRoutes);
 
 // Auth routes
 router.use("/auth", authRoutes);
