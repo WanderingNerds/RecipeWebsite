@@ -4,6 +4,8 @@ import { createSupabaseClient } from "../config/supabase.js";
 import multer from "multer";
 import rateLimit from "express-rate-limit";
 import { generateThumbnail, optimizeImage, validateImageFile } from "../utils/imageUtils.js";
+import { parseIngredients } from "../utils/ingredientParser.js";
+import { resolveScaling, scaleIngredients, QUICK_SCALE_FACTORS } from "../utils/ingredientScaler.js";
 
 const router = Router();
 
@@ -315,10 +317,23 @@ router.get("/:id", requireAuth, async (req, res) => {
     // Check if current user is the owner
     const isOwner = recipe.user_id === req.user.id;
 
+    // Convert the free-text ingredients into quantity / unit / ingredient rows
+    const ingredientRows = parseIngredients(recipe.ingredients);
+
+    // Scale them to the requested servings (?servings=8) or multiplier (?scale=2)
+    const scaling = resolveScaling({
+      servingsText: recipe.servings,
+      requestedServings: req.query.servings,
+      requestedScale: req.query.scale,
+    });
+
     res.render("recipes/view", {
       title: recipe.title,
       recipe,
       isOwner,
+      ingredientRows: scaleIngredients(ingredientRows, scaling.factor),
+      scaling,
+      quickScaleFactors: QUICK_SCALE_FACTORS,
     });
   } catch (error) {
     console.error("Error viewing recipe:", error);
