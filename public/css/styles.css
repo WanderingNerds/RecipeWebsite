@@ -387,6 +387,141 @@ a:hover {
   margin: 0;
 }
 
+/* Recipe scaling control */
+.scale-control {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.scale-label {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.scale-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.25rem;
+  padding: 0.35rem 0.7rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  background-color: var(--card-background);
+  color: var(--text-color);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.4;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.scale-btn:hover {
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+  text-decoration: none;
+}
+
+.scale-btn.is-active {
+  background-color: var(--primary-color);
+  border-color: var(--primary-color);
+  color: white;
+}
+
+.scale-servings-form {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+}
+
+.scale-servings-input {
+  width: 3.75rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  font-size: 0.9375rem;
+  font-family: inherit;
+  text-align: center;
+}
+
+/* Hide number input spinner arrows */
+.scale-servings-input::-webkit-outer-spin-button,
+.scale-servings-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.scale-servings-input[type=number] {
+  -moz-appearance: textfield;
+}
+
+.scale-reset {
+  font-size: 0.875rem;
+  color: var(--primary-color);
+  text-decoration: none;
+}
+
+.scale-notice {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  margin: 0 0 1rem 0;
+}
+
+/* Ingredient list */
+.ingredient-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.ingredient-section {
+  font-weight: 600;
+  color: var(--text-color);
+  padding: 1.25rem 0 0.5rem 0;
+}
+
+.ingredient-row {
+  display: flex;
+  gap: 1rem;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--border-color);
+  line-height: 1.5;
+}
+
+.ingredient-amount {
+  flex: 0 0 8.5rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.amount-primary {
+  font-weight: 600;
+  color: var(--text-color);
+}
+
+.amount-secondary {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.ingredient-name {
+  flex: 1;
+}
+
+.ingredient-note {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.ingredient-footnote {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  margin: 1rem 0 0 0;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .hero h1 {

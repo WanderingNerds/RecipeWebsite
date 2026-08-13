@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(npm audit:*)",
-      "Bash(git --version:*)"
+      "Bash(git --version:*)",
+      "Bash(npm start)"
     ]
   }
 }
