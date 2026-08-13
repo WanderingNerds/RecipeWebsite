@@ -447,6 +447,17 @@ a:hover {
   text-align: center;
 }
 
+/* Hide number input spinner arrows */
+.scale-servings-input::-webkit-outer-spin-button,
+.scale-servings-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.scale-servings-input[type=number] {
+  -moz-appearance: textfield;
+}
+
 .scale-reset {
   font-size: 0.875rem;
   color: var(--primary-color);

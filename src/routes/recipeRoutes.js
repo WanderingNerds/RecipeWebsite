@@ -297,6 +297,43 @@ router.post("/:id/delete", requireAuth, async (req, res) => {
   }
 });
 
+// GET /recipes/:id/scale - API endpoint for instant scaling (returns JSON)
+router.get("/:id/scale", requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const supabaseClient = createSupabaseClient(req.accessToken);
+
+    const { data: recipe, error } = await supabaseClient
+      .from("recipes")
+      .select("*")
+      .eq("id", id)
+      .single();
+
+    if (error || !recipe) {
+      return res.status(404).json({ error: "Recipe not found" });
+    }
+
+    // Convert the free-text ingredients into quantity / unit / ingredient rows
+    const ingredientRows = parseIngredients(recipe.ingredients);
+
+    // Scale them to the requested servings (?servings=8) or multiplier (?scale=2)
+    const scaling = resolveScaling({
+      servingsText: recipe.servings,
+      requestedServings: req.query.servings,
+      requestedScale: req.query.scale,
+    });
+
+    // Return JSON with scaled ingredients and scaling info
+    res.json({
+      ingredientRows: scaleIngredients(ingredientRows, scaling.factor),
+      scaling,
+    });
+  } catch (error) {
+    console.error("Error scaling recipe:", error);
+    res.status(500).json({ error: "An unexpected error occurred" });
+  }
+});
+
 // GET /recipes/:id - View a single recipe
 router.get("/:id", requireAuth, async (req, res) => {
   try {
