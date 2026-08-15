@@ -95,3 +95,4 @@ yarn.lock
 SECURITY_*.md
 PRE_COMMIT_CHECKLIST.md
 GIT_TROUBLESHOOTING.md
+.mcp.json
