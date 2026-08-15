@@ -1,0 +1,34 @@
+<article class="recipe-card">
+  <a href="/r/<%= recipe.id %>" class="recipe-card-media" aria-hidden="<%= recipe.thumbnail_url ? 'false' : 'true' %>" tabindex="-1">
+    <% if (recipe.thumbnail_url) { %>
+      <img src="<%= recipe.thumbnail_url %>" alt="" loading="lazy">
+    <% } else { %>
+      <span class="recipe-card-placeholder">🍽️</span>
+    <% } %>
+  </a>
+
+  <div class="recipe-card-body">
+    <h3 class="recipe-card-title">
+      <a href="/r/<%= recipe.id %>"><%= recipe.title %></a>
+    </h3>
+
+    <% if (recipe.author) { %>
+      <p class="recipe-card-author">By <%= recipe.author %></p>
+    <% } %>
+
+    <div class="recipe-card-meta">
+      <% if (recipe.prep_time) { %>
+        <span>⏱️ Prep: <%= recipe.prep_time %></span>
+      <% } %>
+      <% if (recipe.cook_time) { %>
+        <span>🔥 Cook: <%= recipe.cook_time %></span>
+      <% } %>
+      <% if (recipe.servings) { %>
+        <span>🍽️ <%= recipe.servings %> servings</span>
+      <% } %>
+      <% if (recipe.difficulty) { %>
+        <span>📊 <%= recipe.difficulty %></span>
+      <% } %>
+    </div>
+  </div>
+</article>

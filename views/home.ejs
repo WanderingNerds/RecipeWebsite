@@ -2,16 +2,25 @@
   <h1>Welcome to Recipe Website</h1>
   <p>Discover and share delicious recipes from around the world.</p>
 
-  <% if (!user) { %>
-    <div class="hero-actions">
+  <form class="search-form search-form-lg search-form-hero" action="/search" method="GET" role="search">
+    <input
+      type="search"
+      name="q"
+      placeholder="Search recipes by name or ingredient&hellip;"
+      aria-label="Search recipes"
+      maxlength="100"
+    >
+    <button type="submit" class="btn btn-primary">Search</button>
+  </form>
+
+  <div class="hero-actions">
+    <a href="/browse" class="btn btn-outline btn-lg">Browse All Recipes</a>
+    <% if (!user) { %>
       <a href="/auth/register" class="btn btn-primary btn-lg">Get Started</a>
-      <a href="/auth/login" class="btn btn-outline btn-lg">Login</a>
-    </div>
-  <% } else { %>
-    <div class="hero-actions">
+    <% } else { %>
       <a href="/dashboard" class="btn btn-primary btn-lg">Go to Dashboard</a>
-    </div>
-  <% } %>
+    <% } %>
+  </div>
 </section>
 
 <section class="features">
