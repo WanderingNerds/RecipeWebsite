@@ -3,7 +3,8 @@
     "allow": [
       "Bash(npm audit:*)",
       "Bash(git --version:*)",
-      "Bash(npm start)"
+      "Bash(npm start)",
+      "Bash(dir:*)"
     ]
   }
 }
