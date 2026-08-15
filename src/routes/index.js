@@ -3,6 +3,7 @@ import authRoutes from "./authRoutes.js";
 import recipeRoutes from "./recipeRoutes.js";
 import categoryRoutes from "./categoryRoutes.js";
 import tagRoutes from "./tagRoutes.js";
+import publicRoutes from "./publicRoutes.js";
 import { requireAuth } from "../middleware/authMiddleware.js";
 
 const router = Router();
