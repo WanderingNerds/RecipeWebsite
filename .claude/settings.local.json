@@ -4,7 +4,9 @@
       "Bash(npm audit:*)",
       "Bash(git --version:*)",
       "Bash(npm start)",
-      "Bash(dir:*)"
+      "Bash(dir:*)",
+      "mcp__claude_ai_Atlassian_Rovo__getAccessibleAtlassianResources",
+      "mcp__claude_ai_Atlassian_Rovo__getConfluenceSpaces"
     ]
   }
 }

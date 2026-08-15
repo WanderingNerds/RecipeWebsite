@@ -168,6 +168,20 @@ Original page reload behavior would resume.
 
 ---
 
+## Related Feature: Recipe Categories and Tagging
+
+This branch also includes the Recipe Categories and Tagging feature, which allows users to organize recipes with pre-defined categories and custom tags.
+
+**Full documentation:** See [docs/CATEGORIES_AND_TAGS.md](docs/CATEGORIES_AND_TAGS.md)
+
+**Quick Overview:**
+- 4 new database tables (categories, tags, recipe_categories, recipe_tags)
+- Category and tag selection on recipe forms
+- Filter bar on recipe index page
+- Clickable badges on recipe cards and view page
+
+---
+
 **Implemented by:** Claude Code
 **Date:** 2026-08-12
 **Branch:** REW-11-recipe-scaling-engine

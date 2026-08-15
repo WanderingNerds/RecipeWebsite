@@ -17,6 +17,40 @@ RecipeWebsite/
 
 Claude Code (and Claude in Cowork, via the Agent tool) will auto-discover them by the `name:` in each file's frontmatter.
 
+## Atlassian access (Atlassian Rovo MCP Server)
+
+These agents connect to Jira/Confluence via Atlassian's official **Rovo MCP Server** (`mcp.atlassian.com`), not a third-party connector. Every tool name in the `tools:` frontmatter (`getJiraIssue`, `createConfluencePage`, etc.) is copied verbatim from Atlassian's [supported tools list](https://support.atlassian.com/atlassian-rovo-mcp-server/docs/supported-tools/).
+
+### Connect it in Claude Code
+
+The old `/v1/sse` endpoint stopped working after June 30, 2026. Use the current endpoint and name the server exactly `atlassian` so the tool names below resolve (`mcp__atlassian__<toolName>`):
+
+```
+claude mcp add --transport http atlassian https://mcp.atlassian.com/v1/mcp
+```
+
+First use will trigger an OAuth 2.1 browser login (or configure an API token instead — see Atlassian's [authentication docs](https://support.atlassian.com/atlassian-rovo-mcp-server/docs/authentication-and-authorization/)). If you name the server something other than `atlassian`, find-and-replace the `mcp__atlassian__` prefix in all five agent files to match.
+
+### cloudId bootstrap
+
+Every Rovo MCP Jira/Confluence tool call requires a `cloudId`. Each agent is instructed to call `getAccessibleAtlassianResources` once, first, and reuse the returned `cloudId` for the rest of its Atlassian calls in that session — this is built into each agent's prompt already.
+
+### Access by agent
+
+| Agent | Jira | Confluence | Jira used for | Confluence used for |
+|---|---|---|---|---|
+| Planner | read-only | read/write | pulling ticket context into the plan | creating/updating the plan/architecture page, linked from Jira |
+| Developer | read/write | none | creating tickets if missing, transitions, comments, worklogs, linking follow-up tickets | — |
+| Reviewer | read/write | none | filing linked, assigned bug tickets for blocking issues; transitions; comments | — |
+| QA | read/write | none | filing linked, assigned bug tickets for failures; transitions; comments; worklogs | — |
+| Documentation | read + comment | read/write | commenting the Confluence link back onto every issue touched | final as-shipped write-up, architecture/API/DB pages |
+
+Only Planner and Documentation touch Confluence. Developer, Reviewer, and QA use Jira purely to keep ticket state, tracking, and assignment honest — none of them write docs.
+
+### Permissions your org admin must grant
+
+Rovo MCP gates tools by permission group. For this pipeline to work end-to-end, your Atlassian org needs `read_jira`, `write_jira`, `search_jira`, `read_confluence`, `write_confluence`, and `search_confluence` enabled for the connecting account (Confluence write only needs to reach Planner and Documentation, but Rovo MCP grants by account, not per-agent).
+
 ## Stack correction
 
 The original brief specified React for the Developer agent. The actual repo is **Node.js + Express 5 (ES modules) with server-rendered EJS views and Supabase (Postgres + Auth)** — there's no React anywhere in the codebase. All five agent prompts below are written against the real stack. If a React frontend is planned for later, say so and these prompts should be updated.
