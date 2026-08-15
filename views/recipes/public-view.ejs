@@ -1,0 +1,105 @@
+<div class="container" style="max-width: 900px; padding: 2rem 1rem;">
+
+  <div style="margin-bottom: 2rem;">
+    <a href="/browse" style="color: var(--primary-color); text-decoration: none; display: inline-flex; align-items: center; margin-bottom: 1rem;">
+      ← Back to recipes
+    </a>
+
+    <div style="display: flex; justify-content: space-between; align-items: start; gap: 1rem; margin-bottom: 1rem;">
+      <div>
+        <h1 style="margin-bottom: 0.5rem;"><%= recipe.title %></h1>
+        <% if (recipe.author) { %>
+          <p style="color: var(--text-muted);">By <%= recipe.author %></p>
+        <% } %>
+      </div>
+      <% if (isOwner) { %>
+        <a href="/recipes/<%= recipe.id %>/edit" class="btn btn-outline">Edit Recipe</a>
+      <% } %>
+    </div>
+  </div>
+
+  <div style="background: var(--card-background); padding: 2rem; border-radius: var(--radius); box-shadow: var(--shadow);">
+
+    <!-- Recipe photo -->
+    <% if (recipe.photo_url) { %>
+      <div style="margin-bottom: 2rem; background: #f5f5f5; border-radius: var(--radius); display: flex; align-items: center; justify-content: center; min-height: 300px;">
+        <img src="<%= recipe.photo_url %>" alt="<%= recipe.title %>" style="width: 100%; max-height: 400px; object-fit: contain; border-radius: var(--radius);">
+      </div>
+    <% } %>
+
+    <!-- Recipe metadata -->
+    <% if (recipe.prep_time || recipe.cook_time || recipe.servings || recipe.difficulty) { %>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1.5rem; padding: 1.5rem; background: var(--background-color); border-radius: var(--radius); margin-bottom: 2rem;">
+        <% if (recipe.prep_time) { %>
+          <div>
+            <p style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 0.25rem;">Prep Time</p>
+            <p style="font-weight: 600; margin: 0;"><%= recipe.prep_time %></p>
+          </div>
+        <% } %>
+        <% if (recipe.cook_time) { %>
+          <div>
+            <p style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 0.25rem;">Cook Time</p>
+            <p style="font-weight: 600; margin: 0;"><%= recipe.cook_time %></p>
+          </div>
+        <% } %>
+        <% if (recipe.servings) { %>
+          <div>
+            <p style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 0.25rem;">Servings</p>
+            <p style="font-weight: 600; margin: 0;"><%= recipe.servings %></p>
+          </div>
+        <% } %>
+        <% if (recipe.difficulty) { %>
+          <div>
+            <p style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 0.25rem;">Difficulty</p>
+            <p style="font-weight: 600; margin: 0;"><%= recipe.difficulty %></p>
+          </div>
+        <% } %>
+      </div>
+    <% } %>
+
+    <!-- Ingredients -->
+    <% if (recipe.ingredients) { %>
+      <div style="margin-bottom: 2rem;">
+        <h2 style="font-size: 1.5rem; margin-bottom: 1rem; color: var(--primary-color);">Ingredients</h2>
+        <div style="white-space: pre-line; line-height: 1.8;"><%= recipe.ingredients %></div>
+      </div>
+    <% } %>
+
+    <hr style="border: none; border-top: 1px solid var(--border-color); margin: 2rem 0;">
+
+    <!-- Instructions -->
+    <div style="margin-bottom: 2rem;">
+      <h2 style="font-size: 1.5rem; margin-bottom: 1rem; color: var(--primary-color);">Instructions</h2>
+      <div style="white-space: pre-line; line-height: 1.8;"><%= recipe.instructions %></div>
+    </div>
+
+    <!-- Tips & Notes -->
+    <% if (recipe.notes) { %>
+      <div style="background-color: #e8f4f8; border-radius: var(--radius); padding: 1.5rem; margin-top: 2rem;">
+        <h3 style="font-size: 1.125rem; margin-bottom: 0.75rem; color: var(--text-color);">Tips &amp; Notes</h3>
+        <div style="white-space: pre-line; line-height: 1.6;"><%= recipe.notes %></div>
+      </div>
+    <% } %>
+
+    <!-- Footer -->
+    <div style="margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--border-color); font-size: 0.875rem; color: var(--text-muted);">
+      <p style="margin: 0;">Published on <%= new Date(recipe.created_at).toLocaleDateString() %></p>
+      <% if (recipe.updated_at && recipe.updated_at !== recipe.created_at) { %>
+        <p style="margin: 0.25rem 0 0 0;">Last updated on <%= new Date(recipe.updated_at).toLocaleDateString() %></p>
+      <% } %>
+    </div>
+
+  </div>
+
+  <% if (!user) { %>
+    <div class="signup-cta">
+      <h3>Want to save your own recipes?</h3>
+      <p>Create a free account to build and publish your own collection.</p>
+      <div class="signup-cta-actions">
+        <a href="/auth/register" class="btn btn-primary">Sign Up</a>
+        <a href="/auth/login" class="btn btn-outline">Login</a>
+      </div>
+    </div>
+  <% } %>
+
+</div>

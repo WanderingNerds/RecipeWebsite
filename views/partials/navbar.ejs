@@ -2,12 +2,25 @@
   <div class="container navbar-container">
     <a href="/" class="navbar-brand">Recipe Website</a>
 
+    <form class="search-form search-form-nav" action="/search" method="GET" role="search">
+      <input
+        type="search"
+        name="q"
+        value="<%= typeof query !== 'undefined' ? query : '' %>"
+        placeholder="Search recipes&hellip;"
+        aria-label="Search recipes"
+        maxlength="100"
+      >
+      <button type="submit" class="btn btn-primary" aria-label="Search">Search</button>
+    </form>
+
     <ul class="navbar-nav">
       <li><a href="/" class="<%= currentPath === '/' ? 'active' : '' %>">Home</a></li>
+      <li><a href="/browse" class="<%= currentPath.startsWith('/browse') ? 'active' : '' %>">Browse</a></li>
 
       <% if (user) { %>
         <li><a href="/dashboard" class="<%= currentPath === '/dashboard' ? 'active' : '' %>">Dashboard</a></li>
-        <li><a href="/recipes" class="<%= currentPath.startsWith('/recipes') ? 'active' : '' %>">Recipes</a></li>
+        <li><a href="/recipes" class="<%= currentPath.startsWith('/recipes') ? 'active' : '' %>">My Recipes</a></li>
         <li class="navbar-user">
           <span>Hello, <%= user.user_metadata?.name || user.email %></span>
           <a href="/auth/logout" class="btn btn-outline">Logout</a>

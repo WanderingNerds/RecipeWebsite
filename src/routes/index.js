@@ -15,6 +15,9 @@ router.get("/", (req, res) => {
   });
 });
 
+// Public search and browse (no login required)
+router.use("/", publicRoutes);
+
 // Auth routes
 router.use("/auth", authRoutes);
 
