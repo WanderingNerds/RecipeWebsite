@@ -35,11 +35,174 @@ const upload = multer({
   },
 });
 
+/**
+ * Generate a URL-friendly slug from a string
+ */
+function generateSlug(text) {
+  return text
+    .toLowerCase()
+    .trim()
+    .replace(/[^\w\s-]/g, '')
+    .replace(/[\s_-]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+/**
+ * Helper to save recipe categories
+ */
+async function saveRecipeCategories(supabaseClient, recipeId, categoryIds) {
+  if (!categoryIds || !categoryIds.length) return;
+
+  // Ensure categoryIds is an array
+  const ids = Array.isArray(categoryIds) ? categoryIds : [categoryIds];
+
+  // Delete existing categories
+  await supabaseClient
+    .from("recipe_categories")
+    .delete()
+    .eq("recipe_id", recipeId);
+
+  // Insert new categories
+  const categoryRecords = ids.map(categoryId => ({
+    recipe_id: recipeId,
+    category_id: categoryId
+  }));
+
+  await supabaseClient
+    .from("recipe_categories")
+    .insert(categoryRecords);
+}
+
+/**
+ * Helper to save recipe tags (creates new tags if needed)
+ */
+async function saveRecipeTags(supabaseClient, recipeId, userId, tagNames) {
+  if (!tagNames || !tagNames.length) return;
+
+  // Ensure tagNames is an array and filter empty values
+  const names = (Array.isArray(tagNames) ? tagNames : [tagNames])
+    .map(name => name.trim())
+    .filter(name => name);
+
+  if (!names.length) return;
+
+  // Delete existing tags for this recipe
+  await supabaseClient
+    .from("recipe_tags")
+    .delete()
+    .eq("recipe_id", recipeId);
+
+  // Get or create tags
+  const tagIds = [];
+  for (const name of names) {
+    const slug = generateSlug(name);
+    if (!slug) continue;
+
+    // Try to find existing tag
+    let { data: existingTag } = await supabaseClient
+      .from("tags")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("slug", slug)
+      .single();
+
+    if (existingTag) {
+      tagIds.push(existingTag.id);
+    } else {
+      // Create new tag
+      const { data: newTag } = await supabaseClient
+        .from("tags")
+        .insert([{ name, slug, user_id: userId }])
+        .select("id")
+        .single();
+
+      if (newTag) {
+        tagIds.push(newTag.id);
+      }
+    }
+  }
+
+  // Insert recipe_tags
+  if (tagIds.length) {
+    const tagRecords = tagIds.map(tagId => ({
+      recipe_id: recipeId,
+      tag_id: tagId
+    }));
+
+    await supabaseClient
+      .from("recipe_tags")
+      .insert(tagRecords);
+  }
+}
+
+/**
+ * Helper to fetch recipe with categories and tags
+ */
+async function fetchRecipeWithRelations(supabaseClient, recipeId, userId = null) {
+  let query = supabaseClient
+    .from("recipes")
+    .select("*")
+    .eq("id", recipeId);
+
+  if (userId) {
+    query = query.eq("user_id", userId);
+  }
+
+  const { data: recipe, error } = await query.single();
+
+  if (error || !recipe) {
+    return null;
+  }
+
+  // Fetch categories for recipe
+  const { data: recipeCategories } = await supabaseClient
+    .from("recipe_categories")
+    .select("category_id, categories(id, name, slug, icon)")
+    .eq("recipe_id", recipeId);
+
+  recipe.categories = recipeCategories?.map(rc => rc.categories) || [];
+
+  // Fetch tags for recipe
+  const { data: recipeTags } = await supabaseClient
+    .from("recipe_tags")
+    .select("tag_id, tags(id, name, slug)")
+    .eq("recipe_id", recipeId);
+
+  recipe.tags = recipeTags?.map(rt => rt.tags) || [];
+
+  return recipe;
+}
+
 // GET /recipes/new - Show new recipe form
-router.get("/new", requireAuth, (req, res) => {
-  res.render("recipes/new", {
-    title: "Add New Recipe",
-  });
+router.get("/new", requireAuth, async (req, res) => {
+  try {
+    const supabaseClient = createSupabaseClient(req.accessToken);
+
+    // Fetch all categories
+    const { data: categories } = await supabaseClient
+      .from("categories")
+      .select("*")
+      .order("display_order", { ascending: true });
+
+    // Fetch user's tags for autocomplete
+    const { data: userTags } = await supabaseClient
+      .from("tags")
+      .select("*")
+      .eq("user_id", req.user.id)
+      .order("name", { ascending: true });
+
+    res.render("recipes/new", {
+      title: "Add New Recipe",
+      categories: categories || [],
+      userTags: userTags || [],
+      selectedCategories: [],
+      selectedTags: []
+    });
+  } catch (error) {
+    console.error("Error loading new recipe form:", error);
+    req.flash("error", "An unexpected error occurred");
+    res.redirect("/recipes");
+  }
 });
 
 // POST /recipes - Create a new recipe
@@ -56,6 +219,8 @@ router.post("/", requireAuth, uploadLimiter, upload.single("photo"), async (req,
       instructions,
       notes,
       action, // 'draft' or 'publish'
+      categories,
+      tags,
     } = req.body;
 
     // Validate required fields
@@ -114,6 +279,13 @@ router.post("/", requireAuth, uploadLimiter, upload.single("photo"), async (req,
       return res.redirect("/recipes/new");
     }
 
+    // Save categories and tags
+    await saveRecipeCategories(supabaseClient, data.id, categories);
+
+    // Parse tags from comma-separated string or array
+    const tagNames = tags ? (typeof tags === 'string' ? tags.split(',') : tags) : [];
+    await saveRecipeTags(supabaseClient, data.id, req.user.id, tagNames);
+
     // Success message based on action
     const successMessage = action === 'publish'
       ? "Recipe published successfully!"
@@ -132,13 +304,29 @@ router.post("/", requireAuth, uploadLimiter, upload.single("photo"), async (req,
 router.get("/", requireAuth, async (req, res) => {
   try {
     const supabaseClient = createSupabaseClient(req.accessToken);
+    const { category, tags: tagFilter } = req.query;
 
-    // Fetch user's recipes
-    const { data: recipes, error } = await supabaseClient
+    // Fetch all categories for filter dropdown
+    const { data: allCategories } = await supabaseClient
+      .from("categories")
+      .select("*")
+      .order("display_order", { ascending: true });
+
+    // Fetch user's tags for filter
+    const { data: userTags } = await supabaseClient
+      .from("tags")
+      .select("*")
+      .eq("user_id", req.user.id)
+      .order("name", { ascending: true });
+
+    // Build base query for recipes
+    let recipesQuery = supabaseClient
       .from("recipes")
       .select("*")
       .eq("user_id", req.user.id)
       .order("created_at", { ascending: false });
+
+    const { data: recipes, error } = await recipesQuery;
 
     if (error) {
       console.error("Error fetching recipes:", error);
@@ -146,9 +334,54 @@ router.get("/", requireAuth, async (req, res) => {
       return res.redirect("/dashboard");
     }
 
+    // Fetch categories and tags for each recipe
+    const recipesWithRelations = await Promise.all(
+      (recipes || []).map(async (recipe) => {
+        const { data: recipeCategories } = await supabaseClient
+          .from("recipe_categories")
+          .select("category_id, categories(id, name, slug, icon)")
+          .eq("recipe_id", recipe.id);
+
+        const { data: recipeTags } = await supabaseClient
+          .from("recipe_tags")
+          .select("tag_id, tags(id, name, slug)")
+          .eq("recipe_id", recipe.id);
+
+        return {
+          ...recipe,
+          categories: recipeCategories?.map(rc => rc.categories) || [],
+          tags: recipeTags?.map(rt => rt.tags) || []
+        };
+      })
+    );
+
+    // Filter by category if specified
+    let filteredRecipes = recipesWithRelations;
+    if (category) {
+      filteredRecipes = filteredRecipes.filter(recipe =>
+        recipe.categories.some(cat => cat.slug === category)
+      );
+    }
+
+    // Filter by tags if specified
+    if (tagFilter) {
+      const tagSlugs = tagFilter.split(',').map(t => t.trim()).filter(t => t);
+      if (tagSlugs.length) {
+        filteredRecipes = filteredRecipes.filter(recipe =>
+          tagSlugs.every(slug =>
+            recipe.tags.some(tag => tag.slug === slug)
+          )
+        );
+      }
+    }
+
     res.render("recipes/index", {
       title: "My Recipes",
-      recipes: recipes || [],
+      recipes: filteredRecipes,
+      categories: allCategories || [],
+      userTags: userTags || [],
+      selectedCategory: category || '',
+      selectedTags: tagFilter || ''
     });
   } catch (error) {
     console.error("Error in recipes list:", error);
@@ -163,21 +396,33 @@ router.get("/:id/edit", requireAuth, async (req, res) => {
     const { id } = req.params;
     const supabaseClient = createSupabaseClient(req.accessToken);
 
-    const { data: recipe, error } = await supabaseClient
-      .from("recipes")
-      .select("*")
-      .eq("id", id)
-      .eq("user_id", req.user.id) // Only owner can edit
-      .single();
+    const recipe = await fetchRecipeWithRelations(supabaseClient, id, req.user.id);
 
-    if (error || !recipe) {
+    if (!recipe) {
       req.flash("error", "Recipe not found or you don't have permission to edit it");
       return res.redirect("/recipes");
     }
 
+    // Fetch all categories
+    const { data: categories } = await supabaseClient
+      .from("categories")
+      .select("*")
+      .order("display_order", { ascending: true });
+
+    // Fetch user's tags for autocomplete
+    const { data: userTags } = await supabaseClient
+      .from("tags")
+      .select("*")
+      .eq("user_id", req.user.id)
+      .order("name", { ascending: true });
+
     res.render("recipes/edit", {
       title: `Edit ${recipe.title}`,
       recipe,
+      categories: categories || [],
+      userTags: userTags || [],
+      selectedCategories: recipe.categories.map(c => c.id),
+      selectedTags: recipe.tags.map(t => t.name)
     });
   } catch (error) {
     console.error("Error loading recipe for edit:", error);
@@ -202,6 +447,8 @@ router.post("/:id/update", requireAuth, uploadLimiter, upload.single("photo"), a
       notes,
       action,
       removePhoto,
+      categories,
+      tags,
     } = req.body;
 
     // Validate required fields
@@ -259,6 +506,13 @@ router.post("/:id/update", requireAuth, uploadLimiter, upload.single("photo"), a
       req.flash("error", "Failed to update recipe. Please try again.");
       return res.redirect(`/recipes/${id}/edit`);
     }
+
+    // Update categories and tags
+    await saveRecipeCategories(supabaseClient, id, categories);
+
+    // Parse tags from comma-separated string or array
+    const tagNames = tags ? (typeof tags === 'string' ? tags.split(',') : tags) : [];
+    await saveRecipeTags(supabaseClient, id, req.user.id, tagNames);
 
     req.flash("success", "Recipe updated successfully!");
     res.redirect(`/recipes/${id}`);
@@ -340,13 +594,9 @@ router.get("/:id", requireAuth, async (req, res) => {
     const { id } = req.params;
     const supabaseClient = createSupabaseClient(req.accessToken);
 
-    const { data: recipe, error } = await supabaseClient
-      .from("recipes")
-      .select("*")
-      .eq("id", id)
-      .single();
+    const recipe = await fetchRecipeWithRelations(supabaseClient, id);
 
-    if (error || !recipe) {
+    if (!recipe) {
       req.flash("error", "Recipe not found");
       return res.redirect("/recipes");
     }

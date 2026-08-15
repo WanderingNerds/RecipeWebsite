@@ -21,6 +21,24 @@
       </div>
     </div>
 
+    <!-- Categories and Tags -->
+    <% if ((recipe.categories && recipe.categories.length > 0) || (recipe.tags && recipe.tags.length > 0)) { %>
+      <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem;">
+        <% if (recipe.categories && recipe.categories.length > 0) { %>
+          <% recipe.categories.forEach(cat => { %>
+            <a href="/recipes?category=<%= cat.slug %>" class="category-badge category-badge-lg">
+              <span><%= cat.icon %></span> <%= cat.name %>
+            </a>
+          <% }); %>
+        <% } %>
+        <% if (recipe.tags && recipe.tags.length > 0) { %>
+          <% recipe.tags.forEach(tag => { %>
+            <a href="/recipes?tags=<%= tag.slug %>" class="tag-badge tag-badge-lg"><%= tag.name %></a>
+          <% }); %>
+        <% } %>
+      </div>
+    <% } %>
+
     <% if (isOwner) { %>
       <div style="display: flex; gap: 0.75rem; margin-bottom: 1rem;">
         <a href="/recipes/<%= recipe.id %>/edit" class="btn btn-outline">Edit Recipe</a>
@@ -109,7 +127,7 @@
         <% if (scaling.isScaled) { %>
           <p class="scale-notice">
             Scaled <%= scaling.factorText %>× from the original recipe<%= scaling.canScaleByServings ? ' (' + recipe.servings + ')' : '' %>.
-            Amounts without a number, like “to taste”, are unchanged.
+            Amounts without a number, like "to taste", are unchanged.
           </p>
         <% } %>
 

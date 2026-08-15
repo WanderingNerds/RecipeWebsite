@@ -76,6 +76,36 @@
 
       </div>
 
+      <!-- Categories Section -->
+      <div style="margin-bottom: 1.5rem;">
+        <h3 style="font-size: 1.25rem; margin-bottom: 1rem; color: var(--primary-color);">Categories</h3>
+        <p style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 0.75rem;">Select one or more categories that describe this recipe</p>
+        <div class="categories-grid">
+          <% categories.forEach(category => { %>
+            <label class="category-checkbox">
+              <input type="checkbox" name="categories" value="<%= category.id %>"
+                <%= selectedCategories.includes(category.id) ? 'checked' : '' %>>
+              <span class="category-checkbox-label">
+                <span class="category-icon"><%= category.icon %></span>
+                <span class="category-name"><%= category.name %></span>
+              </span>
+            </label>
+          <% }); %>
+        </div>
+      </div>
+
+      <!-- Tags Section -->
+      <div style="margin-bottom: 1.5rem;">
+        <h3 style="font-size: 1.25rem; margin-bottom: 1rem; color: var(--primary-color);">Tags</h3>
+        <p style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 0.75rem;">Add custom tags to organize your recipes (press Enter or comma to add)</p>
+        <div class="tags-input-container" data-existing-tags='<%= JSON.stringify(userTags) %>' data-selected-tags='<%= JSON.stringify(selectedTags) %>'>
+          <div class="tags-list"></div>
+          <input type="text" class="tags-input" placeholder="Type a tag and press Enter...">
+          <input type="hidden" name="tags" class="tags-hidden-input" value="">
+          <div class="tags-suggestions"></div>
+        </div>
+      </div>
+
       <!-- Instructions Section (full width) -->
       <div style="margin-bottom: 1.5rem;">
         <h3 style="font-size: 1.25rem; margin-bottom: 1rem; color: var(--primary-color);">Instructions <span style="color: var(--error-color);">*</span></h3>
@@ -113,3 +143,4 @@
 </style>
 
 <script src="/js/recipe-form.js"></script>
+<script src="/js/tags-input.js"></script>
