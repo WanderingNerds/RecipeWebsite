@@ -1,34 +1,42 @@
 <article class="recipe-card">
   <a href="/r/<%= recipe.id %>" class="recipe-card-media" aria-hidden="<%= recipe.thumbnail_url ? 'false' : 'true' %>" tabindex="-1">
     <% if (recipe.thumbnail_url) { %>
-      <img src="<%= recipe.thumbnail_url %>" alt="" loading="lazy">
+      <img src="<%= recipe.thumbnail_url %>" alt="<%= recipe.title %>" loading="lazy" class="washed">
     <% } else { %>
-      <span class="recipe-card-placeholder">🍽️</span>
+      <span class="recipe-card-placeholder"><%= recipe.title.charAt(0).toUpperCase() %></span>
     <% } %>
   </a>
 
   <div class="recipe-card-body">
+    <% if (recipe.categories && recipe.categories.length > 0) { %>
+      <div class="recipe-card-tags">
+        <% recipe.categories.slice(0, 2).forEach(function(cat) { %>
+          <span class="tag tag-accent-2"><%= cat.name %></span>
+        <% }); %>
+      </div>
+    <% } %>
+
     <h3 class="recipe-card-title">
       <a href="/r/<%= recipe.id %>"><%= recipe.title %></a>
     </h3>
 
-    <% if (recipe.author) { %>
-      <p class="recipe-card-author">By <%= recipe.author %></p>
+    <% if (recipe.description) { %>
+      <p class="recipe-card-description"><%= recipe.description.substring(0, 80) %><%= recipe.description.length > 80 ? '...' : '' %></p>
     <% } %>
 
     <div class="recipe-card-meta">
-      <% if (recipe.prep_time) { %>
-        <span>⏱️ Prep: <%= recipe.prep_time %></span>
-      <% } %>
-      <% if (recipe.cook_time) { %>
-        <span>🔥 Cook: <%= recipe.cook_time %></span>
+      <% if (recipe.prep_time || recipe.cook_time) { %>
+        <span><%= recipe.prep_time || recipe.cook_time %></span>
       <% } %>
       <% if (recipe.servings) { %>
-        <span>🍽️ <%= recipe.servings %> servings</span>
-      <% } %>
-      <% if (recipe.difficulty) { %>
-        <span>📊 <%= recipe.difficulty %></span>
+        <span><%= recipe.servings %> servings</span>
       <% } %>
     </div>
+
+    <% if (recipe.author) { %>
+      <div class="recipe-card-author">
+        <span>@<%= recipe.author %></span>
+      </div>
+    <% } %>
   </div>
 </article>

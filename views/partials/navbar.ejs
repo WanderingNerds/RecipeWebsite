@@ -1,6 +1,6 @@
 <nav class="navbar">
   <div class="container navbar-container">
-    <a href="/" class="navbar-brand">Recipe Website</a>
+    <a href="/" class="navbar-brand">Potluck</a>
 
     <form class="search-form search-form-nav" action="/search" method="GET" role="search">
       <input
@@ -20,7 +20,8 @@
 
       <% if (user) { %>
         <li><a href="/dashboard" class="<%= currentPath === '/dashboard' ? 'active' : '' %>">Dashboard</a></li>
-        <li><a href="/recipes" class="<%= currentPath.startsWith('/recipes') ? 'active' : '' %>">My Recipes</a></li>
+        <li><a href="/recipes" class="<%= currentPath === '/recipes' || (currentPath.startsWith('/recipes/') && currentPath !== '/recipes/liked') ? 'active' : '' %>">My Recipes</a></li>
+        <li><a href="/recipes/liked" class="<%= currentPath === '/recipes/liked' ? 'active' : '' %>">Liked</a></li>
         <li class="navbar-user">
           <span>Hello, <%= user.user_metadata?.name || user.email %></span>
           <a href="/auth/logout" class="btn btn-outline">Logout</a>

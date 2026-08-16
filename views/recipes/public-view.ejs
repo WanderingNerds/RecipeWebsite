@@ -12,9 +12,22 @@
           <p style="color: var(--text-muted);">By <%= recipe.author %></p>
         <% } %>
       </div>
-      <% if (isOwner) { %>
-        <a href="/recipes/<%= recipe.id %>/edit" class="btn btn-outline">Edit Recipe</a>
-      <% } %>
+      <div style="display: flex; align-items: center; gap: 1rem;">
+        <% if (user) { %>
+          <button class="like-btn" data-recipe-id="<%= recipe.id %>" data-liked="<%= isLiked %>" aria-label="<%= isLiked ? 'Unlike this recipe' : 'Like this recipe' %>">
+            <span class="like-btn-icon">&#9829;</span>
+            <span class="like-btn-count"><%= likeCount %></span>
+          </button>
+        <% } else { %>
+          <button class="like-btn like-btn-guest" data-recipe-id="<%= recipe.id %>" aria-label="Log in to like this recipe">
+            <span class="like-btn-icon">&#9829;</span>
+            <span class="like-btn-count"><%= likeCount %></span>
+          </button>
+        <% } %>
+        <% if (isOwner) { %>
+          <a href="/recipes/<%= recipe.id %>/edit" class="btn btn-outline">Edit Recipe</a>
+        <% } %>
+      </div>
     </div>
   </div>
 
