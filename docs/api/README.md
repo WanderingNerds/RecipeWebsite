@@ -30,6 +30,14 @@ All API endpoints require authentication unless otherwise noted. Authentication 
 | POST | `/recipes/:id/delete` | Delete a recipe |
 | GET | `/recipes/:id/scale` | Get scaled ingredient data (JSON) |
 
+### Recipe Import (REW-12)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/recipes/import` | Render import page with upload form |
+| POST | `/recipes/import/parse` | Parse uploaded file, return JSON preview |
+| POST | `/recipes/import/save` | Save imported recipe after user confirmation |
+
 ### Categories
 
 | Method | Endpoint | Description |
@@ -59,6 +67,7 @@ All API endpoints require authentication unless otherwise noted. Authentication 
 ## Detailed Documentation
 
 - [Recipe Scaling API](recipe-scaling.md) - Real-time ingredient scaling
+- [Recipe Import - OCR/PDF Parsing](recipe-import-ocr-parsing.md) - Text extraction and parsing from PDFs and images
 - [Categories and Tags](../CATEGORIES_AND_TAGS.md) - Full categories/tags documentation
 
 ---
@@ -103,6 +112,7 @@ The API includes rate limiting to prevent abuse:
 
 - **General:** 100 requests per 15 minutes per IP
 - **File Uploads:** 10 uploads per 15 minutes per IP
+- **Recipe Imports:** 5 imports per 15 minutes per user
 
 When rate limited, requests receive:
 ```json

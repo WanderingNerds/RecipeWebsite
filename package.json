@@ -45,7 +45,9 @@
     "file-type": "^22.0.1",
     "helmet": "^8.0.0",
     "multer": "^2.2.0",
-    "sharp": "^0.35.3"
+    "pdf.js-extract": "^0.2.1",
+    "sharp": "^0.35.3",
+    "tesseract.js": "^5.0.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.0"

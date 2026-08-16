@@ -1,0 +1,112 @@
+<!-- Import Recipe Modal -->
+<div id="importModal" class="modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.5); z-index: 1000; align-items: center; justify-content: center;">
+  <div class="modal-content" style="background: var(--card-background); padding: 2rem; border-radius: var(--radius); box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15); max-width: 500px; width: 90%; max-height: 90vh; overflow-y: auto;">
+
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+      <h3 style="margin: 0;">Import Recipe</h3>
+      <button type="button" id="closeImportModal" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-muted);">&times;</button>
+    </div>
+
+    <p style="color: var(--text-muted); margin-bottom: 1.5rem;">
+      Upload a recipe file to import. Supported formats:
+    </p>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1.5rem;">
+      <span class="format-badge" style="background: var(--background-color); padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.75rem;">
+        <strong>.json</strong> JSON-LD
+      </span>
+      <span class="format-badge" style="background: var(--background-color); padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.75rem;">
+        <strong>.pdf</strong> PDF
+      </span>
+      <span class="format-badge" style="background: var(--background-color); padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.75rem;">
+        <strong>.jpg/.png/.webp</strong> Image (OCR)
+      </span>
+    </div>
+
+    <!-- Quick upload zone -->
+    <div id="modalDropZone" style="border: 2px dashed var(--border-color); border-radius: var(--radius); padding: 2rem; text-align: center; cursor: pointer; margin-bottom: 1rem;">
+      <div style="font-size: 2rem; margin-bottom: 0.5rem; opacity: 0.5;">&#128196;</div>
+      <p style="margin-bottom: 0.5rem;">Drag & drop or click to upload</p>
+      <p style="color: var(--text-muted); font-size: 0.75rem;">Max 2MB</p>
+    </div>
+    <input type="file" id="modalFileInput" accept=".json,.pdf,.jpg,.jpeg,.png,.webp" style="display: none;">
+
+    <div style="text-align: center; margin-bottom: 1rem; color: var(--text-muted);">or</div>
+
+    <a href="/recipes/import" class="btn btn-outline" style="display: block; width: 100%; text-align: center;">
+      Open Full Import Page
+    </a>
+
+  </div>
+</div>
+
+<script>
+  // Initialize import modal if it exists
+  document.addEventListener('DOMContentLoaded', function() {
+    const modal = document.getElementById('importModal');
+    const closeBtn = document.getElementById('closeImportModal');
+    const dropZone = document.getElementById('modalDropZone');
+    const fileInput = document.getElementById('modalFileInput');
+    const importBtn = document.getElementById('importRecipeBtn');
+
+    if (!modal) return;
+
+    // Open modal
+    if (importBtn) {
+      importBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        modal.style.display = 'flex';
+      });
+    }
+
+    // Close modal
+    if (closeBtn) {
+      closeBtn.addEventListener('click', function() {
+        modal.style.display = 'none';
+      });
+    }
+
+    // Close on outside click
+    modal.addEventListener('click', function(e) {
+      if (e.target === modal) {
+        modal.style.display = 'none';
+      }
+    });
+
+    // Drop zone click
+    if (dropZone && fileInput) {
+      dropZone.addEventListener('click', function() {
+        fileInput.click();
+      });
+
+      // Handle file selection - redirect to import page with file
+      fileInput.addEventListener('change', function() {
+        if (fileInput.files.length > 0) {
+          // Store file info and redirect
+          sessionStorage.setItem('pendingImportFile', 'true');
+          window.location.href = '/recipes/import';
+        }
+      });
+
+      // Drag and drop
+      dropZone.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        dropZone.style.borderColor = 'var(--primary-color)';
+        dropZone.style.backgroundColor = 'rgba(79, 70, 229, 0.05)';
+      });
+
+      dropZone.addEventListener('dragleave', function() {
+        dropZone.style.borderColor = 'var(--border-color)';
+        dropZone.style.backgroundColor = 'transparent';
+      });
+
+      dropZone.addEventListener('drop', function(e) {
+        e.preventDefault();
+        dropZone.style.borderColor = 'var(--border-color)';
+        dropZone.style.backgroundColor = 'transparent';
+        // Redirect to full import page
+        window.location.href = '/recipes/import';
+      });
+    }
+  });
+</script>

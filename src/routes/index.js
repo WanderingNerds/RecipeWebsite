@@ -1,6 +1,7 @@
 import { Router } from "express";
 import authRoutes from "./authRoutes.js";
 import recipeRoutes from "./recipeRoutes.js";
+import importRoutes from "./importRoutes.js";
 import categoryRoutes from "./categoryRoutes.js";
 import tagRoutes from "./tagRoutes.js";
 import publicRoutes from "./publicRoutes.js";
@@ -20,6 +21,9 @@ router.use("/", publicRoutes);
 
 // Auth routes
 router.use("/auth", authRoutes);
+
+// Import routes (must be BEFORE /recipes to prevent /:id matching "import")
+router.use("/recipes/import", importRoutes);
 
 // Recipe routes
 router.use("/recipes", recipeRoutes);
