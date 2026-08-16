@@ -1,12 +1,12 @@
 <section class="hero">
-  <h1>Welcome to Recipe Website</h1>
-  <p>Discover and share delicious recipes from around the world.</p>
+  <h1>Welcome to Potluck</h1>
+  <p>Every dish carries the people who cooked it. Discover recipes, share your notes, and cook together.</p>
 
   <form class="search-form search-form-lg search-form-hero" action="/search" method="GET" role="search">
     <input
       type="search"
       name="q"
-      placeholder="Search recipes by name or ingredient&hellip;"
+      placeholder="Search recipes by name or ingredient..."
       aria-label="Search recipes"
       maxlength="100"
     >
@@ -14,29 +14,29 @@
   </form>
 
   <div class="hero-actions">
-    <a href="/browse" class="btn btn-outline btn-lg">Browse All Recipes</a>
+    <a href="/browse" class="btn btn-secondary btn-lg">Browse Recipes</a>
     <% if (!user) { %>
       <a href="/auth/register" class="btn btn-primary btn-lg">Get Started</a>
     <% } else { %>
-      <a href="/dashboard" class="btn btn-primary btn-lg">Go to Dashboard</a>
+      <a href="/recipes/new" class="btn btn-primary btn-lg">Add a Recipe</a>
     <% } %>
   </div>
 </section>
 
 <section class="features">
-  <h2>Why Choose Us?</h2>
+  <h2>Cook with us</h2>
   <div class="features-grid">
     <div class="feature-card">
-      <h3>Easy to Use</h3>
-      <p>Simple and intuitive interface for managing your recipes.</p>
+      <h3>Collect Recipes</h3>
+      <p>Save your favorites and organize them into lists. Import from anywhere.</p>
     </div>
     <div class="feature-card">
-      <h3>Secure</h3>
-      <p>Your data is protected with industry-standard encryption.</p>
+      <h3>Scale & Cook</h3>
+      <p>Adjust servings instantly. Step-by-step cook mode keeps your phone awake.</p>
     </div>
     <div class="feature-card">
-      <h3>Share & Discover</h3>
-      <p>Connect with other food lovers and discover new recipes.</p>
+      <h3>Share Notes</h3>
+      <p>Add your swaps and tips. Every note makes a recipe better for the next cook.</p>
     </div>
   </div>
 </section>

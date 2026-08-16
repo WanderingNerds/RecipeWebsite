@@ -1,36 +1,36 @@
 <section class="auth-page">
   <div class="auth-card">
-    <h1>Create Account</h1>
-    <p>Join us and start sharing your favorite recipes!</p>
+    <h1>Join Potluck</h1>
+    <p>Start collecting recipes and sharing what you cook.</p>
 
     <form action="/auth/register" method="POST" class="auth-form">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>">
 
       <div class="form-group">
-        <label for="name">Name</label>
-        <input type="text" id="name" name="name" required placeholder="Enter your name">
+        <label for="name">Your name</label>
+        <input type="text" id="name" name="name" required placeholder="How should we call you?">
       </div>
 
       <div class="form-group">
         <label for="email">Email</label>
-        <input type="email" id="email" name="email" required placeholder="Enter your email">
+        <input type="email" id="email" name="email" required placeholder="you@example.com">
       </div>
 
       <div class="form-group">
         <label for="password">Password</label>
-        <input type="password" id="password" name="password" required minlength="8" placeholder="Enter your password (min 8 characters)">
+        <input type="password" id="password" name="password" required minlength="8" placeholder="At least 8 characters">
       </div>
 
       <div class="form-group">
-        <label for="confirmPassword">Confirm Password</label>
-        <input type="password" id="confirmPassword" name="confirmPassword" required placeholder="Confirm your password">
+        <label for="confirmPassword">Confirm password</label>
+        <input type="password" id="confirmPassword" name="confirmPassword" required placeholder="Type it again">
       </div>
 
-      <button type="submit" class="btn btn-primary btn-block">Create Account</button>
+      <button type="submit" class="btn btn-primary btn-block">Create account</button>
     </form>
 
     <p class="auth-footer">
-      Already have an account? <a href="/auth/login">Login</a>
+      Already cooking with us? <a href="/auth/login">Sign in</a>
     </p>
   </div>
 </section>

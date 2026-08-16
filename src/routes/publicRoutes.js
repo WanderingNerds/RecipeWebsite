@@ -1,7 +1,41 @@
 import { Router } from "express";
-import { supabase } from "../config/supabase.js";
+import { supabase, createSupabaseClient } from "../config/supabase.js";
 
 const router = Router();
+
+/**
+ * Helper to get like count for a recipe
+ */
+async function getLikeCount(recipeId) {
+  const { data, error } = await supabase.rpc("get_recipe_like_count", {
+    p_recipe_id: recipeId,
+  });
+
+  if (error) {
+    console.error("Error getting like count:", error);
+    return 0;
+  }
+
+  return data || 0;
+}
+
+/**
+ * Helper to check if user has liked a recipe
+ */
+async function hasUserLiked(supabaseClient, recipeId) {
+  const { data, error } = await supabaseClient
+    .from("recipe_likes")
+    .select("user_id")
+    .eq("recipe_id", recipeId)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Error checking like status:", error);
+    return false;
+  }
+
+  return !!data;
+}
 
 // Every route here is public. We deliberately use the anon-key client rather than
 // createSupabaseClient(req.accessToken) so results are identical whether or not the
@@ -141,10 +175,22 @@ router.get("/r/:id", async (req, res, next) => {
       );
     }
 
+    // Get like count
+    const likeCount = await getLikeCount(id);
+
+    // Check if user has liked (if authenticated)
+    let isLiked = false;
+    if (req.user && req.cookies["sb-access-token"]) {
+      const supabaseClient = createSupabaseClient(req.cookies["sb-access-token"]);
+      isLiked = await hasUserLiked(supabaseClient, id);
+    }
+
     res.render("recipes/public-view", {
       title: recipe.title,
       recipe,
       isOwner: req.user?.id === recipe.user_id,
+      likeCount,
+      isLiked,
     });
   } catch (error) {
     next(error);

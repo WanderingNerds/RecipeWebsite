@@ -3,12 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title><%= title %> | Recipe Website</title>
+  <title><%= title %> | Potluck</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="/css/organic.css">
+  <link href="https://fonts.googleapis.com/css2?family=Caprasimo:wght@400&family=Figtree:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/styles.css">
 </head>
-<body class="organic-theme">
+<body>
   <% if (success && success.length > 0) { %>
     <div style="position:fixed;top:20px;right:20px;background:var(--color-accent-2-100);color:var(--color-accent-2-800);padding:var(--space-3) var(--space-4);border-radius:var(--radius-md);box-shadow:var(--shadow-md);z-index:1000;">
       <%= success %>
@@ -16,7 +17,7 @@
   <% } %>
 
   <% if (error && error.length > 0) { %>
-    <div style="position:fixed;top:20px;right:20px;background:var(--color-accent-200);color:var(--color-accent-800);padding:var(--space-3) var(--space-4);border-radius:var(--radius-md);box-shadow:var(--shadow-md);z-index:1000;">
+    <div style="position:fixed;top:20px;right:20px;background:var(--color-accent-100);color:var(--color-accent-800);padding:var(--space-3) var(--space-4);border-radius:var(--radius-md);box-shadow:var(--shadow-md);z-index:1000;">
       <%= error %>
     </div>
   <% } %>

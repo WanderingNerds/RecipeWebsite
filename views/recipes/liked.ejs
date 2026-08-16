@@ -1,0 +1,51 @@
+<div class="page-narrow">
+  <div class="page-header">
+    <h1>Liked Recipes</h1>
+    <p class="page-subtitle">Recipes you've saved for later</p>
+  </div>
+
+  <% if (recipes.length === 0) { %>
+    <div class="empty-state">
+      <h3>No liked recipes yet</h3>
+      <p>Browse recipes and click the heart button to save your favorites here.</p>
+      <a href="/browse" class="btn btn-primary">Browse Recipes</a>
+    </div>
+  <% } else { %>
+    <p class="result-count"><%= recipes.length %> recipe<%= recipes.length !== 1 ? 's' : '' %></p>
+
+    <div class="recipe-grid">
+      <% recipes.forEach(function(recipe) { %>
+        <article class="recipe-card">
+          <a href="/r/<%= recipe.id %>" class="recipe-card-media" aria-hidden="<%= recipe.thumbnail_url ? 'false' : 'true' %>" tabindex="-1">
+            <% if (recipe.thumbnail_url) { %>
+              <img src="<%= recipe.thumbnail_url %>" alt="<%= recipe.title %>" loading="lazy" class="washed">
+            <% } else { %>
+              <span class="recipe-card-placeholder"><%= recipe.title.charAt(0).toUpperCase() %></span>
+            <% } %>
+          </a>
+
+          <div class="recipe-card-body">
+            <h3 class="recipe-card-title">
+              <a href="/r/<%= recipe.id %>"><%= recipe.title %></a>
+            </h3>
+
+            <div class="recipe-card-meta">
+              <% if (recipe.prep_time || recipe.cook_time) { %>
+                <span><%= recipe.prep_time || recipe.cook_time %></span>
+              <% } %>
+              <% if (recipe.servings) { %>
+                <span><%= recipe.servings %> servings</span>
+              <% } %>
+            </div>
+
+            <% if (recipe.author) { %>
+              <div class="recipe-card-author">
+                <span>@<%= recipe.author %></span>
+              </div>
+            <% } %>
+          </div>
+        </article>
+      <% }); %>
+    </div>
+  <% } %>
+</div>

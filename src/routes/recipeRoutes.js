@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { requireAuth } from "../middleware/authMiddleware.js";
-import { createSupabaseClient } from "../config/supabase.js";
+import { createSupabaseClient, supabase } from "../config/supabase.js";
 import multer from "multer";
 import rateLimit from "express-rate-limit";
 import { generateThumbnail, optimizeImage, validateImageFile } from "../utils/imageUtils.js";
@@ -133,6 +133,40 @@ async function saveRecipeTags(supabaseClient, recipeId, userId, tagNames) {
       .from("recipe_tags")
       .insert(tagRecords);
   }
+}
+
+/**
+ * Helper to get like count for a recipe
+ */
+async function getLikeCount(recipeId) {
+  const { data, error } = await supabase.rpc("get_recipe_like_count", {
+    p_recipe_id: recipeId,
+  });
+
+  if (error) {
+    console.error("Error getting like count:", error);
+    return 0;
+  }
+
+  return data || 0;
+}
+
+/**
+ * Helper to check if user has liked a recipe
+ */
+async function hasUserLiked(supabaseClient, recipeId) {
+  const { data, error } = await supabaseClient
+    .from("recipe_likes")
+    .select("user_id")
+    .eq("recipe_id", recipeId)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Error checking like status:", error);
+    return false;
+  }
+
+  return !!data;
 }
 
 /**
@@ -604,6 +638,10 @@ router.get("/:id", requireAuth, async (req, res) => {
     // Check if current user is the owner
     const isOwner = recipe.user_id === req.user.id;
 
+    // Get like count and status
+    const likeCount = await getLikeCount(id);
+    const isLiked = await hasUserLiked(supabaseClient, id);
+
     // Convert the free-text ingredients into quantity / unit / ingredient rows
     const ingredientRows = parseIngredients(recipe.ingredients);
 
@@ -618,6 +656,8 @@ router.get("/:id", requireAuth, async (req, res) => {
       title: recipe.title,
       recipe,
       isOwner,
+      likeCount,
+      isLiked,
       ingredientRows: scaleIngredients(ingredientRows, scaling.factor),
       scaling,
       quickScaleFactors: QUICK_SCALE_FACTORS,

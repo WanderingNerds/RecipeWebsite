@@ -13,6 +13,12 @@
         <% } %>
       </div>
       <div style="display: flex; align-items: center; gap: 1rem;">
+        <% if (recipe.status === 'published') { %>
+          <button class="like-btn" data-recipe-id="<%= recipe.id %>" data-liked="<%= isLiked %>" aria-label="<%= isLiked ? 'Unlike this recipe' : 'Like this recipe' %>">
+            <span class="like-btn-icon">&#9829;</span>
+            <span class="like-btn-count"><%= likeCount %></span>
+          </button>
+        <% } %>
         <% if (recipe.status === 'draft') { %>
           <span style="background-color: #f8d7da; color: #721c24; padding: 0.5rem 1rem; border-radius: 4px; font-size: 0.875rem;">Draft</span>
         <% } else { %>
