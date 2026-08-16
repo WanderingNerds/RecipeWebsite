@@ -1,0 +1,167 @@
+<div class="container" style="max-width: 1000px; margin: 0 auto; padding: 2rem 1rem;">
+
+  <div style="margin-bottom: 2rem;">
+    <a href="/recipes" style="color: var(--primary-color); text-decoration: none; font-size: 0.875rem;">&larr; Back to My Recipes</a>
+    <h1 style="margin-top: 1rem; margin-bottom: 0.5rem;">Import Recipe</h1>
+    <p style="color: var(--text-muted); max-width: 600px;">Upload a recipe file to import. We'll extract the recipe details and let you review them before saving.</p>
+  </div>
+
+  <!-- Upload Section -->
+  <div id="uploadSection" class="import-upload-section" style="background: var(--card-background); padding: 2rem; border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 2rem;">
+
+    <h3 style="margin-bottom: 1rem; color: var(--primary-color);">Upload Recipe File</h3>
+
+    <!-- Supported formats -->
+    <div style="margin-bottom: 1.5rem;">
+      <p style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 0.75rem;">Supported formats:</p>
+      <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+        <% supportedFormats.forEach(format => { %>
+          <span style="background: var(--background-color); padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.75rem; color: var(--text-muted);">
+            <strong><%= format.extension %></strong> - <%= format.description %>
+          </span>
+        <% }); %>
+      </div>
+    </div>
+
+    <!-- Drop zone -->
+    <div id="dropZone" style="border: 2px dashed var(--border-color); border-radius: var(--radius); padding: 3rem 2rem; text-align: center; cursor: pointer; transition: all 0.2s ease;">
+      <div id="dropZoneContent">
+        <div style="font-size: 3rem; margin-bottom: 1rem; opacity: 0.5;">&#128196;</div>
+        <p style="font-size: 1.125rem; margin-bottom: 0.5rem;">Drag and drop your recipe file here</p>
+        <p style="color: var(--text-muted); font-size: 0.875rem; margin-bottom: 1rem;">or click to browse</p>
+        <button type="button" class="btn btn-primary" id="browseButton">Choose File</button>
+        <p style="color: var(--text-muted); font-size: 0.75rem; margin-top: 1rem;">Maximum file size: 2MB</p>
+      </div>
+      <div id="uploadProgress" style="display: none;">
+        <div style="font-size: 2rem; margin-bottom: 1rem;">&#9203;</div>
+        <p style="font-size: 1rem; margin-bottom: 0.5rem;">Processing file...</p>
+        <p style="color: var(--text-muted); font-size: 0.875rem;" id="uploadFileName"></p>
+      </div>
+    </div>
+    <input type="file" id="fileInput" accept=".json,.pdf,.jpg,.jpeg,.png,.webp,application/json,application/pdf,image/jpeg,image/png,image/webp" style="display: none;">
+
+    <!-- Error display -->
+    <div id="uploadError" style="display: none; margin-top: 1rem; padding: 1rem; background-color: #f8d7da; color: #721c24; border-radius: var(--radius);">
+      <strong>Error:</strong> <span id="uploadErrorMessage"></span>
+    </div>
+
+  </div>
+
+  <!-- Preview Section (hidden initially) -->
+  <div id="previewSection" style="display: none;">
+    <form id="importForm">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+
+      <div style="background: var(--card-background); padding: 2rem; border-radius: var(--radius); box-shadow: var(--shadow);">
+
+        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 1.5rem;">
+          <div>
+            <h3 style="margin-bottom: 0.5rem; color: var(--primary-color);">Review Imported Recipe</h3>
+            <p style="color: var(--text-muted); font-size: 0.875rem;">Review and edit the extracted data before saving.</p>
+          </div>
+          <div id="confidenceIndicator" style="text-align: right;">
+            <span style="font-size: 0.75rem; color: var(--text-muted);">Parse confidence:</span>
+            <div id="confidenceBar" style="width: 100px; height: 8px; background: var(--border-color); border-radius: 4px; margin-top: 0.25rem;">
+              <div id="confidenceFill" style="height: 100%; border-radius: 4px; transition: width 0.3s ease;"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Warnings -->
+        <div id="warningsSection" style="display: none; margin-bottom: 1.5rem; padding: 1rem; background-color: #fff3cd; border: 1px solid #ffc107; border-radius: var(--radius);">
+          <strong style="color: #856404;">&#9888; Parsing Notes:</strong>
+          <ul id="warningsList" style="margin: 0.5rem 0 0 1rem; padding: 0; color: #856404;"></ul>
+        </div>
+
+        <!-- Title -->
+        <div class="form-group" style="margin-bottom: 1.5rem;">
+          <label for="importTitle" style="display: block; margin-bottom: 0.5rem; font-weight: 600;">
+            Title <span style="color: var(--error-color);">*</span>
+          </label>
+          <input type="text" id="importTitle" name="title" required style="width: 100%; padding: 0.75rem 1rem; border: 1px solid var(--border-color); border-radius: var(--radius); font-size: 1rem;">
+          <div id="titleError" style="display: none; color: var(--error-color); font-size: 0.875rem; margin-top: 0.5rem;"></div>
+        </div>
+
+        <!-- Two column layout -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 1.5rem;">
+
+          <!-- Left column - Ingredients -->
+          <div>
+            <h4 style="margin-bottom: 1rem; color: var(--primary-color);">Ingredients</h4>
+            <div class="form-group">
+              <p style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 0.5rem;">One per line, including measurements</p>
+              <textarea id="importIngredients" name="ingredients" rows="12" placeholder="Add ingredients..." style="width: 100%; padding: 0.75rem 1rem; border: 1px solid var(--border-color); border-radius: var(--radius); font-size: 1rem; font-family: inherit; resize: vertical;"></textarea>
+            </div>
+          </div>
+
+          <!-- Right column - Instructions -->
+          <div>
+            <h4 style="margin-bottom: 1rem; color: var(--primary-color);">Instructions <span style="color: var(--error-color);">*</span></h4>
+            <div class="form-group">
+              <p style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 0.5rem;">Step-by-step cooking instructions</p>
+              <textarea id="importInstructions" name="instructions" rows="12" required placeholder="Add instructions..." style="width: 100%; padding: 0.75rem 1rem; border: 1px solid var(--border-color); border-radius: var(--radius); font-size: 1rem; font-family: inherit; resize: vertical;"></textarea>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Meta fields -->
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.5rem;">
+          <div class="form-group">
+            <label for="importPrepTime" style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Prep Time</label>
+            <input type="text" id="importPrepTime" name="prepTime" placeholder="15 min" style="width: 100%; padding: 0.5rem 0.75rem; border: 1px solid var(--border-color); border-radius: var(--radius);">
+          </div>
+          <div class="form-group">
+            <label for="importCookTime" style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Cook Time</label>
+            <input type="text" id="importCookTime" name="cookTime" placeholder="40 min" style="width: 100%; padding: 0.5rem 0.75rem; border: 1px solid var(--border-color); border-radius: var(--radius);">
+          </div>
+          <div class="form-group">
+            <label for="importServings" style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Servings</label>
+            <input type="text" id="importServings" name="servings" placeholder="4" style="width: 100%; padding: 0.5rem 0.75rem; border: 1px solid var(--border-color); border-radius: var(--radius);">
+          </div>
+          <div class="form-group">
+            <label for="importSourceUrl" style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Source URL</label>
+            <input type="url" id="importSourceUrl" name="sourceUrl" placeholder="https://..." style="width: 100%; padding: 0.5rem 0.75rem; border: 1px solid var(--border-color); border-radius: var(--radius);">
+          </div>
+        </div>
+
+        <!-- Description/Notes -->
+        <div class="form-group" style="margin-bottom: 1.5rem;">
+          <label for="importDescription" style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Description / Notes</label>
+          <textarea id="importDescription" name="description" rows="3" placeholder="Optional description or notes about this recipe..." style="width: 100%; padding: 0.75rem 1rem; border: 1px solid var(--border-color); border-radius: var(--radius); font-size: 1rem; font-family: inherit; resize: vertical;"></textarea>
+        </div>
+
+        <!-- Submit buttons -->
+        <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 1rem; border-top: 1px solid var(--border-color);">
+          <button type="button" id="startOverButton" class="btn btn-outline" style="background: none; border: 1px solid var(--border-color); color: var(--text-muted);">
+            &larr; Start Over
+          </button>
+          <div style="display: flex; gap: 1rem;">
+            <button type="submit" name="action" value="draft" class="btn btn-outline" id="saveDraftButton">Save as Draft</button>
+            <button type="submit" name="action" value="publish" class="btn btn-primary" id="publishButton">Publish Recipe</button>
+          </div>
+        </div>
+
+      </div>
+    </form>
+  </div>
+
+</div>
+
+<style>
+  #dropZone.dragover {
+    border-color: var(--primary-color);
+    background-color: rgba(var(--primary-color-rgb), 0.05);
+  }
+
+  @media (max-width: 768px) {
+    #previewSection [style*="grid-template-columns: 1fr 1fr"] {
+      grid-template-columns: 1fr !important;
+    }
+    #previewSection [style*="grid-template-columns: repeat(4"] {
+      grid-template-columns: 1fr 1fr !important;
+    }
+  }
+</style>
+
+<script src="/js/import.js"></script>
