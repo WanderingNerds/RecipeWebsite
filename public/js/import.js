@@ -173,13 +173,14 @@ document.addEventListener("DOMContentLoaded", function () {
     const confidencePercent = Math.round(confidence * 100);
     confidenceFill.style.width = `${confidencePercent}%`;
 
-    // Color based on confidence
+    // Color based on confidence using CSS classes
+    confidenceFill.classList.remove("confidence-good", "confidence-medium", "confidence-low");
     if (confidence >= 0.8) {
-      confidenceFill.style.backgroundColor = "#28a745"; // Green
+      confidenceFill.classList.add("confidence-good");
     } else if (confidence >= 0.5) {
-      confidenceFill.style.backgroundColor = "#ffc107"; // Yellow
+      confidenceFill.classList.add("confidence-medium");
     } else {
-      confidenceFill.style.backgroundColor = "#dc3545"; // Red
+      confidenceFill.classList.add("confidence-low");
     }
 
     // Display warnings if any

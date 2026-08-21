@@ -41,7 +41,7 @@
     <input type="file" id="fileInput" accept=".json,.pdf,.jpg,.jpeg,.png,.webp,application/json,application/pdf,image/jpeg,image/png,image/webp" style="display: none;">
 
     <!-- Error display -->
-    <div id="uploadError" style="display: none; margin-top: 1rem; padding: 1rem; background-color: #f8d7da; color: #721c24; border-radius: var(--radius);">
+    <div id="uploadError" class="callout-error" style="display: none; margin-top: 1rem;">
       <strong>Error:</strong> <span id="uploadErrorMessage"></span>
     </div>
 
@@ -68,9 +68,9 @@
         </div>
 
         <!-- Warnings -->
-        <div id="warningsSection" style="display: none; margin-bottom: 1.5rem; padding: 1rem; background-color: #fff3cd; border: 1px solid #ffc107; border-radius: var(--radius);">
-          <strong style="color: #856404;">&#9888; Parsing Notes:</strong>
-          <ul id="warningsList" style="margin: 0.5rem 0 0 1rem; padding: 0; color: #856404;"></ul>
+        <div id="warningsSection" class="callout-warning" style="display: none; margin-bottom: 1.5rem;">
+          <strong>&#9888; Parsing Notes:</strong>
+          <ul id="warningsList" style="margin: 0.5rem 0 0 1rem; padding: 0;"></ul>
         </div>
 
         <!-- Title -->
@@ -150,8 +150,8 @@
 
 <style>
   #dropZone.dragover {
-    border-color: var(--primary-color);
-    background-color: rgba(var(--primary-color-rgb), 0.05);
+    border-color: var(--color-accent);
+    background-color: var(--color-accent-100);
   }
 
   @media (max-width: 768px) {

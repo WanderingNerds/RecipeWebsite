@@ -20,9 +20,9 @@
           </button>
         <% } %>
         <% if (recipe.status === 'draft') { %>
-          <span style="background-color: #f8d7da; color: #721c24; padding: 0.5rem 1rem; border-radius: 4px; font-size: 0.875rem;">Draft</span>
+          <span class="badge-draft">Draft</span>
         <% } else { %>
-          <span style="background-color: #d4edda; color: #155724; padding: 0.5rem 1rem; border-radius: 4px; font-size: 0.875rem;">Published</span>
+          <span class="badge-published">Published</span>
         <% } %>
       </div>
     </div>
@@ -60,7 +60,7 @@
 
     <!-- Recipe photo -->
     <% if (recipe.photo_url) { %>
-      <div style="margin-bottom: 2rem; background: #f5f5f5; border-radius: var(--radius); display: flex; align-items: center; justify-content: center; min-height: 300px;">
+      <div class="photo-placeholder" style="margin-bottom: 2rem; border-radius: var(--radius); display: flex; align-items: center; justify-content: center; min-height: 300px;">
         <img src="<%= recipe.photo_url %>" alt="<%= recipe.title %>" style="width: 100%; max-height: 400px; object-fit: contain; border-radius: var(--radius);">
       </div>
     <% } %>
@@ -175,8 +175,8 @@
 
     <!-- Tips & Notes -->
     <% if (recipe.notes) { %>
-      <div style="background-color: #e8f4f8; border-radius: var(--radius); padding: 1.5rem; margin-top: 2rem;">
-        <h3 style="font-size: 1.125rem; margin-bottom: 0.75rem; color: var(--text-color);">Tips & Notes</h3>
+      <div class="callout-info" style="margin-top: 2rem;">
+        <h3 style="font-size: 1.125rem; margin-bottom: 0.75rem;">Tips & Notes</h3>
         <div style="white-space: pre-line; line-height: 1.6;"><%= recipe.notes %></div>
       </div>
     <% } %>

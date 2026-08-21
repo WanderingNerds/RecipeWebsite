@@ -23,9 +23,10 @@ document.addEventListener('DOMContentLoaded', function() {
         photoImage.src = e.target.result;
         photoImage.style.display = 'block';
         photoImage.style.objectFit = 'contain';
-        photoImage.style.backgroundColor = '#f5f5f5';
         photoPlaceholder.style.display = 'none';
-        photoPreview.style.background = '#f5f5f5';
+        // Switch from pattern to solid background using CSS class
+        photoPreview.classList.remove('photo-placeholder-pattern');
+        photoPreview.classList.add('photo-placeholder');
       };
       reader.readAsDataURL(file);
     }
