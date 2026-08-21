@@ -8,10 +8,11 @@
 
 :root {
   /* ── Ground & ink ─────────────────────────────────────────── */
-  --color-bg: #f5ead8;        /* page ground - cream */
-  --color-surface: #ebddc5;   /* cards, inputs, quiet panels */
-  --color-text: #201e1d;      /* ink */
-  --color-divider: color-mix(in srgb, #201e1d 16%, transparent);
+  --color-bg: #fafafa;        /* page ground - clean white */
+  --color-surface: #ffffff;   /* cards, inputs - pure white */
+  --color-text: #1a1a1a;      /* ink - near black */
+  --color-text-light: #f5ead8; /* cream - for dark backgrounds */
+  --color-divider: color-mix(in srgb, #1a1a1a 12%, transparent);
 
   /* ── Primary hues (four; any may lead a region) ───────────── */
   --color-accent: #7a8a5e;    /* sage — primary UI accent (buttons, CTAs) */
@@ -22,16 +23,16 @@
   --color-sage: #7a8a5e;      /* sage — alias for accent */
   --color-terracotta: #c67139; /* terracotta — alias for tertiary */
 
-  /* ── Neutral ramp ────────────────────────────────────────── */
-  --color-neutral-100: #f9f4ed;
-  --color-neutral-200: #eee7db;
-  --color-neutral-300: #dcd3c4;
-  --color-neutral-400: #c0b6a5;
-  --color-neutral-500: #a19786;
-  --color-neutral-600: #82796a;
-  --color-neutral-700: #645c50;
-  --color-neutral-800: #474238;
-  --color-neutral-900: #2e2b25;
+  /* ── Neutral ramp (cool gray) ───────────────────────────── */
+  --color-neutral-100: #f8f9fa;
+  --color-neutral-200: #e9ecef;
+  --color-neutral-300: #dee2e6;
+  --color-neutral-400: #ced4da;
+  --color-neutral-500: #adb5bd;
+  --color-neutral-600: #6c757d;
+  --color-neutral-700: #495057;
+  --color-neutral-800: #343a40;
+  --color-neutral-900: #212529;
 
   /* ── Accent (Sage) ramp — primary UI color ─────────────────── */
   --color-accent-100: #f0fae1;
@@ -194,25 +195,26 @@ h1, h2, h3, h4, h5, h6 {
   line-height: 1.12;
   letter-spacing: -0.015em;
   margin: 0 0 var(--space-2);
+  color: var(--color-sage-700);  /* Colorful headers */
 }
 
-h1 { font-size: 42px; }
+h1 { font-size: 42px; color: var(--color-sage-600); }
 h2 { font-size: 32px; }
 h3 { font-size: 25px; }
 h4 { font-size: 20px; }
-h5 { font-size: 16px; }
-h6 { font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; }
+h5 { font-size: 16px; color: var(--color-mist-700); }
+h6 { font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-blush-600); }
 
 p { margin: 0 0 var(--space-3); }
 
 a {
-  color: var(--color-mist-600);
+  color: var(--color-sage-600);
   text-decoration: none;
   text-underline-offset: 3px;
 }
 
 a:hover {
-  color: var(--color-mist-700);
+  color: var(--color-sage-700);
   text-decoration: underline;
 }
 
@@ -562,8 +564,8 @@ textarea.input {
 }
 
 .form-error {
-  color: var(--color-accent-700);
-  background-color: var(--color-accent-100);
+  color: var(--color-blush-800);
+  background-color: var(--color-blush-100);
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-pill);
   font-size: 13px;
@@ -627,6 +629,8 @@ textarea.input {
   padding: var(--space-3);
   border-radius: var(--radius-card);
   background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--color-neutral-200);
 }
 
 .card-kicker {
@@ -670,6 +674,7 @@ textarea.input {
 .navbar {
   background-color: var(--color-surface);
   box-shadow: var(--shadow-sm);
+  border-bottom: 1px solid var(--color-neutral-200);
   padding: var(--space-3) 0;
   position: sticky;
   top: 0;
@@ -1716,6 +1721,7 @@ a.pagination-link:hover {
 
 .footer {
   background-color: var(--color-surface);
+  border-top: 1px solid var(--color-neutral-200);
   padding: var(--space-4) 0;
   text-align: center;
   color: var(--color-neutral-600);
