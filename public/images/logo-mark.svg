@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Potluck logo mark: a terracotta cooking pot with sage steam on a cream background">
+  <rect width="256" height="256" rx="56" fill="#f5ead8"/>
+  <rect x="32" y="108" width="28" height="14" rx="7" fill="#c67139"/>
+  <rect x="196" y="108" width="28" height="14" rx="7" fill="#c67139"/>
+  <rect x="56" y="104" width="144" height="20" rx="10" fill="#c67139"/>
+  <path d="M64 120 h128 v38 a64 64 0 0 1 -128 0 z" fill="#c67139"/>
+  <path d="M108 92 q-12 -16 0 -32" stroke="#7a8a5e" stroke-width="9" fill="none" stroke-linecap="round"/>
+  <path d="M148 92 q12 -16 0 -32" stroke="#7a8a5e" stroke-width="9" fill="none" stroke-linecap="round"/>
+</svg>

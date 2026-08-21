@@ -8,6 +8,8 @@ A recipe website built with Node.js, Express, and Supabase Auth.
 - **Authentication**: Supabase Auth
 - **Database**: Supabase (PostgreSQL)
 - **Frontend**: EJS server-side rendering
+- **Design System**: Potluck Brand Theme (CSS custom properties)
+- **Typography**: Caprasimo (headings), Figtree (body)
 
 ## Getting Started
 
@@ -93,7 +95,7 @@ recipe-website/
 │   ├── home.ejs                # Home page
 │   └── dashboard.ejs           # Protected dashboard
 ├── public/
-│   ├── css/styles.css          # Styles
+│   ├── css/styles.css          # Potluck design system and styles
 │   └── js/
 │       ├── main.js             # Client-side JavaScript
 │       ├── recipe-form.js      # Recipe form handling
@@ -133,6 +135,14 @@ recipe-website/
 - Secure login with Supabase Auth
 - Protected routes with middleware
 - Automatic session management via cookies
+
+### Potluck Brand Theme (REW-48)
+- **Dark Olive Hero**: Hero section with `#4f5c3f` background and botanical decorations
+- **Warm Backgrounds**: Oat milk/vanilla (`#faf5ea`) page backgrounds
+- **Wavy Dividers**: SVG wave transitions between sections
+- **Feature Cards**: Colored left borders with circular icons (Sage, Mist, Blush)
+- **CSS Custom Properties**: Complete design token system for maintainability
+- **Responsive Design**: Mobile-first with graceful degradation
 
 ## Scripts
 

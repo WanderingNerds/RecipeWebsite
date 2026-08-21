@@ -63,6 +63,52 @@ function Invoke-NativeLogged {
     return [PSCustomObject]@{ ExitCode = $LASTEXITCODE }
 }
 
+function Format-ClaudeEvent {
+    <#
+    Turns one line of `claude -p --output-format stream-json` output into a short,
+    readable log line. Falls back to the raw line if it isn't parseable JSON (e.g.
+    a stray stderr diagnostic), and returns $null for event types not worth logging
+    (so the log stays readable instead of a wall of raw JSON).
+    #>
+    param([string]$RawLine)
+    if ([string]::IsNullOrWhiteSpace($RawLine)) { return $null }
+    try {
+        $evt = $RawLine | ConvertFrom-Json -ErrorAction Stop
+    } catch {
+        return $RawLine
+    }
+
+    switch ($evt.type) {
+        'system' {
+            if ($evt.subtype -eq 'init') {
+                return "[session started] model=$($evt.model)"
+            }
+            return "[system:$($evt.subtype)]"
+        }
+        'result' {
+            return "[RESULT] subtype=$($evt.subtype) cost=`$$($evt.total_cost_usd) turns=$($evt.num_turns) :: $($evt.result)"
+        }
+        { $_ -in @('assistant', 'user') } {
+            $who = if ($evt.parent_tool_use_id) { 'subagent' } else { 'main' }
+            $parts = @()
+            foreach ($block in $evt.message.content) {
+                if ($block.type -eq 'text' -and $block.text) {
+                    $t = $block.text.Trim()
+                    if ($t.Length -gt 300) { $t = $t.Substring(0, 300) + '...' }
+                    if ($t) { $parts += "text: $t" }
+                } elseif ($block.type -eq 'tool_use') {
+                    $parts += "tool_use: $($block.name)"
+                } elseif ($block.type -eq 'tool_result') {
+                    $parts += "tool_result (error=$([bool]$block.is_error))"
+                }
+            }
+            if ($parts.Count -eq 0) { return $null }
+            return "[$who/$($evt.type)] " + ($parts -join ' | ')
+        }
+        default { return $null }   # e.g. stream_event token deltas - too noisy to log per-token
+    }
+}
+
 Set-Location $RepoPath
 Write-Log "=== Run started (repo: $RepoPath) ==="
 
@@ -136,12 +182,25 @@ End with a short plain-text summary: ticket key, ticket summary, branch name, wh
 "@
 
     Write-Log "Starting claude -p run..."
-    # NOTE: --dangerously-skip-permissions is required for a fully unattended run (there is
-    # no human to answer permission prompts). Verify this is still the correct flag for your
-    # installed Claude Code version with `claude --help` - it has changed names before.
-    # See this folder's README.md for the security tradeoffs of running this way.
-    $claudeResult = Invoke-NativeLogged -Exe claude -ExeArgs @('-p', $prompt, '--dangerously-skip-permissions') -LogPrefix ""
-    Write-Log "claude -p exited with code $($claudeResult.ExitCode)"
+    # --permission-mode auto: the documented way to run -p unattended - a safety
+    # classifier reviews actions instead of a human, rather than disabling permission
+    # checks outright. --output-format stream-json --verbose: emits one JSON event per
+    # message/tool-call AS IT HAPPENS (not buffered until exit), which is what lets this
+    # log show real progress during a run that can take many minutes. Verify these flags
+    # still match your installed Claude Code version with `claude -p --help` if this
+    # errors - CLI flags do change between versions.
+    $prevEAP = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        & claude -p $prompt --permission-mode auto --output-format stream-json --verbose 2>&1 | ForEach-Object {
+            $formatted = Format-ClaudeEvent -RawLine $_.ToString()
+            if ($formatted) { Write-Log $formatted }
+        }
+    } finally {
+        $ErrorActionPreference = $prevEAP
+    }
+    $claudeExitCode = $LASTEXITCODE
+    Write-Log "claude -p exited with code $claudeExitCode"
 
     # --- Return to a clean base branch so the repo isn't left sitting on a random ticket branch ---
     $postBranch = git rev-parse --abbrev-ref HEAD

@@ -1,42 +1,86 @@
 <section class="hero">
-  <h1>Welcome to Potluck</h1>
-  <p>Every dish carries the people who cooked it. Discover recipes, share your notes, and cook together.</p>
+  <div class="hero__content">
+    <h1>Welcome to Potluck</h1>
+    <p class="hero__lede">Every dish carries the people who cooked it. Discover recipes, share your notes, and cook together.</p>
 
-  <form class="search-form search-form-lg search-form-hero" action="/search" method="GET" role="search">
-    <input
-      type="search"
-      name="q"
-      placeholder="Search recipes by name or ingredient..."
-      aria-label="Search recipes"
-      maxlength="100"
-    >
-    <button type="submit" class="btn btn-primary">Search</button>
-  </form>
+    <div class="hero__search">
+      <form class="search-form" action="/search" method="GET" role="search">
+        <input
+          type="search"
+          name="q"
+          placeholder="Search recipes by name or ingredient..."
+          aria-label="Search recipes"
+          maxlength="100"
+        >
+        <button type="submit" class="btn btn-primary">Search</button>
+      </form>
+    </div>
 
-  <div class="hero-actions">
-    <a href="/browse" class="btn btn-secondary btn-lg">Browse Recipes</a>
-    <% if (!user) { %>
-      <a href="/auth/register" class="btn btn-primary btn-lg">Get Started</a>
-    <% } else { %>
-      <a href="/recipes/new" class="btn btn-primary btn-lg">Add a Recipe</a>
-    <% } %>
+    <div class="hero__actions">
+      <a href="/browse" class="btn btn-outline-light btn-lg">Browse Recipes</a>
+      <% if (!user) { %>
+        <a href="/auth/register" class="btn btn-primary btn-lg">Get Started</a>
+      <% } else { %>
+        <a href="/recipes/new" class="btn btn-primary btn-lg">Add a Recipe</a>
+      <% } %>
+    </div>
   </div>
 </section>
 
-<section class="features">
-  <h2>Cook with us</h2>
-  <div class="features-grid">
-    <div class="feature-card">
-      <h3>Collect Recipes</h3>
-      <p>Save your favorites and organize them into lists. Import from anywhere.</p>
-    </div>
-    <div class="feature-card">
-      <h3>Scale & Cook</h3>
-      <p>Adjust servings instantly. Step-by-step cook mode keeps your phone awake.</p>
-    </div>
-    <div class="feature-card">
-      <h3>Share Notes</h3>
-      <p>Add your swaps and tips. Every note makes a recipe better for the next cook.</p>
+<!-- Wavy divider between hero and body -->
+<div class="hero-wave">
+  <svg viewBox="0 0 1440 120" fill="none" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
+    <path d="M0 120L48 108C96 96 192 72 288 66C384 60 480 72 576 78C672 84 768 84 864 78C960 72 1056 60 1152 60C1248 60 1344 72 1392 78L1440 84V120H1392C1344 120 1248 120 1152 120C1056 120 960 120 864 120C768 120 672 120 576 120C480 120 384 120 288 120C192 120 96 120 48 120H0Z" fill="#faf5ea"/>
+  </svg>
+</div>
+
+<section class="feature-section">
+  <div class="container">
+    <h2 class="feature-section__heading">Cook with us</h2>
+    <div class="feature-grid">
+      <!-- Collect Recipes - Olive/Sage -->
+      <article class="feature-card feature-card--collect">
+        <div class="feature-card__icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/>
+            <path d="M12 6v7"/>
+            <path d="M8 9h8"/>
+          </svg>
+        </div>
+        <div class="feature-card__content">
+          <h3>Collect Recipes</h3>
+          <p>Save your favorites and organize them into lists. Import from anywhere.</p>
+        </div>
+      </article>
+
+      <!-- Scale & Cook - Blue/Mist -->
+      <article class="feature-card feature-card--scale">
+        <div class="feature-card__icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <polyline points="12 6 12 12 16 14"/>
+          </svg>
+        </div>
+        <div class="feature-card__content">
+          <h3>Scale & Cook</h3>
+          <p>Adjust servings instantly. Step-by-step cook mode keeps your phone awake.</p>
+        </div>
+      </article>
+
+      <!-- Share Notes - Pink/Blush -->
+      <article class="feature-card feature-card--notes">
+        <div class="feature-card__icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            <path d="M8 10h8"/>
+            <path d="M8 14h4"/>
+          </svg>
+        </div>
+        <div class="feature-card__content">
+          <h3>Share Notes</h3>
+          <p>Add your swaps and tips. Every note makes a recipe better for the next cook.</p>
+        </div>
+      </article>
     </div>
   </div>
 </section>
