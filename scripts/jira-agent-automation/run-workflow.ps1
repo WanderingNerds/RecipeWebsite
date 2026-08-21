@@ -36,13 +36,17 @@ function Write-Log {
 
 function Invoke-NativeLogged {
     <#
-    Runs a native command with stdout+stderr merged and each line logged, WITHOUT
-    letting $ErrorActionPreference = 'Stop' treat routine stderr chatter as a
-    terminating error. git ("Already on 'main'", "Switched to branch...") and the
-    claude CLI both write ordinary status output to stderr even on success; under
-    Stop + 2>&1 that would otherwise abort the script on a non-error. Success/failure
-    is judged strictly by the process's real exit code ($LASTEXITCODE), returned here
-    so the caller decides what to do.
+    Runs a native command with stdout+stderr merged, logging (and echoing to the
+    console) each line AS IT ARRIVES rather than buffering the whole run - a
+    multi-agent claude -p pipeline can take many minutes, and a buffered version
+    would show nothing at all until the process exits, making a slow-but-fine run
+    indistinguishable from a hung one. This also avoids letting
+    $ErrorActionPreference = 'Stop' treat routine stderr chatter as a terminating
+    error: git ("Already on 'main'", "Switched to branch...") and the claude CLI
+    both write ordinary status output to stderr even on success; under Stop + 2>&1
+    that would otherwise abort the script on a non-error. Success/failure is judged
+    strictly by the process's real exit code ($LASTEXITCODE), returned here so the
+    caller decides what to do.
     #>
     param(
         [Parameter(Mandatory)][string]$Exe,
@@ -51,15 +55,12 @@ function Invoke-NativeLogged {
     )
     $prevEAP = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
-    $lines = @()
     try {
-        $lines = & $Exe @ExeArgs 2>&1 | ForEach-Object { $_.ToString() }
+        & $Exe @ExeArgs 2>&1 | ForEach-Object { Write-Log "$LogPrefix$($_.ToString())" }
     } finally {
         $ErrorActionPreference = $prevEAP
     }
-    $exitCode = $LASTEXITCODE
-    foreach ($l in $lines) { Write-Log "$LogPrefix$l" }
-    return [PSCustomObject]@{ Lines = $lines; ExitCode = $exitCode }
+    return [PSCustomObject]@{ ExitCode = $LASTEXITCODE }
 }
 
 Set-Location $RepoPath
