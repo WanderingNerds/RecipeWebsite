@@ -1,6 +1,6 @@
 # Jira agent pipeline automation
 
-Runs every 15 minutes on your machine. Each run:
+Runs every 5 hours on your machine. Each run:
 
 1. Skips entirely if the working tree isn't clean (never interferes with manual work in progress).
 2. Finds the highest-priority Jira ticket assigned to you that isn't Done and isn't already "In Progress".

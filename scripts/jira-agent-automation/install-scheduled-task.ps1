@@ -1,6 +1,6 @@
 <#
 One-time setup. Registers a Windows Scheduled Task that runs run-workflow.ps1
-every 15 minutes, starting now, only while you're logged on to this machine.
+every 5 hours, starting now, only while you're logged on to this machine.
 
 Run this once from a normal PowerShell window (not this bridge):
 
@@ -28,7 +28,7 @@ $action = New-ScheduledTaskAction -Execute "powershell.exe" `
 # produces a duration string the Task Scheduler XML schema rejects - this is the fix for
 # that, not an oversight.)
 $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) `
-             -RepetitionInterval (New-TimeSpan -Minutes 15)
+             -RepetitionInterval (New-TimeSpan -Hours 5)
 
 $settings = New-ScheduledTaskSettingsSet `
               -MultipleInstances IgnoreNew `
@@ -40,11 +40,11 @@ Register-ScheduledTask -TaskName $TaskName `
                         -Action $action `
                         -Trigger $trigger `
                         -Settings $settings `
-                        -Description "Every 15 min: checks Jira for the highest-priority open ticket assigned to Andrew Carroll and runs it through the Planner/Developer/Reviewer/Documentation agent pipeline, committing locally (no push)." `
+                        -Description "Every 5 hours: checks Jira for the highest-priority open ticket assigned to Andrew Carroll and runs it through the Planner/Developer/Reviewer/Documentation agent pipeline, committing locally (no push)." `
                         -Force | Out-Null
 
 Write-Host "Installed scheduled task '$TaskName'."
-Write-Host "It runs under your current Windows user account, only while you're logged on, every 15 minutes."
+Write-Host "It runs under your current Windows user account, only while you're logged on, every 5 hours."
 Write-Host ""
 Write-Host "Useful commands:"
 Write-Host "  Run it once right now (test):  Start-ScheduledTask -TaskName '$TaskName'"
