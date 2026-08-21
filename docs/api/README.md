@@ -60,7 +60,10 @@ All API endpoints require authentication unless otherwise noted. Authentication 
 | POST | `/auth/login` | Process login |
 | GET | `/auth/register` | Registration page |
 | POST | `/auth/register` | Process registration |
-| POST | `/auth/logout` | Log out |
+| GET | `/auth/logout` | Log out |
+| GET | `/auth/callback` | Email confirmation callback (REW-41) |
+| GET | `/auth/resend-confirmation` | Resend confirmation email page (REW-41) |
+| POST | `/auth/resend-confirmation` | Process resend confirmation request (REW-41) |
 
 ---
 
@@ -69,6 +72,7 @@ All API endpoints require authentication unless otherwise noted. Authentication 
 - [Recipe Scaling API](recipe-scaling.md) - Real-time ingredient scaling
 - [Recipe Import - OCR/PDF Parsing](recipe-import-ocr-parsing.md) - Text extraction and parsing from PDFs and images
 - [Categories and Tags](../CATEGORIES_AND_TAGS.md) - Full categories/tags documentation
+- [Email Confirmation Flow](email-confirmation.md) - Email verification and callback handling (REW-41)
 
 ---
 
