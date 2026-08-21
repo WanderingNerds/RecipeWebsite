@@ -8,49 +8,75 @@
 
 :root {
   /* ── Ground & ink ─────────────────────────────────────────── */
-  --color-bg: #f5ead8;        /* page ground - cream */
-  --color-surface: #ebddc5;   /* cards, inputs, quiet panels */
-  --color-text: #201e1d;      /* ink */
-  --color-divider: color-mix(in srgb, #201e1d 16%, transparent);
+  --color-bg: #fafafa;        /* page ground - clean white */
+  --color-surface: #ffffff;   /* cards, inputs - pure white */
+  --color-text: #1a1a1a;      /* ink - near black */
+  --color-text-light: #f5ead8; /* cream - for dark backgrounds */
+  --color-divider: color-mix(in srgb, #1a1a1a 12%, transparent);
 
   /* ── Primary hues (four; any may lead a region) ───────────── */
-  --color-accent: #c67139;    /* terracotta — cooking & publishing (default lead) */
-  --color-accent-2: #7a8a5e;  /* sage — information: diet, seasonality */
+  --color-accent: #7a8a5e;    /* sage — primary UI accent (buttons, CTAs) */
+  --color-accent-2: #7f93a5;  /* mist — secondary accent (links, info) */
+  --color-accent-tertiary: #c67139; /* terracotta — cooking-specific accents, warnings */
   --color-blush: #d17c7e;     /* blush petal — people, notes, sweet/baking */
   --color-mist: #7f93a5;      /* misty sky — time, temperature, cook mode */
+  --color-sage: #7a8a5e;      /* sage — alias for accent */
+  --color-terracotta: #c67139; /* terracotta — alias for tertiary */
 
-  /* ── Neutral ramp ────────────────────────────────────────── */
-  --color-neutral-100: #f9f4ed;
-  --color-neutral-200: #eee7db;
-  --color-neutral-300: #dcd3c4;
-  --color-neutral-400: #c0b6a5;
-  --color-neutral-500: #a19786;
-  --color-neutral-600: #82796a;
-  --color-neutral-700: #645c50;
-  --color-neutral-800: #474238;
-  --color-neutral-900: #2e2b25;
+  /* ── Neutral ramp (cool gray) ───────────────────────────── */
+  --color-neutral-100: #f8f9fa;
+  --color-neutral-200: #e9ecef;
+  --color-neutral-300: #dee2e6;
+  --color-neutral-400: #ced4da;
+  --color-neutral-500: #adb5bd;
+  --color-neutral-600: #6c757d;
+  --color-neutral-700: #495057;
+  --color-neutral-800: #343a40;
+  --color-neutral-900: #212529;
 
-  /* ── Accent (Terracotta) ramp ────────────────────────────── */
-  --color-accent-100: #fff2eb;
-  --color-accent-200: #ffe1d0;
-  --color-accent-300: #ffc6a5;
-  --color-accent-400: #f6a06b;
-  --color-accent-500: #d67f48;
-  --color-accent-600: #b2622d;
-  --color-accent-700: #8c491a;
-  --color-accent-800: #643312;
-  --color-accent-900: #402310;
+  /* ── Accent (Sage) ramp — primary UI color ─────────────────── */
+  --color-accent-100: #f0fae1;
+  --color-accent-200: #e1eecc;
+  --color-accent-300: #ccdbb2;
+  --color-accent-400: #aebf92;
+  --color-accent-500: #8fa073;
+  --color-accent-600: #728157;
+  --color-accent-700: #56633f;
+  --color-accent-800: #3d472b;
+  --color-accent-900: #272e1b;
 
-  /* ── Accent-2 (Sage) ramp ────────────────────────────────── */
-  --color-accent-2-100: #f0fae1;
-  --color-accent-2-200: #e1eecc;
-  --color-accent-2-300: #ccdbb2;
-  --color-accent-2-400: #aebf92;
-  --color-accent-2-500: #8fa073;
-  --color-accent-2-600: #728157;
-  --color-accent-2-700: #56633f;
-  --color-accent-2-800: #3d472b;
-  --color-accent-2-900: #272e1b;
+  /* ── Terracotta ramp — tertiary accent ─────────────────────── */
+  --color-terracotta-100: #fff2eb;
+  --color-terracotta-200: #ffe1d0;
+  --color-terracotta-300: #ffc6a5;
+  --color-terracotta-400: #f6a06b;
+  --color-terracotta-500: #d67f48;
+  --color-terracotta-600: #b2622d;
+  --color-terracotta-700: #8c491a;
+  --color-terracotta-800: #643312;
+  --color-terracotta-900: #402310;
+
+  /* ── Accent-2 (Mist) ramp — secondary accent ────────────────── */
+  --color-accent-2-100: #eff5fa;
+  --color-accent-2-200: #dbe7f0;
+  --color-accent-2-300: #becfdd;
+  --color-accent-2-400: #9db1c2;
+  --color-accent-2-500: #7f93a5;
+  --color-accent-2-600: #647787;
+  --color-accent-2-700: #4b5c69;
+  --color-accent-2-800: #34404b;
+  --color-accent-2-900: #1f2830;
+
+  /* ── Sage ramp — alias for primary accent ──────────────────── */
+  --color-sage-100: #f0fae1;
+  --color-sage-200: #e1eecc;
+  --color-sage-300: #ccdbb2;
+  --color-sage-400: #aebf92;
+  --color-sage-500: #8fa073;
+  --color-sage-600: #728157;
+  --color-sage-700: #56633f;
+  --color-sage-800: #3d472b;
+  --color-sage-900: #272e1b;
 
   /* ── Blush (Blush petal) ramp ────────────────────────────── */
   --color-blush-100: #fff1f0;
@@ -109,8 +135,10 @@
   --card-background: var(--color-surface);
   --text-muted: var(--color-neutral-600);
   --border-color: var(--color-divider);
-  --success-color: var(--color-accent-2-600);
-  --error-color: var(--color-accent-700);
+  --success-color: var(--color-accent-600);
+  --error-color: var(--color-blush-700);
+  --warning-color: var(--color-terracotta-600);
+  --info-color: var(--color-mist-600);
   --shadow: var(--shadow-sm);
   --radius: var(--radius-sm);
 }
@@ -167,24 +195,26 @@ h1, h2, h3, h4, h5, h6 {
   line-height: 1.12;
   letter-spacing: -0.015em;
   margin: 0 0 var(--space-2);
+  color: var(--color-text);
 }
 
-h1 { font-size: 42px; }
-h2 { font-size: 32px; }
-h3 { font-size: 25px; }
-h4 { font-size: 20px; }
-h5 { font-size: 16px; }
-h6 { font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; }
+h1 { font-size: 42px; color: var(--color-sage-600); }
+h2 { font-size: 32px; color: var(--color-mist-700); }
+h3 { font-size: 25px; color: var(--color-blush-600); }
+h4 { font-size: 20px; color: var(--color-sage-700); }
+h5 { font-size: 16px; color: var(--color-mist-600); }
+h6 { font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-blush-500); }
 
 p { margin: 0 0 var(--space-3); }
 
 a {
-  color: var(--color-accent);
+  color: var(--color-mist-600);
   text-decoration: none;
   text-underline-offset: 3px;
 }
 
 a:hover {
+  color: var(--color-mist-700);
   text-decoration: underline;
 }
 
@@ -269,13 +299,33 @@ img {
 .btn-ghost:hover { background: color-mix(in srgb, var(--color-accent) 10%, transparent); }
 .btn-ghost:active { background: color-mix(in srgb, var(--color-accent) 18%, transparent); }
 
-/* Outline — for compatibility */
+/* Outline — uses Mist for variety */
 .btn-outline {
-  border: 1px solid var(--color-accent);
-  color: var(--color-accent);
+  border: 1px solid var(--color-mist-500);
+  color: var(--color-mist-700);
 }
 .btn-outline:hover {
-  background: var(--color-accent);
+  background: var(--color-mist-500);
+  color: var(--color-bg);
+}
+
+/* Outline Sage — explicit sage outline */
+.btn-outline-sage {
+  border: 1px solid var(--color-sage-500);
+  color: var(--color-sage-700);
+}
+.btn-outline-sage:hover {
+  background: var(--color-sage-500);
+  color: var(--color-bg);
+}
+
+/* Outline Blush — pink outline */
+.btn-outline-blush {
+  border: 1px solid var(--color-blush-400);
+  color: var(--color-blush-600);
+}
+.btn-outline-blush:hover {
+  background: var(--color-blush-500);
   color: var(--color-bg);
 }
 
@@ -344,6 +394,133 @@ img {
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
+   Status Badges — Draft/Published indicators
+   ══════════════════════════════════════════════════════════════════════ */
+
+.badge-draft {
+  display: inline-block;
+  background-color: var(--color-terracotta-100);
+  color: var(--color-terracotta-800);
+  padding: 0.25rem 0.75rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.badge-draft-sm {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+}
+
+.badge-published {
+  display: inline-block;
+  background-color: var(--color-accent-100);
+  color: var(--color-accent-800);
+  padding: 0.25rem 0.75rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.badge-published-sm {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+}
+
+.badge-new {
+  display: inline-block;
+  background-color: var(--color-mist-100);
+  color: var(--color-mist-800);
+  padding: 0.25rem 0.75rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.badge-edit {
+  display: inline-block;
+  background-color: var(--color-mist-100);
+  color: var(--color-mist-800);
+  padding: 0.25rem 0.75rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Callout Sections — Info, Warning, Error, Success
+   ══════════════════════════════════════════════════════════════════════ */
+
+.callout-info {
+  background-color: var(--color-mist-100);
+  border-radius: var(--radius-sm);
+  padding: 1.5rem;
+}
+
+.callout-info h3,
+.callout-info h4 {
+  color: var(--color-mist-800);
+}
+
+.callout-warning {
+  background-color: var(--color-terracotta-100);
+  border: 1px solid var(--color-terracotta-300);
+  border-radius: var(--radius-sm);
+  padding: 1rem;
+}
+
+.callout-warning strong {
+  color: var(--color-terracotta-800);
+}
+
+.callout-warning ul {
+  color: var(--color-terracotta-800);
+}
+
+.callout-error {
+  background-color: var(--color-blush-100);
+  color: var(--color-blush-800);
+  border-radius: var(--radius-sm);
+  padding: 1rem;
+}
+
+.callout-success {
+  background-color: var(--color-accent-100);
+  color: var(--color-accent-800);
+  border-radius: var(--radius-sm);
+  padding: 1rem;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Confidence Indicators — Import confidence levels
+   ══════════════════════════════════════════════════════════════════════ */
+
+.confidence-good {
+  background-color: var(--color-accent-600);
+}
+
+.confidence-medium {
+  background-color: var(--color-terracotta-500);
+}
+
+.confidence-low {
+  background-color: var(--color-blush-600);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Photo Placeholder — Recipe photo backgrounds
+   ══════════════════════════════════════════════════════════════════════ */
+
+.photo-placeholder {
+  background-color: var(--color-neutral-200);
+}
+
+.photo-placeholder-pattern {
+  background: linear-gradient(135deg, var(--color-neutral-200) 25%, var(--color-neutral-300) 25%, var(--color-neutral-300) 50%, var(--color-neutral-200) 50%, var(--color-neutral-200) 75%, var(--color-neutral-300) 75%, var(--color-neutral-300));
+  background-size: 20px 20px;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
    Forms — Pill inputs
    ══════════════════════════════════════════════════════════════════════ */
 
@@ -407,8 +584,8 @@ textarea.input {
 }
 
 .form-error {
-  color: var(--color-accent-700);
-  background-color: var(--color-accent-100);
+  color: var(--color-blush-800);
+  background-color: var(--color-blush-100);
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-pill);
   font-size: 13px;
@@ -472,7 +649,15 @@ textarea.input {
   padding: var(--space-3);
   border-radius: var(--radius-card);
   background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--color-neutral-200);
+  border-left: 4px solid var(--color-mist-300);
 }
+
+/* Card color variants */
+.card-sage { border-left-color: var(--color-sage-400); }
+.card-blush { border-left-color: var(--color-blush-400); }
+.card-mist { border-left-color: var(--color-mist-400); }
 
 .card-kicker {
   font-size: 10px;
@@ -515,6 +700,8 @@ textarea.input {
 .navbar {
   background-color: var(--color-surface);
   box-shadow: var(--shadow-sm);
+  border-top: 4px solid var(--color-sage);
+  border-bottom: 1px solid var(--color-neutral-200);
   padding: var(--space-3) 0;
   position: sticky;
   top: 0;
@@ -558,11 +745,11 @@ textarea.input {
 
 .navbar-nav a.active,
 .navbar-nav a[aria-current='page'] {
-  color: var(--color-accent);
+  color: var(--color-blush-600);
 }
 
 .navbar-nav a:hover {
-  color: var(--color-accent);
+  color: var(--color-blush-500);
   text-decoration: none;
 }
 
@@ -1561,6 +1748,7 @@ a.pagination-link:hover {
 
 .footer {
   background-color: var(--color-surface);
+  border-top: 1px solid var(--color-neutral-200);
   padding: var(--space-4) 0;
   text-align: center;
   color: var(--color-neutral-600);

@@ -67,17 +67,17 @@ app.use(session({
 }));
 app.use(flash());
 
-// Rate limiting
-const generalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per windowMs
-  message: 'Too many requests from this IP, please try again later.',
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
-// Apply general rate limiting to all requests
-app.use(generalLimiter);
+// Rate limiting (disabled in development)
+if (process.env.NODE_ENV === 'production') {
+  const generalLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // Limit each IP to 100 requests per windowMs
+    message: 'Too many requests from this IP, please try again later.',
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+  app.use(generalLimiter);
+}
 
 // CSRF Protection - TEMPORARILY DISABLED
 // TODO: Re-enable CSRF protection after debugging library issues

@@ -1,7 +1,7 @@
 <div class="container" style="max-width: 1000px; margin: 0 auto; padding: 2rem 1rem;">
 
   <div style="margin-bottom: 2rem;">
-    <span style="display: inline-block; background-color: #f8d7da; color: #721c24; padding: 0.25rem 0.75rem; border-radius: 4px; font-size: 0.875rem; margin-bottom: 1rem;">New recipe</span>
+    <span class="badge-new" style="display: inline-block; margin-bottom: 1rem;">New recipe</span>
     <h1 style="margin-bottom: 0.5rem;">Add a recipe to your collection</h1>
     <p style="color: var(--text-muted); max-width: 600px;">Fill in the details below. Only a title and instructions are required — everything else is optional.</p>
   </div>
@@ -19,7 +19,7 @@
           <div style="margin-bottom: 1.5rem;">
             <label for="photo" style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Recipe Photo (optional)</label>
             <input type="file" id="photo" name="photo" accept="image/*" style="display: none;">
-            <div id="photoPreview" style="background: linear-gradient(135deg, #f0f0f0 25%, #e0e0e0 25%, #e0e0e0 50%, #f0f0f0 50%, #f0f0f0 75%, #e0e0e0 75%, #e0e0e0); background-size: 20px 20px; width: 100%; height: 200px; border-radius: var(--radius); display: flex; align-items: center; justify-content: center; cursor: pointer; position: relative; overflow: hidden;">
+            <div id="photoPreview" class="photo-placeholder-pattern" style="width: 100%; height: 200px; border-radius: var(--radius); display: flex; align-items: center; justify-content: center; cursor: pointer; position: relative; overflow: hidden;">
               <span id="photoPlaceholder" style="background: white; padding: 0.5rem 1rem; border-radius: 20px; font-size: 0.875rem; color: var(--text-muted);">Click to upload photo of the finished dish</span>
               <img id="photoImage" style="display: none; width: 100%; height: 100%; object-fit: cover;">
             </div>
@@ -116,8 +116,8 @@
       </div>
 
       <!-- Tips & notes -->
-      <div style="background-color: #e8f4f8; border-radius: var(--radius); padding: 1.5rem; margin-bottom: 1.5rem;">
-        <h3 style="font-size: 1.125rem; margin-bottom: 0.5rem; color: var(--text-color);">Tips & notes</h3>
+      <div class="callout-info" style="margin-bottom: 1.5rem;">
+        <h3 style="font-size: 1.125rem; margin-bottom: 0.5rem;">Tips & notes</h3>
         <p style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 0.75rem;">Substitutions, storage tips, or anything else worth remembering</p>
         <textarea name="notes" rows="3" style="background: white; width: 100%; padding: 0.75rem 1rem; border: 1px solid var(--border-color); border-radius: var(--radius); font-size: 1rem; font-family: inherit; resize: vertical;" placeholder="This freezes well for up to 3 months. Swap butter for olive oil for a dairy-free version."></textarea>
       </div>
