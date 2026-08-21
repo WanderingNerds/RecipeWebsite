@@ -96,3 +96,9 @@ SECURITY_*.md
 PRE_COMMIT_CHECKLIST.md
 GIT_TROUBLESHOOTING.md
 .mcp.json
+
+# OCR / ML Model Files
+*.traineddata
+
+# AI / Claude Code
+.claude/
