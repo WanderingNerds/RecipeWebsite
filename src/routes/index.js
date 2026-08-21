@@ -15,6 +15,7 @@ const router = Router();
 router.get("/", (req, res) => {
   res.render("home", {
     title: "Recipe Website",
+    isHomePage: true,
   });
 });
 

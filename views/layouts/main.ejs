@@ -4,6 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><%= title %> | Potluck</title>
+  <link rel="icon" type="image/svg+xml" href="/images/logo-mark.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Caprasimo:wght@400&family=Figtree:wght@400;600;700&display=swap" rel="stylesheet">
@@ -12,15 +16,15 @@
 <body>
   <%- include('../partials/navbar') %>
 
-  <main class="container">
+  <main class="<%= typeof isHomePage !== 'undefined' && isHomePage ? 'home-main' : 'container' %>">
     <% if (success && success.length > 0) { %>
-      <div class="alert alert-success">
+      <div class="alert alert-success container">
         <%= success %>
       </div>
     <% } %>
 
     <% if (error && error.length > 0) { %>
-      <div class="alert alert-error">
+      <div class="alert alert-error container">
         <%= error %>
       </div>
     <% } %>
