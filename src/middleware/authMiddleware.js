@@ -1,4 +1,5 @@
 import { supabase } from "../config/supabase.js";
+import { setAuthCookies } from "../utils/authUtils.js";
 
 /**
  * Middleware that requires authentication
@@ -26,18 +27,7 @@ export async function requireAuth(req, res, next) {
 
         if (!refreshError && refreshData.session) {
           // Set new cookies
-          res.cookie("sb-access-token", refreshData.session.access_token, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
-            maxAge: 60 * 60 * 1000, // 1 hour
-            sameSite: "lax",
-          });
-          res.cookie("sb-refresh-token", refreshData.session.refresh_token, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
-            maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-            sameSite: "lax",
-          });
+          setAuthCookies(res, refreshData.session);
 
           req.user = refreshData.user;
           req.accessToken = refreshData.session.access_token; // Attach access token for Supabase client

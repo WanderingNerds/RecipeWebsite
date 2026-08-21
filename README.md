@@ -39,7 +39,10 @@ A recipe website built with Node.js, Express, and Supabase Auth.
    SUPABASE_URL=https://your-project.supabase.co
    SUPABASE_ANON_KEY=your-supabase-anon-key
    SESSION_SECRET=your-session-secret
+   APP_URL=https://your-production-domain.com  # Required for production
    ```
+
+   Note: `APP_URL` is required for email confirmation links to work correctly in production. In development, it defaults to `http://localhost:3000`.
 
 5. Start the development server:
    ```bash
@@ -54,7 +57,12 @@ A recipe website built with Node.js, Express, and Supabase Auth.
 2. Go to **Settings > API** to get your:
    - Project URL (`SUPABASE_URL`)
    - Anon/Public key (`SUPABASE_ANON_KEY`)
-3. Authentication is handled automatically by Supabase Auth
+3. Configure authentication redirect URLs in **Authentication > URL Configuration**:
+   - **Site URL**: Set to your production URL (e.g., `https://your-domain.com`)
+   - **Redirect URLs**: Add your callback URL(s):
+     - Production: `https://your-domain.com/auth/callback`
+     - Development: `http://localhost:3000/auth/callback`
+4. Authentication is handled automatically by Supabase Auth
 
 ## Project Structure
 
