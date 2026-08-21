@@ -195,26 +195,26 @@ h1, h2, h3, h4, h5, h6 {
   line-height: 1.12;
   letter-spacing: -0.015em;
   margin: 0 0 var(--space-2);
-  color: var(--color-sage-700);  /* Colorful headers */
+  color: var(--color-text);
 }
 
 h1 { font-size: 42px; color: var(--color-sage-600); }
-h2 { font-size: 32px; }
-h3 { font-size: 25px; }
-h4 { font-size: 20px; }
-h5 { font-size: 16px; color: var(--color-mist-700); }
-h6 { font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-blush-600); }
+h2 { font-size: 32px; color: var(--color-mist-700); }
+h3 { font-size: 25px; color: var(--color-blush-600); }
+h4 { font-size: 20px; color: var(--color-sage-700); }
+h5 { font-size: 16px; color: var(--color-mist-600); }
+h6 { font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-blush-500); }
 
 p { margin: 0 0 var(--space-3); }
 
 a {
-  color: var(--color-sage-600);
+  color: var(--color-mist-600);
   text-decoration: none;
   text-underline-offset: 3px;
 }
 
 a:hover {
-  color: var(--color-sage-700);
+  color: var(--color-mist-700);
   text-decoration: underline;
 }
 
@@ -299,13 +299,33 @@ img {
 .btn-ghost:hover { background: color-mix(in srgb, var(--color-accent) 10%, transparent); }
 .btn-ghost:active { background: color-mix(in srgb, var(--color-accent) 18%, transparent); }
 
-/* Outline — for compatibility */
+/* Outline — uses Mist for variety */
 .btn-outline {
-  border: 1px solid var(--color-accent);
-  color: var(--color-accent);
+  border: 1px solid var(--color-mist-500);
+  color: var(--color-mist-700);
 }
 .btn-outline:hover {
-  background: var(--color-accent);
+  background: var(--color-mist-500);
+  color: var(--color-bg);
+}
+
+/* Outline Sage — explicit sage outline */
+.btn-outline-sage {
+  border: 1px solid var(--color-sage-500);
+  color: var(--color-sage-700);
+}
+.btn-outline-sage:hover {
+  background: var(--color-sage-500);
+  color: var(--color-bg);
+}
+
+/* Outline Blush — pink outline */
+.btn-outline-blush {
+  border: 1px solid var(--color-blush-400);
+  color: var(--color-blush-600);
+}
+.btn-outline-blush:hover {
+  background: var(--color-blush-500);
   color: var(--color-bg);
 }
 
@@ -631,7 +651,13 @@ textarea.input {
   background: var(--color-surface);
   box-shadow: var(--shadow-sm);
   border: 1px solid var(--color-neutral-200);
+  border-left: 4px solid var(--color-mist-300);
 }
+
+/* Card color variants */
+.card-sage { border-left-color: var(--color-sage-400); }
+.card-blush { border-left-color: var(--color-blush-400); }
+.card-mist { border-left-color: var(--color-mist-400); }
 
 .card-kicker {
   font-size: 10px;
@@ -674,6 +700,7 @@ textarea.input {
 .navbar {
   background-color: var(--color-surface);
   box-shadow: var(--shadow-sm);
+  border-top: 4px solid var(--color-sage);
   border-bottom: 1px solid var(--color-neutral-200);
   padding: var(--space-3) 0;
   position: sticky;
@@ -718,11 +745,11 @@ textarea.input {
 
 .navbar-nav a.active,
 .navbar-nav a[aria-current='page'] {
-  color: var(--color-accent);
+  color: var(--color-blush-600);
 }
 
 .navbar-nav a:hover {
-  color: var(--color-accent);
+  color: var(--color-blush-500);
   text-decoration: none;
 }
 
