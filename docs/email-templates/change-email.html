@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <title>Confirm your new email address</title>
+  <link href="https://fonts.googleapis.com/css2?family=Caprasimo&family=Figtree:wght@400;600&display=swap" rel="stylesheet">
+  <!--[if mso]>
+  <style type="text/css">
+    body, table, td {font-family: Georgia, serif !important;}
+  </style>
+  <![endif]-->
+</head>
+<body style="margin: 0; padding: 0; background-color: #f5ead8; font-family: 'Figtree', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #201e1d; line-height: 1.55;">
+  <!-- Outer wrapper -->
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #f5ead8;">
+    <tr>
+      <td align="center" style="padding: 40px 20px;">
+        <!-- Content container -->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 600px;">
+
+          <!-- Header with wordmark -->
+          <tr>
+            <td align="center" style="padding-bottom: 32px;">
+              <span style="font-family: 'Caprasimo', Georgia, serif; font-size: 32px; font-weight: 400; color: #c67139; text-decoration: none;">Potluck</span>
+            </td>
+          </tr>
+
+          <!-- Content card -->
+          <tr>
+            <td style="background-color: #ebddc5; border-radius: 16px; padding: 32px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+
+                <!-- Greeting -->
+                <tr>
+                  <td style="padding-bottom: 16px;">
+                    <h1 style="margin: 0; font-family: 'Caprasimo', Georgia, serif; font-size: 24px; font-weight: 400; color: #201e1d; line-height: 1.2;">Confirm your new email</h1>
+                  </td>
+                </tr>
+
+                <!-- Body text -->
+                <tr>
+                  <td style="padding-bottom: 8px;">
+                    <p style="margin: 0; font-size: 16px; color: #201e1d;">Hi there,</p>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding-bottom: 24px;">
+                    <p style="margin: 0; font-size: 16px; color: #201e1d;">You requested to change the email address on your Potluck account to <strong style="color: #201e1d;">{{ .NewEmail }}</strong>. Please confirm this change by clicking the button below.</p>
+                  </td>
+                </tr>
+
+                <!-- Primary CTA button -->
+                <tr>
+                  <td align="center" style="padding-bottom: 24px;">
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td style="background-color: #c67139; border-radius: 999px;">
+                          <a href="{{ .ConfirmationURL }}" target="_blank" style="display: inline-block; padding: 12px 24px; font-family: 'Caprasimo', Georgia, serif; font-size: 16px; font-weight: 400; color: #f5ead8; text-decoration: none;">Confirm new email</a>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+
+                <!-- Fallback link -->
+                <tr>
+                  <td style="padding-bottom: 16px;">
+                    <p style="margin: 0; font-size: 14px; color: #645c50;">If the button doesn't work, copy and paste this link into your browser:</p>
+                    <p style="margin: 8px 0 0 0; font-size: 14px; color: #c67139; word-break: break-all;">{{ .ConfirmationURL }}</p>
+                  </td>
+                </tr>
+
+              </table>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td align="center" style="padding-top: 24px;">
+              <p style="margin: 0; font-size: 13px; color: #82796a;">This email was sent to {{ .Email }}</p>
+              <p style="margin: 8px 0 0 0; font-size: 13px; color: #82796a;">If you didn't request this email change, please contact support immediately as someone may be trying to access your account.</p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
