@@ -34,6 +34,34 @@ function Write-Log {
     Write-Host $line
 }
 
+function Invoke-NativeLogged {
+    <#
+    Runs a native command with stdout+stderr merged and each line logged, WITHOUT
+    letting $ErrorActionPreference = 'Stop' treat routine stderr chatter as a
+    terminating error. git ("Already on 'main'", "Switched to branch...") and the
+    claude CLI both write ordinary status output to stderr even on success; under
+    Stop + 2>&1 that would otherwise abort the script on a non-error. Success/failure
+    is judged strictly by the process's real exit code ($LASTEXITCODE), returned here
+    so the caller decides what to do.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$Exe,
+        [Parameter(Mandatory)][string[]]$ExeArgs,
+        [string]$LogPrefix = "  "
+    )
+    $prevEAP = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    $lines = @()
+    try {
+        $lines = & $Exe @ExeArgs 2>&1 | ForEach-Object { $_.ToString() }
+    } finally {
+        $ErrorActionPreference = $prevEAP
+    }
+    $exitCode = $LASTEXITCODE
+    foreach ($l in $lines) { Write-Log "$LogPrefix$l" }
+    return [PSCustomObject]@{ Lines = $lines; ExitCode = $exitCode }
+}
+
 Set-Location $RepoPath
 Write-Log "=== Run started (repo: $RepoPath) ==="
 
@@ -66,9 +94,12 @@ try {
 
     # --- Sync base branch ---
     Write-Log "Fetching and syncing '$BaseBranch'..."
-    git fetch origin 2>&1 | ForEach-Object { Write-Log "  $_" }
-    git checkout $BaseBranch 2>&1 | ForEach-Object { Write-Log "  $_" }
-    git pull origin $BaseBranch 2>&1 | ForEach-Object { Write-Log "  $_" }
+    $r = Invoke-NativeLogged -Exe git -ExeArgs @('fetch', 'origin')
+    if ($r.ExitCode -ne 0) { throw "git fetch failed (exit $($r.ExitCode))" }
+    $r = Invoke-NativeLogged -Exe git -ExeArgs @('checkout', $BaseBranch)
+    if ($r.ExitCode -ne 0) { throw "git checkout $BaseBranch failed (exit $($r.ExitCode))" }
+    $r = Invoke-NativeLogged -Exe git -ExeArgs @('pull', 'origin', $BaseBranch)
+    if ($r.ExitCode -ne 0) { throw "git pull origin $BaseBranch failed (exit $($r.ExitCode))" }
 
     # --- Build the orchestrator prompt for the main (non-subagent) Claude Code session ---
     $prompt = @"
@@ -108,17 +139,16 @@ End with a short plain-text summary: ticket key, ticket summary, branch name, wh
     # no human to answer permission prompts). Verify this is still the correct flag for your
     # installed Claude Code version with `claude --help` - it has changed names before.
     # See this folder's README.md for the security tradeoffs of running this way.
-    $output = & claude -p $prompt --dangerously-skip-permissions 2>&1
-    $exitCode = $LASTEXITCODE
-    $output | ForEach-Object { Write-Log $_ }
-    Write-Log "claude -p exited with code $exitCode"
+    $claudeResult = Invoke-NativeLogged -Exe claude -ExeArgs @('-p', $prompt, '--dangerously-skip-permissions') -LogPrefix ""
+    Write-Log "claude -p exited with code $($claudeResult.ExitCode)"
 
     # --- Return to a clean base branch so the repo isn't left sitting on a random ticket branch ---
     $postBranch = git rev-parse --abbrev-ref HEAD
     if ($postBranch -ne $BaseBranch) {
         $stillDirty = git status --porcelain
         if (-not $stillDirty) {
-            git checkout $BaseBranch 2>&1 | ForEach-Object { Write-Log "  $_" }
+            $r = Invoke-NativeLogged -Exe git -ExeArgs @('checkout', $BaseBranch)
+            if ($r.ExitCode -ne 0) { Write-Log "Warning: could not switch back to '$BaseBranch' (exit $($r.ExitCode)); left on '$postBranch'." }
         } else {
             Write-Log "Left checked out on '$postBranch' with uncommitted changes present - not switching branches so nothing is lost. Check this run's log and the repo state manually."
         }
