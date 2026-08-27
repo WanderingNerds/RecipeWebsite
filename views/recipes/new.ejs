@@ -11,7 +11,7 @@
     <div style="background: var(--card-background); padding: 2rem; border-radius: var(--radius); box-shadow: var(--shadow);">
 
       <!-- Two column layout for desktop, single column for mobile -->
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 2rem;">
+      <div class="form-grid-2col" style="margin-bottom: 2rem;">
 
         <!-- Left column -->
         <div style="grid-column: 1 / -1;">
@@ -41,7 +41,7 @@
           </div>
 
           <!-- Meta fields grid -->
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+          <div class="form-grid-meta">
             <div class="form-group">
               <label>Prep time</label>
               <input type="text" name="prepTime" placeholder="15 min">
@@ -132,15 +132,6 @@
   </form>
 
 </div>
-
-<style>
-  /* Responsive layout - stack on mobile */
-  @media (max-width: 768px) {
-    .container > form > div > div {
-      grid-template-columns: 1fr !important;
-    }
-  }
-</style>
 
 <script src="/js/recipe-form.js"></script>
 <script src="/js/tags-input.js"></script>

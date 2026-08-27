@@ -98,6 +98,7 @@ recipe-website/
 │   ├── css/styles.css          # Potluck design system and styles
 │   └── js/
 │       ├── main.js             # Client-side JavaScript
+│       ├── nav.js              # Mobile hamburger nav toggle (REW-50)
 │       ├── recipe-form.js      # Recipe form handling
 │       └── tags-input.js       # Tag input with autocomplete
 ├── database/
@@ -143,6 +144,13 @@ recipe-website/
 - **Feature Cards**: Colored left borders with circular icons (Sage, Mist, Blush)
 - **CSS Custom Properties**: Complete design token system for maintainability
 - **Responsive Design**: Mobile-first with graceful degradation
+
+### Mobile Navigation & Responsive Layout (REW-50)
+- **Hamburger Menu**: Persistent header (logo left, hamburger right) below the 768px breakpoint, replacing the old "nav links just disappear" behavior
+- **Accessible Toggle**: `public/js/nav.js` wires `aria-expanded`/`aria-hidden`, closes the menu on link click, outside click/tap, repeat toggle, or Escape, and re-syncs state when crossing the 768px breakpoint (e.g. device rotation)
+- **Single Mobile Breakpoint**: Consolidated two previously-conflicting mobile breakpoints in `styles.css` into one at 768px
+- **No-Overflow Layouts**: Recipe/feature card grids and recipe forms collapse to a single column below 480px/640px respectively, replacing the fixed-width inline styles that used to overflow narrow viewports
+- **44px Tap Targets**: Icon buttons, scale controls, like buttons, pagination links, and the hamburger toggle all meet a ~44x44px minimum tap target on mobile
 
 ## Scripts
 
