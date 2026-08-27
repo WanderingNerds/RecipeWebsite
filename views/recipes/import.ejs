@@ -54,7 +54,7 @@
 
       <div style="background: var(--card-background); padding: 2rem; border-radius: var(--radius); box-shadow: var(--shadow);">
 
-        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 1.5rem;">
+        <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: start; gap: 1rem; margin-bottom: 1.5rem;">
           <div>
             <h3 style="margin-bottom: 0.5rem; color: var(--primary-color);">Review Imported Recipe</h3>
             <p style="color: var(--text-muted); font-size: 0.875rem;">Review and edit the extracted data before saving.</p>
@@ -83,7 +83,7 @@
         </div>
 
         <!-- Two column layout -->
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 1.5rem;">
+        <div class="form-grid-2col" style="margin-bottom: 1.5rem;">
 
           <!-- Left column - Ingredients -->
           <div>
@@ -106,7 +106,7 @@
         </div>
 
         <!-- Meta fields -->
-        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.5rem;">
+        <div class="form-grid-meta-4" style="margin-bottom: 1.5rem;">
           <div class="form-group">
             <label for="importPrepTime" style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Prep Time</label>
             <input type="text" id="importPrepTime" name="prepTime" placeholder="15 min" style="width: 100%; padding: 0.5rem 0.75rem; border: 1px solid var(--border-color); border-radius: var(--radius);">
@@ -132,11 +132,11 @@
         </div>
 
         <!-- Submit buttons -->
-        <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 1rem; border-top: 1px solid var(--border-color);">
+        <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
           <button type="button" id="startOverButton" class="btn btn-outline" style="background: none; border: 1px solid var(--border-color); color: var(--text-muted);">
             &larr; Start Over
           </button>
-          <div style="display: flex; gap: 1rem;">
+          <div style="display: flex; flex-wrap: wrap; gap: 1rem;">
             <button type="submit" name="action" value="draft" class="btn btn-outline" id="saveDraftButton">Save as Draft</button>
             <button type="submit" name="action" value="publish" class="btn btn-primary" id="publishButton">Publish Recipe</button>
           </div>
@@ -152,15 +152,6 @@
   #dropZone.dragover {
     border-color: var(--color-accent);
     background-color: var(--color-accent-100);
-  }
-
-  @media (max-width: 768px) {
-    #previewSection [style*="grid-template-columns: 1fr 1fr"] {
-      grid-template-columns: 1fr !important;
-    }
-    #previewSection [style*="grid-template-columns: repeat(4"] {
-      grid-template-columns: 1fr 1fr !important;
-    }
   }
 </style>
 

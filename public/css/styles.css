@@ -211,6 +211,8 @@ html {
   font-size: 15px;
   color-scheme: light;
   scroll-behavior: smooth;
+  /* Defensive backstop only — root-cause overflow fixes live throughout this file */
+  overflow-x: hidden;
 }
 
 body {
@@ -224,6 +226,8 @@ body {
   display: flex;
   flex-direction: column;
   text-rendering: optimizeLegibility;
+  /* Defensive backstop only — root-cause overflow fixes live throughout this file */
+  overflow-x: hidden;
 }
 
 main {
@@ -345,6 +349,43 @@ img {
   border-radius: var(--radius-sm);
 }
 
+/* Persistent header row: logo left, hamburger right (hamburger hidden on desktop) */
+.navbar-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.navbar-toggle {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid rgba(244, 235, 221, 0.4);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.navbar-toggle-bar {
+  display: block;
+  width: 20px;
+  height: 2px;
+  background: var(--potluck-oat-milk);
+  border-radius: var(--radius-pill);
+}
+
+/* Collapsible menu wrapper. Always visible on desktop; toggled via .is-open on mobile. */
+.navbar-menu {
+  display: flex;
+  align-items: center;
+}
+
 .navbar-nav {
   display: flex;
   list-style: none;
@@ -418,39 +459,75 @@ img {
   border-color: var(--potluck-oat-milk);
 }
 
-/* Responsive navbar */
-@media (max-width: 52rem) {
+/* Responsive navbar — single consolidated breakpoint (hamburger <=768px, full nav >=769px) */
+@media (max-width: 768px) {
   .navbar-container {
-    grid-template-columns: 1fr auto;
+    grid-template-columns: 1fr;
+    row-gap: var(--space-3);
     padding-block: 0.85rem;
+  }
+
+  .navbar-header {
+    grid-column: 1 / -1;
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .navbar-toggle {
+    display: inline-flex;
   }
 
   .navbar .search-form-nav {
     grid-column: 1 / -1;
-    grid-row: 2;
     flex: 1 1 100%;
+    margin: 0;
   }
 
-  .navbar-nav a:not(.btn):not(.navbar-brand) {
+  /* Collapsed by default; JS toggles .is-open + aria-hidden/aria-expanded */
+  .navbar-menu {
+    grid-column: 1 / -1;
     display: none;
+    width: 100%;
   }
-}
 
-@media (max-width: 768px) {
-  .navbar-container {
-    flex-direction: column;
-    gap: var(--space-3);
+  .navbar-menu.is-open {
+    display: flex;
   }
 
   .navbar-nav {
-    flex-wrap: wrap;
-    justify-content: center;
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+    gap: 0;
+    padding-bottom: var(--space-2);
   }
 
-  .search-form-nav {
-    flex: 1 1 100%;
-    margin: 0;
-    order: 3;
+  .navbar-nav li {
+    width: 100%;
+  }
+
+  .navbar-nav a:not(.btn) {
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+    padding: var(--space-2) var(--space-1);
+  }
+
+  /* Orange underline indicator doesn't read well in a stacked list */
+  .navbar-nav a:not(.btn)::after {
+    display: none;
+  }
+
+  .navbar-nav a.btn {
+    min-height: 44px;
+  }
+
+  .navbar-user {
+    flex-wrap: wrap;
+    width: 100%;
+    padding-top: var(--space-2);
+    margin-top: var(--space-2);
+    border-top: 1px solid rgba(244, 235, 221, 0.17);
   }
 }
 
@@ -878,6 +955,12 @@ img {
   gap: var(--space-6);
 }
 
+@media (max-width: 480px) {
+  .features-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ══════════════════════════════════════════════════════════════════════════
    Tags — Six families, pill shape
    ══════════════════════════════════════════════════════════════════════════ */
@@ -1099,6 +1182,34 @@ img {
   flex-direction: column;
   gap: 5px;
   margin-bottom: var(--space-3);
+}
+
+/* Responsive two/four-column form grids (recipe new/edit/import) — collapse to
+   a single column below 640px so form fields don't get squeezed/overflow. */
+.form-grid-2col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+}
+
+.form-grid-meta {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.form-grid-meta-4 {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+}
+
+@media (max-width: 640px) {
+  .form-grid-2col,
+  .form-grid-meta,
+  .form-grid-meta-4 {
+    grid-template-columns: 1fr;
+  }
 }
 
 .form-group label {
@@ -1394,6 +1505,25 @@ textarea.input {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: var(--space-6);
+}
+
+@media (max-width: 480px) {
+  .recipe-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* My Recipes list grid (auto-fill variant, used with .feature-card items) */
+.recipe-grid-fill {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1.5rem;
+}
+
+@media (max-width: 480px) {
+  .recipe-grid-fill {
+    grid-template-columns: 1fr;
+  }
 }
 
 .recipe-card {
@@ -2408,6 +2538,27 @@ a.pagination-link:hover {
 
   .recipe-grid {
     gap: var(--space-4);
+  }
+
+  /* Bump tap targets to ~44x44px on touch-sized viewports */
+  .btn-icon {
+    width: 44px;
+    height: 44px;
+  }
+
+  .scale-btn {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .like-btn {
+    min-height: 44px;
+  }
+
+  .pagination-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
   }
 }
 
