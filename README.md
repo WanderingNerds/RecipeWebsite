@@ -121,7 +121,7 @@ recipe-website/
 - **Direct Input**: Type a specific number of servings
 - **Quick Scale Buttons**: One-click multipliers (0.5x, 1x, 2x, 3x) for recipes without parseable servings
 - **Professional Accuracy**: Ingredients converted to grams for precise scaling
-- **Practical Measurements**: Displays user-friendly amounts (e.g., "1 cup + 2 tbsp")
+- **Practical Measurements**: Displays user-friendly amounts (e.g., "1 cup + 2 tbsp") as the primary amount, with the gram conversion shown as a secondary amount (REW-45); this is a fixed default with no user-facing toggle yet
 - **Shareable URLs**: Scaled state reflected in URL for bookmarking and sharing
 
 ### Categories and Tagging (REW-11)

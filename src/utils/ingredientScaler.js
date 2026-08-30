@@ -156,14 +156,17 @@ export function scaleIngredientRow(row, factor) {
 }
 
 /**
- * Picks which of the two amounts leads: grams when the ingredient could be
- * weighed, otherwise the measurement.
+ * Picks which of the two amounts leads: the practical kitchen measurement
+ * (cups, tbsp, oz, count) when one exists, falling back to grams only when no
+ * practical measurement could be derived. Grams are shown as a secondary
+ * amount alongside the measurement, but never duplicated as both primary and
+ * secondary, and never shown as an empty secondary when no measurement exists.
  * @param {object} row
  * @returns {object}
  */
 function withDisplayAmounts(row) {
-  const primaryAmount = row.gramsText || row.measureText;
-  const secondaryAmount = row.gramsText ? row.measureText : "";
+  const primaryAmount = row.measureText || row.gramsText;
+  const secondaryAmount = row.measureText ? row.gramsText : "";
   return { ...row, primaryAmount, secondaryAmount };
 }
 
