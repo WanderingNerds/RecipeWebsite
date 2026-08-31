@@ -22,8 +22,8 @@ All API endpoints require authentication unless otherwise noted. Authentication 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/recipes` | List user's recipes (with optional category/tag filtering) |
-| GET | `/recipes/new` | Get form data for creating a recipe |
-| POST | `/recipes` | Create a new recipe |
+| GET | `/recipes/new` | Get form data for creating a recipe (Author field pre-filled with account display name, REW-46) |
+| POST | `/recipes` | Create a new recipe (Author defaults server-side to account display name if blank/missing, REW-46) |
 | GET | `/recipes/:id` | View a single recipe |
 | GET | `/recipes/:id/edit` | Get form data for editing a recipe |
 | POST | `/recipes/:id/update` | Update a recipe |
@@ -34,9 +34,9 @@ All API endpoints require authentication unless otherwise noted. Authentication 
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/recipes/import` | Render import page with upload form |
+| GET | `/recipes/import` | Render import page with upload form (Author field pre-filled with account display name, REW-46) |
 | POST | `/recipes/import/parse` | Parse uploaded file, return JSON preview |
-| POST | `/recipes/import/save` | Save imported recipe after user confirmation |
+| POST | `/recipes/import/save` | Save imported recipe after user confirmation (accepts `author`, defaults server-side to account display name if blank/missing, REW-46) |
 
 ### Categories
 
@@ -71,6 +71,7 @@ All API endpoints require authentication unless otherwise noted. Authentication 
 
 - [Recipe Scaling API](recipe-scaling.md) - Real-time ingredient scaling
 - [Recipe Import - OCR/PDF Parsing](recipe-import-ocr-parsing.md) - Text extraction and parsing from PDFs and images
+- [Recipe Author Default](recipe-author-default.md) - Account-name defaulting on recipe create/import (REW-46)
 - [Categories and Tags](../CATEGORIES_AND_TAGS.md) - Full categories/tags documentation
 - [Email Confirmation Flow](email-confirmation.md) - Email verification and callback handling (REW-41)
 

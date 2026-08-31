@@ -1,0 +1,60 @@
+## Jira issue
+[REW-46: Default recipe author to logged-in account name](https://wanderingnerds.atlassian.net/browse/REW-46) — Task, Medium priority, label `QA-findings`, status To Do. No acceptance criteria field or comments were present on the ticket; the description is the sole source of truth: "QA finding: When creating a recipe, the Author field should default automatically to the account name of the currently logged-in user."
+
+## Confluence page
+[REW-9, REW-10 & REW-46: Manual Recipe Entry, Recipe Search, and Recipe Author Default](https://wanderingnerds.atlassian.net/wiki/spaces/Recipe/pages/10485762/REW-9+REW-10+REW-46+Manual+Recipe+Entry+Recipe+Search+and+Recipe+Author+Default) (updated existing "Manual Recipe Entry" implementation page in place, added a REW-46 section, rather than forking a new page).
+
+## Summary
+When a logged-in user creates a recipe, the `Author` field should default to their account name instead of arriving blank or relying only on the browser to fill it in. Investigation found the manual "New Recipe" form (`views/recipes/new.ejs`) already pre-fills Author client-side with `user.user_metadata?.name || user.email`, but `POST /recipes` never re-applies that default server-side, so a blank/missing submission still saves `author = NULL`. The Import Recipe flow (`views/recipes/import.ejs` / `src/routes/importRoutes.js`) has no Author field at all today, so every imported recipe currently saves `author = NULL` regardless of who is logged in. This plan closes both gaps behind one shared, tested helper so "logged-in account name" has a single definition across the app, while keeping Author fully user-editable.
+
+## Open questions / assumptions
+- **Scope beyond the literal ticket text (assumption, proceeding):** the ticket only says "When creating a recipe," which most literally maps to the manual "New Recipe" form. That form's *client-side* default already technically satisfies the words of the ticket. I'm treating the real, testable gap as (a) the missing **server-side** enforcement on `POST /recipes`, and (b) the Import Recipe flow, which is also a "recipe creation" path and has zero Author handling today. If the reporter intended this ticket to cover only the manual form's client-side prefill (already present), the import-flow work here is extra scope — flagging this explicitly rather than assuming silently. Recommend Developer confirm with QA/reporter; if the import-flow fix should be tracked separately, split it into its own ticket (Developer to create, per this agent's read-only Jira constraint).
+- **Author stays editable, not locked (assumption):** the ticket says "default," not "force" or "read-only." I'm assuming Author should remain a free-text, user-editable field pre-filled with the account name, since users legitimately attribute a recipe to someone else (e.g., "Grandma's recipe"). If the intent was actually to always store the account name regardless of user edits, that's a materially different (and more restrictive) design — flagging this assumption explicitly.
+- **"Account name" definition (assumption):** using the existing pattern already in the codebase (`views/partials/navbar.ejs`, `views/recipes/new.ejs`): `user.user_metadata?.name?.trim() || user.email`. Supabase stores the name entered at registration (`views/auth/register.ejs` → `src/routes/authRoutes.js` `signUp({ options: { data: { name } } })`) in `user_metadata.name`. Users who registered before this field existed, or via a path that never set it, will fall back to email — treated as acceptable per existing precedent, not a new gap introduced by this change.
+- **Editing existing recipes is out of scope:** `views/recipes/edit.ejs` / `POST /recipes/:id/update` are unaffected by this plan. An existing recipe with a legitimately blank `author` (e.g., created before this feature, or a user who intentionally cleared it) will not be retroactively defaulted on edit. The ticket only discusses recipe *creation*.
+
+## Tasks
+1. Add `src/utils/userUtils.js` exporting `getAccountDisplayName(user)` that returns `user?.user_metadata?.name` (trimmed, if non-empty) else `user?.email` else `null`. This becomes the single source of truth, replacing the duplicated inline expression currently in `views/recipes/new.ejs` and `views/partials/navbar.ejs`.
+2. Add `src/utils/userUtils.test.js` (co-located, `node --test` style matching `src/utils/ingredientParser.test.js`) covering: user with `user_metadata.name` set; user with `user_metadata` present but no `name`; user with no `user_metadata` at all; user with `user_metadata.name` as whitespace-only string (should fall back to email); null/undefined `user`.
+3. Update `GET /recipes/new` in `src/routes/recipeRoutes.js` to compute `accountDisplayName = getAccountDisplayName(req.user)` and pass it into `res.render("recipes/new", { ... accountDisplayName })`.
+4. Update `views/recipes/new.ejs` Author input to use the passed-in `accountDisplayName` local instead of the inline `user.user_metadata?.name || user.email` expression (behavior-equivalent, removes duplicated logic, keeps the field editable/text-type as-is).
+5. Update `POST /recipes` in `src/routes/recipeRoutes.js`: after destructuring `author` from `req.body`, compute the effective value as the submitted `author` if it's a non-empty trimmed string, otherwise `getAccountDisplayName(req.user)`. Set `recipeData.author` to that effective value (keep a final `|| null` fallback only for the theoretical case where the account has neither a name nor an email). This is the core fix — it makes the default authoritative regardless of what the client actually submits.
+6. Update `GET /recipes/import` in `src/routes/importRoutes.js` to compute `accountDisplayName = getAccountDisplayName(req.user)` and pass it to `res.render("recipes/import", { ... accountDisplayName })`.
+7. Update `views/recipes/import.ejs` to add a new "Author" `form-group` (text input, `name="author"`, `id="importAuthor"`) inside the existing meta fields grid (alongside Prep Time / Cook Time / Servings / Source URL), pre-filled with `value="<%= accountDisplayName || '' %>"`, matching the styling/pattern of the other meta inputs in that form.
+8. Update `public/js/import.js`: add an `importAuthor` element reference, and include `author: importAuthor.value.trim()` in the JSON body posted to `/recipes/import/save` inside `saveRecipe()`. Do not have `displayPreview()` overwrite this field — it's independent of the parsed file content.
+9. Update `POST /recipes/import/save` in `src/routes/importRoutes.js`: destructure `author` from `req.body`, compute the effective value the same way as task 5 (submitted trimmed value, else `getAccountDisplayName(req.user)`), and add it to `recipeData` before the insert.
+10. (Optional, low-risk consistency cleanup — not required for acceptance) Update `views/partials/navbar.ejs` to use `getAccountDisplayName(user)` instead of its own inline copy of the same expression, if a shared client-side/view-local import path can be wired in without touching the global locals middleware. Skip if it would require broader changes to how `user`/locals are wired into every view.
+11. Run `npm test` to confirm no regressions in the existing `src/utils/*.test.js` suite alongside the new `userUtils.test.js`.
+
+## Affected files
+- `src/utils/userUtils.js` (new) — `getAccountDisplayName(user)` helper, single source of truth for the account display name.
+- `src/utils/userUtils.test.js` (new) — unit tests for the helper's fallback logic.
+- `src/routes/recipeRoutes.js` — `GET /new`: pass `accountDisplayName` to the view. `POST /`: enforce the account-name fallback server-side when `author` is blank/missing.
+- `views/recipes/new.ejs` — Author input switched to use the `accountDisplayName` local (same rendered behavior, single source of truth).
+- `src/routes/importRoutes.js` — `GET /`: pass `accountDisplayName` to the view. `POST /save`: accept `author` from the request body and apply the same server-side fallback.
+- `views/recipes/import.ejs` — add a new editable, pre-filled Author input to the import review form.
+- `public/js/import.js` — read the new Author input and include it in the payload sent to `/recipes/import/save`.
+- `views/partials/navbar.ejs` — optional consistency refactor to reuse the shared helper (not required for acceptance criteria).
+
+## Database changes
+None. `recipes.author` is already a nullable `TEXT` column with no default (`database/migrations/001_create_recipes_table.sql`). This is an application-layer fix only; no new migration file is needed and no RLS policy changes are implicated (both affected insert paths already run through the requesting user's own Supabase client with the existing "Users can insert own recipes" policy).
+
+## Security considerations
+- **Auth:** both affected routes (`POST /recipes`, `GET/POST /recipes/import*`) are already behind `requireAuth`, so `req.user` is guaranteed populated whenever the new default logic runs. No new unauthenticated surface is introduced.
+- **CSRF:** no change to CSRF handling — `views/recipes/new.ejs` and `views/recipes/import.ejs` already submit `_csrf`/`X-CSRF-Token`; the new Author field rides the same forms/fetch calls.
+- **Input validation/sanitization:** continue the existing pattern of `.trim()` on the incoming `author` string before use; EJS `<%= %>` output escaping already prevents stored-XSS when the value (default or user-supplied) is rendered back into the Author input's `value` attribute or elsewhere. No new unescaped output path is introduced.
+- **Trust boundary note:** the account display name is derived from `req.user` (server-verified Supabase session via `requireAuth`), not from client input, so defaulting to it server-side is safe — it cannot be used to spoof another user's identity as "author" unless the user explicitly types a different value themselves (which is expected/allowed).
+- **Rate limiting/upload handling:** unaffected — no changes to `multer`/`sharp`/`file-type` validation paths in either route.
+- Not required for this ticket, but worth a reviewer note: `author` has no `maxlength` on the client or length cap on the server in either route today (unlike the navbar search input's `maxlength="100"`). Consider a reasonable cap (e.g. 200 chars) as defense-in-depth while this code is already being touched — flagging as a suggestion, not an acceptance blocker.
+
+## Acceptance criteria
+- [ ] `getAccountDisplayName(user)` unit tests pass for: name present, name absent (falls back to email), name whitespace-only (falls back to email), and null/undefined user (returns null/falsy without throwing).
+- [ ] When a logged-in user opens the New Recipe form (`GET /recipes/new`), the Author field is pre-filled with their account display name (registered name if set, otherwise their email).
+- [ ] Submitting the New Recipe form without changing Author saves the recipe with the logged-in user's account display name as `author`.
+- [ ] If a user clears the Author field entirely (or it is omitted from the POST body) before submitting the New Recipe form, the saved recipe's `author` still equals the logged-in user's account display name (proves the fallback is enforced server-side, not only via client prefill).
+- [ ] If a user edits Author to a custom value (e.g., "Grandma Rossi") before submitting, that custom value is saved as-is — the field is not locked/read-only.
+- [ ] When a logged-in user opens the Import Recipe page (`GET /recipes/import`), an Author field is visible and pre-filled with their account display name.
+- [ ] Submitting an imported recipe (`POST /recipes/import/save`) without changing Author saves the recipe with the logged-in user's account display name as `author` (previously always saved `null`).
+- [ ] Editing the Author field before saving an imported recipe saves the custom value.
+- [ ] Editing an existing recipe via `GET /recipes/:id/edit` → `POST /recipes/:id/update` is unaffected: an existing `author` value (including a pre-existing `null`) continues to load and save exactly as before.
+- [ ] `npm test` passes with no regressions.

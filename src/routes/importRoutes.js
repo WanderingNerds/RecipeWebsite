@@ -11,6 +11,7 @@ import rateLimit from "express-rate-limit";
 import { requireAuth } from "../middleware/authMiddleware.js";
 import { createSupabaseClient } from "../config/supabase.js";
 import { importRecipe, SUPPORTED_MIME_TYPES, sanitizeUrl } from "../utils/recipeImporter.js";
+import { getAccountDisplayName } from "../utils/userUtils.js";
 
 const router = Router();
 
@@ -55,6 +56,7 @@ router.get("/", requireAuth, (req, res) => {
       { extension: ".pdf", description: "PDF document" },
       { extension: ".jpg/.png/.webp", description: "Recipe image (OCR)" },
     ],
+    accountDisplayName: getAccountDisplayName(req.user),
   });
 });
 
@@ -137,6 +139,7 @@ router.post("/save", requireAuth, async (req, res) => {
   try {
     const {
       title,
+      author,
       description,
       ingredients,
       instructions,
@@ -187,10 +190,17 @@ router.post("/save", requireAuth, async (req, res) => {
       });
     }
 
+    // Default Author to the logged-in account's display name if the
+    // submitted value is blank/missing, so the default is authoritative
+    // server-side (not just a client-side prefill).
+    const trimmedAuthor = author?.trim();
+    const effectiveAuthor = trimmedAuthor || getAccountDisplayName(req.user);
+
     // Prepare recipe data
     const recipeData = {
       user_id: req.user.id,
       title: title.trim(),
+      author: effectiveAuthor || null,
       ingredients: ingredients?.trim() || null,
       instructions: instructions.trim(),
       prep_time: prepTime?.trim() || null,

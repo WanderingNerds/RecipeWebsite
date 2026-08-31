@@ -6,6 +6,7 @@ import rateLimit from "express-rate-limit";
 import { generateThumbnail, optimizeImage, validateImageFile } from "../utils/imageUtils.js";
 import { parseIngredients } from "../utils/ingredientParser.js";
 import { resolveScaling, scaleIngredients, QUICK_SCALE_FACTORS } from "../utils/ingredientScaler.js";
+import { getAccountDisplayName } from "../utils/userUtils.js";
 
 const router = Router();
 
@@ -230,7 +231,8 @@ router.get("/new", requireAuth, async (req, res) => {
       categories: categories || [],
       userTags: userTags || [],
       selectedCategories: [],
-      selectedTags: []
+      selectedTags: [],
+      accountDisplayName: getAccountDisplayName(req.user)
     });
   } catch (error) {
     console.error("Error loading new recipe form:", error);
@@ -283,11 +285,17 @@ router.post("/", requireAuth, uploadLimiter, upload.single("photo"), async (req,
       thumbnailUrl = await generateThumbnail(req.file.buffer);
     }
 
+    // Default Author to the logged-in account's display name if the
+    // submitted value is blank/missing, so the default is authoritative
+    // server-side (not just a client-side prefill).
+    const trimmedAuthor = author?.trim();
+    const effectiveAuthor = trimmedAuthor || getAccountDisplayName(req.user);
+
     // Prepare recipe data
     const recipeData = {
       user_id: req.user.id,
       title: title.trim(),
-      author: author?.trim() || null,
+      author: effectiveAuthor || null,
       prep_time: prepTime?.trim() || null,
       cook_time: cookTime?.trim() || null,
       servings: servings?.trim() || null,

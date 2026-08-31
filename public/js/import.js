@@ -22,6 +22,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   // Preview form elements
   const importTitle = document.getElementById("importTitle");
+  const importAuthor = document.getElementById("importAuthor");
   const importIngredients = document.getElementById("importIngredients");
   const importInstructions = document.getElementById("importInstructions");
   const importPrepTime = document.getElementById("importPrepTime");
@@ -294,6 +295,7 @@ document.addEventListener("DOMContentLoaded", function () {
         },
         body: JSON.stringify({
           title: importTitle.value.trim(),
+          author: importAuthor.value.trim(),
           description: importDescription.value.trim(),
           ingredients: importIngredients.value.trim(),
           instructions: importInstructions.value.trim(),

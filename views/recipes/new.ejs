@@ -37,7 +37,7 @@
 
           <div class="form-group">
             <label>Author</label>
-            <input type="text" name="author" placeholder="Your name" value="<%= user.user_metadata?.name || user.email %>">
+            <input type="text" name="author" placeholder="Your name" value="<%= accountDisplayName || '' %>">
           </div>
 
           <!-- Meta fields grid -->
