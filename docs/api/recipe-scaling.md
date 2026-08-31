@@ -88,8 +88,8 @@ GET /recipes/123e4567-e89b-12d3-a456-426614174000/scale
       "grams": 500,
       "gramsText": "500g",
       "measureText": "4 cups",
-      "primaryAmount": "500g",
-      "secondaryAmount": "4 cups",
+      "primaryAmount": "4 cups",
+      "secondaryAmount": "500g",
       "scaled": true
     },
     {
@@ -168,9 +168,14 @@ GET /recipes/123e4567-e89b-12d3-a456-426614174000/scale
 | `grams` | number \| null | Weight in grams (if calculable) |
 | `gramsText` | string | Formatted grams display (e.g., "250g") |
 | `measureText` | string | Practical measurement (e.g., "1 cup + 2 tbsp") |
-| `primaryAmount` | string | Primary display amount (grams if available, else measure) |
-| `secondaryAmount` | string | Secondary display amount (measure if grams is primary) |
+| `primaryAmount` | string | Primary display amount: the practical kitchen measurement (e.g., "4 cups") if one exists, else grams |
+| `secondaryAmount` | string | Secondary display amount: grams, shown only when a practical measurement is the primary amount (empty otherwise — never duplicates grams as both primary and secondary) |
 | `scaled` | boolean | Whether this row was scaled from original |
+
+> **Note:** As of REW-45, the practical kitchen measurement is always the
+> `primaryAmount` and grams (when known) are the `secondaryAmount`. This is a
+> fixed default — there is currently no user-facing toggle to switch which
+> measurement system leads.
 
 #### scaling
 

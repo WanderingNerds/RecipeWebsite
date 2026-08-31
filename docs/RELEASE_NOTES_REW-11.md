@@ -94,6 +94,14 @@ GET /recipes/:id/scale
   }
 }
 ```
+> **Historical note:** The example above reflects the `primaryAmount`/
+> `secondaryAmount` ordering as originally shipped in this release (grams
+> primary, measurement secondary). [REW-45](https://wanderingnerds.atlassian.net/browse/REW-45)
+> later reversed this so the practical kitchen measurement is primary and
+> grams are secondary (a fixed default, no toggle). See
+> [docs/api/recipe-scaling.md](api/recipe-scaling.md) for the current field
+> semantics — this file is left as a historical snapshot and not updated to
+> match.
 
 ### Updated Endpoints
 
@@ -246,11 +254,28 @@ If issues arise:
 
 ---
 
+## Amendments
+
+### REW-45 — Show grams as secondary measurement (2026-08-30)
+
+A QA finding on the scaling engine's ingredient display: the practical
+kitchen measurement (cups/tbsp/oz/count) is now the `primaryAmount` and the
+gram conversion is the `secondaryAmount`, reversing the ordering this release
+originally shipped with (see the historical note on the example above). This
+is a display-formatting-only change in `withDisplayAmounts()`
+(`src/utils/ingredientScaler.js`) — no route, view, or database changes. It is
+a fixed default; no user-facing toggle between measurement systems exists
+yet. See [docs/api/recipe-scaling.md](api/recipe-scaling.md) for the current
+field semantics.
+
+---
+
 ## Related Documentation
 
 - [Categories and Tags System](CATEGORIES_AND_TAGS.md)
 - [Implementation Notes](../IMPLEMENTATION_NOTES_REW-11.md)
 - [Database README](../database/README.md)
+- [Recipe Scaling API Reference](api/recipe-scaling.md)
 
 ---
 

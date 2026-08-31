@@ -77,6 +77,16 @@ test("shows imperial weights alongside grams, but not metric ones", () => {
   const imperial = scaleIngredientRow(parseIngredientLine("1/2 lb fresh mozzarella"), 2);
   assert.equal(imperial.gramsText, "454 g");
   assert.equal(imperial.measureText, "1 lb");
+  assert.equal(imperial.primaryAmount, "1 lb");
+  assert.equal(imperial.secondaryAmount, "454 g");
+});
+
+test("pins measurement-first, grams-second ordering for the common case", () => {
+  const row = scaleIngredientRow(parseIngredientLine("2 cups all-purpose flour"), 1);
+  assert.equal(row.measureText, "2 cups");
+  assert.equal(row.gramsText, "240 g");
+  assert.equal(row.primaryAmount, "2 cups");
+  assert.equal(row.secondaryAmount, "240 g");
 });
 
 test("rounds counted ingredients to whole items", () => {
@@ -143,11 +153,11 @@ test("scales a whole list", () => {
   const scaled = scaleIngredients(rows, 2);
   assert.deepEqual(
     scaled.map((row) => row.primaryAmount),
-    ["", "480 g", "5.6 g", ""],
+    ["", "4 cups", "2 tsp", ""],
   );
   assert.deepEqual(
     scaled.map((row) => row.secondaryAmount),
-    ["", "4 cups", "2 tsp", ""],
+    ["", "480 g", "5.6 g", ""],
   );
   assert.deepEqual(scaleIngredients(null, 2), []);
 });
