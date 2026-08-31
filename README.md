@@ -114,6 +114,7 @@ recipe-website/
 - Rich recipe metadata (prep time, cook time, servings, difficulty)
 - Image upload with automatic thumbnail generation
 - Draft/Published status workflow
+- **Author Defaults to Account Name (REW-46)**: When creating a recipe manually or via import, the Author field is pre-filled with the logged-in user's account display name (their registered name, or email if no name is set) and this default is enforced server-side even if the field is submitted blank. Author remains fully editable, so a recipe can still be attributed to someone else (e.g. "Grandma's recipe").
 
 ### Instant Recipe Scaling (REW-11)
 - **Real-time Scaling**: Adjust recipe servings without page reloads

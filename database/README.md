@@ -154,6 +154,7 @@ Performance indexes are created on:
 
 ## Notes
 
+- `recipes.author` has no database-level default. When it arrives blank/missing on create (manual entry or import), the application defaults it to the logged-in user's account display name in the route handler, not via a SQL default or trigger — see [Recipe Author Default (REW-46)](../docs/api/recipe-author-default.md). Editing an existing recipe does not retroactively apply this default.
 - The `status` field defaults to 'draft' and accepts 'draft' or 'published'
 - The `difficulty` field accepts 'Easy', 'Medium', or 'Hard'
 - The `updated_at` field on recipes is automatically updated via a trigger
