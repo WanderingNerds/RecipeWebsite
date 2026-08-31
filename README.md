@@ -145,6 +145,7 @@ recipe-website/
 - **Feature Cards**: Colored left borders with circular icons (Sage, Mist, Blush)
 - **CSS Custom Properties**: Complete design token system for maintainability
 - **Responsive Design**: Mobile-first with graceful degradation
+- **Accessible Outline Buttons (REW-51)**: `.btn-outline` (View, Edit, Import Recipe, Cancel, Clear Filters, and 12 other buttons/links) now renders ink-on-light text (~12.9:1 contrast, ~8.6:1 on hover) instead of the near-invisible cream-on-cream text it previously inherited from a dark-background treatment. The one legitimate dark-background usage (navbar Logout) uses the dedicated `.btn-outline-light` class instead.
 
 ### Mobile Navigation & Responsive Layout (REW-50)
 - **Hamburger Menu**: Persistent header (logo left, hamburger right) below the 768px breakpoint, replacing the old "nav links just disappear" behavior

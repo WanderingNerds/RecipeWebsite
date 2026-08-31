@@ -622,14 +622,15 @@ img {
 
 /* Outline */
 .btn-outline {
-  border: 1px solid var(--color-border-on-brand);
-  color: var(--potluck-oat-milk);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
   background: transparent;
   box-shadow: none;
 }
 .btn-outline:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: var(--potluck-oat-milk);
+  background: var(--potluck-sage-100);
+  border-color: var(--potluck-olive-700);
+  color: var(--potluck-olive-900);
 }
 
 /* Icon button */

@@ -43,7 +43,7 @@
           <li><a href="/recipes/liked" class="<%= currentPath === '/recipes/liked' ? 'active' : '' %>">Liked</a></li>
           <li class="navbar-user">
             <span>Hello, <%= user.user_metadata?.name || user.email %></span>
-            <a href="/auth/logout" class="btn btn-outline">Logout</a>
+            <a href="/auth/logout" class="btn btn-outline-light">Logout</a>
           </li>
         <% } else { %>
           <li><a href="/auth/login" class="<%= currentPath === '/auth/login' ? 'active' : '' %>">Login</a></li>
