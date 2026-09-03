@@ -1265,6 +1265,27 @@ textarea.input {
   color: var(--color-neutral-500);
 }
 
+/* REW-52: inline required-field error state (Prep Time / Total Time, etc.) */
+.field-error-message {
+  display: none;
+  color: var(--error-color);
+  font-size: 12px;
+}
+
+.form-group.has-error label {
+  color: var(--error-color);
+}
+
+.form-group.has-error input,
+.form-group.has-error select,
+.form-group.has-error textarea {
+  border-color: var(--error-color);
+}
+
+.form-group.has-error .field-error-message {
+  display: block;
+}
+
 .form-error {
   color: var(--color-blush-800);
   background-color: var(--color-blush-100);

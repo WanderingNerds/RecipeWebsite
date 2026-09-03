@@ -22,11 +22,11 @@ All API endpoints require authentication unless otherwise noted. Authentication 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/recipes` | List user's recipes (with optional category/tag filtering) |
-| GET | `/recipes/new` | Get form data for creating a recipe (Author field pre-filled with account display name, REW-46) |
-| POST | `/recipes` | Create a new recipe (Author defaults server-side to account display name if blank/missing, REW-46) |
+| GET | `/recipes/new` | Get form data for creating a recipe (Author field pre-filled with account display name, REW-46; Prep Time and Total Time/`cookTime` are required, REW-52) |
+| POST | `/recipes` | Create a new recipe (Author defaults server-side to account display name if blank/missing, REW-46; rejects blank `prepTime`/`cookTime`, REW-52) |
 | GET | `/recipes/:id` | View a single recipe |
-| GET | `/recipes/:id/edit` | Get form data for editing a recipe |
-| POST | `/recipes/:id/update` | Update a recipe |
+| GET | `/recipes/:id/edit` | Get form data for editing a recipe (Prep Time and Total Time/`cookTime` are required, REW-52) |
+| POST | `/recipes/:id/update` | Update a recipe (rejects blank `prepTime`/`cookTime`, REW-52) |
 | POST | `/recipes/:id/delete` | Delete a recipe |
 | GET | `/recipes/:id/scale` | Get scaled ingredient data (JSON) |
 
@@ -72,6 +72,7 @@ All API endpoints require authentication unless otherwise noted. Authentication 
 - [Recipe Scaling API](recipe-scaling.md) - Real-time ingredient scaling
 - [Recipe Import - OCR/PDF Parsing](recipe-import-ocr-parsing.md) - Text extraction and parsing from PDFs and images
 - [Recipe Author Default](recipe-author-default.md) - Account-name defaulting on recipe create/import (REW-46)
+- [Required Prep Time / Total Time](recipe-required-times.md) - Required-field enforcement and the Cook Time → Total Time display rename (REW-52)
 - [Categories and Tags](../CATEGORIES_AND_TAGS.md) - Full categories/tags documentation
 - [Email Confirmation Flow](email-confirmation.md) - Email verification and callback handling (REW-41)
 

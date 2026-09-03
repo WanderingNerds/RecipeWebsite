@@ -32,3 +32,53 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   });
 });
+
+// REW-52: require Prep Time and Total Time (cookTime) before a recipe can be saved.
+document.addEventListener('DOMContentLoaded', function() {
+  const recipeForm = document.querySelector('.recipe-form');
+  const prepTimeInput = document.getElementById('prepTime');
+  const cookTimeInput = document.getElementById('cookTime');
+
+  if (!recipeForm || !prepTimeInput || !cookTimeInput) {
+    return; // Not on a recipe create/edit form
+  }
+
+  function setFieldError(input, hasError) {
+    const group = input.closest('.form-group');
+    if (!group) return;
+
+    if (hasError) {
+      group.classList.add('has-error');
+      input.setAttribute('aria-invalid', 'true');
+    } else {
+      group.classList.remove('has-error');
+      input.setAttribute('aria-invalid', 'false');
+    }
+  }
+
+  recipeForm.addEventListener('submit', function(event) {
+    const fields = [prepTimeInput, cookTimeInput];
+    let firstInvalid = null;
+
+    fields.forEach(function(input) {
+      const isBlank = !input.value.trim();
+      setFieldError(input, isBlank);
+      if (isBlank && !firstInvalid) {
+        firstInvalid = input;
+      }
+    });
+
+    if (firstInvalid) {
+      event.preventDefault();
+      firstInvalid.focus();
+    }
+  });
+
+  [prepTimeInput, cookTimeInput].forEach(function(input) {
+    input.addEventListener('input', function() {
+      if (input.value.trim()) {
+        setFieldError(input, false);
+      }
+    });
+  });
+});
