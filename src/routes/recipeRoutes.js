@@ -260,8 +260,8 @@ router.post("/", requireAuth, uploadLimiter, upload.single("photo"), async (req,
     } = req.body;
 
     // Validate required fields
-    if (!title || !instructions) {
-      req.flash("error", "Title and instructions are required");
+    if (!title || !instructions || !prepTime?.trim() || !cookTime?.trim()) {
+      req.flash("error", "Title, instructions, prep time, and total time are required");
       return res.redirect("/recipes/new");
     }
 
@@ -494,8 +494,8 @@ router.post("/:id/update", requireAuth, uploadLimiter, upload.single("photo"), a
     } = req.body;
 
     // Validate required fields
-    if (!title || !instructions) {
-      req.flash("error", "Title and instructions are required");
+    if (!title || !instructions || !prepTime?.trim() || !cookTime?.trim()) {
+      req.flash("error", "Title, instructions, prep time, and total time are required");
       return res.redirect(`/recipes/${id}/edit`);
     }
 

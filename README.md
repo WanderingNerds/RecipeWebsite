@@ -115,6 +115,7 @@ recipe-website/
 - Image upload with automatic thumbnail generation
 - Draft/Published status workflow
 - **Author Defaults to Account Name (REW-46)**: When creating a recipe manually or via import, the Author field is pre-filled with the logged-in user's account display name (their registered name, or email if no name is set) and this default is enforced server-side even if the field is submitted blank. Author remains fully editable, so a recipe can still be attributed to someone else (e.g. "Grandma's recipe").
+- **Required Prep Time / Total Time (REW-52)**: The manual "New Recipe" and "Edit Recipe" forms now require both Prep Time and Total Time before a recipe can be saved (draft or published), with inline validation that highlights the missing field(s) and clears as soon as a value is entered; enforced server-side too. "Total Time" is a display-only relabel of the existing Cook Time field — no new database column was added. The Import Recipe flow is unaffected and can still save with blank times.
 
 ### Instant Recipe Scaling (REW-11)
 - **Real-time Scaling**: Adjust recipe servings without page reloads

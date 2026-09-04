@@ -155,6 +155,7 @@ Performance indexes are created on:
 ## Notes
 
 - `recipes.author` has no database-level default. When it arrives blank/missing on create (manual entry or import), the application defaults it to the logged-in user's account display name in the route handler, not via a SQL default or trigger — see [Recipe Author Default (REW-46)](../docs/api/recipe-author-default.md). Editing an existing recipe does not retroactively apply this default.
+- `recipes.prep_time` and `recipes.cook_time` remain nullable `TEXT` with no `NOT NULL` constraint, but the manual "New Recipe"/"Edit Recipe" forms and their `POST` handlers now require both to be non-blank before a save is accepted (REW-52) — enforcement is application-layer only (no migration, no backfill), because the Import Recipe flow (`POST /recipes/import/save`) can still legitimately save blank values and is unaffected. Note: on the create/edit forms only, `cook_time` is now labeled "Total Time" in the UI — the column itself was **not** renamed and there is no separate `total_time` column; see [Required Prep Time / Total Time (REW-52)](../docs/api/recipe-required-times.md) for the full rationale. The recipe detail views still display this same column as "Cook Time," a known naming inconsistency flagged as a non-blocking follow-up.
 - The `status` field defaults to 'draft' and accepts 'draft' or 'published'
 - The `difficulty` field accepts 'Easy', 'Medium', or 'Hard'
 - The `updated_at` field on recipes is automatically updated via a trigger

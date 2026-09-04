@@ -6,7 +6,7 @@
     <p style="color: var(--text-muted); max-width: 600px;">Fill in the details below. Only a title and instructions are required — everything else is optional.</p>
   </div>
 
-  <form action="/recipes" method="POST" enctype="multipart/form-data">
+  <form action="/recipes" method="POST" enctype="multipart/form-data" class="recipe-form">
     <input type="hidden" name="_csrf" value="<%= csrfToken %>">
     <div style="background: var(--card-background); padding: 2rem; border-radius: var(--radius); box-shadow: var(--shadow);">
 
@@ -43,12 +43,16 @@
           <!-- Meta fields grid -->
           <div class="form-grid-meta">
             <div class="form-group">
-              <label>Prep time</label>
-              <input type="text" name="prepTime" placeholder="15 min">
+              <label>Prep Time <span style="color: var(--error-color);">*</span></label>
+              <input type="text" id="prepTime" name="prepTime" placeholder="15 min" aria-required="true" aria-describedby="prepTimeError">
+              <span class="field-error-message" id="prepTimeError">Required</span>
             </div>
             <div class="form-group">
-              <label>Cook time</label>
-              <input type="text" name="cookTime" placeholder="40 min">
+              <!-- REW-52: displayed as "Total Time" per the ticket, but the underlying
+                   name/DB column intentionally stay cookTime/cook_time (no migration). -->
+              <label>Total Time <span style="color: var(--error-color);">*</span></label>
+              <input type="text" id="cookTime" name="cookTime" placeholder="40 min" aria-required="true" aria-describedby="cookTimeError">
+              <span class="field-error-message" id="cookTimeError">Required</span>
             </div>
             <div class="form-group">
               <label>Servings</label>
