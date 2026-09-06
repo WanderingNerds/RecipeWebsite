@@ -3,19 +3,6 @@
     <h1>Welcome to Potluck</h1>
     <p class="hero__lede">Every dish carries the people who cooked it. Discover recipes, share your notes, and cook together.</p>
 
-    <div class="hero__search">
-      <form class="search-form" action="/search" method="GET" role="search">
-        <input
-          type="search"
-          name="q"
-          placeholder="Search recipes by name or ingredient..."
-          aria-label="Search recipes"
-          maxlength="100"
-        >
-        <button type="submit" class="btn btn-primary">Search</button>
-      </form>
-    </div>
-
     <div class="hero__actions">
       <a href="/browse" class="btn btn-outline-light btn-lg">Browse Recipes</a>
       <% if (!user) { %>

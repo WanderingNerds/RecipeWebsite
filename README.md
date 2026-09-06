@@ -147,6 +147,7 @@ recipe-website/
 - **CSS Custom Properties**: Complete design token system for maintainability
 - **Responsive Design**: Mobile-first with graceful degradation
 - **Accessible Outline Buttons (REW-51)**: `.btn-outline` (View, Edit, Import Recipe, Cancel, Clear Filters, and 12 other buttons/links) now renders ink-on-light text (~12.9:1 contrast, ~8.6:1 on hover) instead of the near-invisible cream-on-cream text it previously inherited from a dark-background treatment. The one legitimate dark-background usage (navbar Logout) uses the dedicated `.btn-outline-light` class instead.
+- **Single Home Page Search Bar (REW-53)**: The Home page hero no longer renders its own duplicate recipe search form. The header/navigation search bar (`.search-form-nav`, always visible in the navbar) is now the only search entry point on the Home page; the "Welcome to Potluck" heading, lede text, and Browse Recipes/Get Started/Add a Recipe buttons are unchanged.
 
 ### Mobile Navigation & Responsive Layout (REW-50)
 - **Hamburger Menu**: Persistent header (logo left, hamburger right) below the 768px breakpoint, replacing the old "nav links just disappear" behavior
