@@ -36,3 +36,11 @@ export function clearAuthCookies(res) {
  * Only allow types that are safe for email confirmation flow
  */
 export const ALLOWED_OTP_TYPES = ["signup", "email"];
+
+/**
+ * OTP type used for password recovery links.
+ * Kept separate from ALLOWED_OTP_TYPES so /auth/callback never accepts a
+ * recovery-type token and logs someone straight into the dashboard --
+ * recovery tokens must only ever be handled by /auth/reset-password.
+ */
+export const RECOVERY_OTP_TYPE = "recovery";

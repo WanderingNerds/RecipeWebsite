@@ -61,9 +61,9 @@ A recipe website built with Node.js, Express, and Supabase Auth.
    - Anon/Public key (`SUPABASE_ANON_KEY`)
 3. Configure authentication redirect URLs in **Authentication > URL Configuration**:
    - **Site URL**: Set to your production URL (e.g., `https://your-domain.com`)
-   - **Redirect URLs**: Add your callback URL(s):
-     - Production: `https://your-domain.com/auth/callback`
-     - Development: `http://localhost:3000/auth/callback`
+   - **Redirect URLs**: Add your callback and password-reset URLs:
+     - Production: `https://your-domain.com/auth/callback`, `https://your-domain.com/auth/reset-password`
+     - Development: `http://localhost:3000/auth/callback`, `http://localhost:3000/auth/reset-password`
 4. Authentication is handled automatically by Supabase Auth
 
 ## Project Structure
@@ -138,6 +138,7 @@ recipe-website/
 - Secure login with Supabase Auth
 - Protected routes with middleware
 - Automatic session management via cookies
+- **Forgot Password / Account Recovery (REW-54)**: The Sign In page's "Forgot Password?" link opens a single centralized recovery page (`/auth/forgot-password`) where a user enters their email and chooses either "Send Password Reset Email" (new, built on Supabase Auth's `resetPasswordForEmail`) or "Resend Confirmation Email" (existing functionality, unchanged). The password reset link lands on `/auth/reset-password`, which requires `${APP_URL}/auth/reset-password` to be allow-listed in Supabase's dashboard alongside the existing `/auth/callback` entry.
 
 ### Potluck Brand Theme (REW-48)
 - **Dark Olive Hero**: Hero section with `#4f5c3f` background and botanical decorations

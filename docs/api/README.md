@@ -62,8 +62,12 @@ All API endpoints require authentication unless otherwise noted. Authentication 
 | POST | `/auth/register` | Process registration |
 | GET | `/auth/logout` | Log out |
 | GET | `/auth/callback` | Email confirmation callback (REW-41) |
-| GET | `/auth/resend-confirmation` | Resend confirmation email page (REW-41) |
-| POST | `/auth/resend-confirmation` | Process resend confirmation request (REW-41) |
+| GET | `/auth/forgot-password` | Centralized account-recovery page — email field, "Send Password Reset Email" / "Resend Confirmation Email" actions (REW-54) |
+| POST | `/auth/forgot-password` | Send a Supabase password-reset email (enumeration-safe) (REW-54) |
+| GET | `/auth/resend-confirmation` | **Changed in REW-54:** now `302` redirects to `/auth/forgot-password` (forwarding `?email=`) instead of rendering its own page |
+| POST | `/auth/resend-confirmation` | Process resend confirmation request (REW-41; unchanged in REW-54) |
+| GET | `/auth/reset-password` | Verify a password-reset link and render the "set a new password" form (REW-54) |
+| POST | `/auth/reset-password` | Set the new password on the recovery-granted session; requires auth + `recovery-session` cookie (REW-54) |
 
 ---
 
@@ -74,7 +78,7 @@ All API endpoints require authentication unless otherwise noted. Authentication 
 - [Recipe Author Default](recipe-author-default.md) - Account-name defaulting on recipe create/import (REW-46)
 - [Required Prep Time / Total Time](recipe-required-times.md) - Required-field enforcement and the Cook Time → Total Time display rename (REW-52)
 - [Categories and Tags](../CATEGORIES_AND_TAGS.md) - Full categories/tags documentation
-- [Email Confirmation Flow](email-confirmation.md) - Email verification and callback handling (REW-41)
+- [Email Confirmation Flow](email-confirmation.md) - Email verification and callback handling (REW-41); also documents the Forgot Password / Account Recovery flow that supersedes the standalone resend page (REW-54)
 
 ---
 
