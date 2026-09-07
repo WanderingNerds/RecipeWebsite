@@ -1,6 +1,6 @@
-# Email Confirmation & Account Recovery Flow (REW-41, REW-54)
+# Email Confirmation & Account Recovery Flow (REW-41, REW-54, REW-57)
 
-This document describes the email confirmation system for user registration, including the callback handler, resend functionality, and security considerations. It also covers the Forgot Password / Account Recovery flow (REW-54) that supersedes the standalone resend-confirmation page.
+This document describes the email confirmation system for user registration, including the callback handler, resend functionality, and security considerations. It also covers the Forgot Password / Account Recovery flow (REW-54) that supersedes the standalone resend-confirmation page, and the REW-57 hardening that makes the reset-password link robust to email-template and redirect-URL-allow-list misconfiguration.
 
 ---
 
@@ -30,7 +30,7 @@ When a user registers, Supabase Auth sends a confirmation email containing a ver
    +-- Failure --> Flash error --> Redirect to /auth/login
 ```
 
-### Password Recovery Flow Diagram (REW-54)
+### Password Recovery Flow Diagram (REW-54, updated REW-57)
 
 ```
 1. User clicks "Forgot Password?" on /auth/login
@@ -43,17 +43,29 @@ When a user registers, Supabase Auth sends a confirmation email containing a ver
 3. User submits "Send Password Reset Email" --> POST /auth/forgot-password
    |
    v
-4. Supabase sends a password-reset email with link to:
-   {APP_URL}/auth/reset-password?token_hash=xxx&type=recovery
+4. PREREQUISITE (REW-57): the Supabase "Reset Password" email template must
+   be the one in docs/email-templates/reset-password.html, which links via
+   {{ .TokenHash }} -- NOT the Supabase default {{ .ConfirmationURL }}.
+   Supabase sends a password-reset email with link to:
+   {SiteURL}/auth/reset-password?token_hash=xxx&type=recovery
    (generic success message shown regardless of whether the email exists)
    |
    v
 5. User clicks link in email --> GET /auth/reset-password
    |
-   +-- Valid token  --> verifyOtp() sets session + recovery-session marker
-   |                    cookie --> render "set a new password" form
+   +-- token_hash + type=recovery --> verifyOtp() sets session +
+   |   recovery-session marker cookie --> render state: "form"
    |
-   +-- Invalid/expired --> Flash error --> Redirect to /auth/forgot-password
+   +-- error/error_code in query --> render state: "error" (mapped,
+   |   fixed copy -- raw error_description is never displayed)
+   |
+   +-- no query params, valid recovery session already set --> render
+   |   state: "form" (how the fragment bridge below returns, and how a
+   |   refresh of the form keeps working)
+   |
+   +-- no query params, no recovery session --> render state: "checking"
+       (see "Implicit-flow fragment recovery" below); never redirects to
+       Home or dead-ends silently
    |
    v
 6. User submits new password --> POST /auth/reset-password (requireAuth +
@@ -62,8 +74,25 @@ When a user registers, Supabase Auth sends a confirmation email containing a ver
    +-- Success --> updateUser() via per-request Supabase client --> clear
    |               session cookies --> Redirect to /auth/login
    |
-   +-- Failure --> Re-render form with inline error
+   +-- Missing recovery-session cookie / expired setSession --> render
+   |   state: "error" inline (never redirects to /auth/forgot-password,
+   |   which combined with redirectIfAuthenticated used to bounce a
+   |   still-logged-in user to Home -- REW-57)
+   |
+   +-- Validation failure (password rules) --> render state: "form" with
+       inline error, recovery session preserved so the user can retry
 ```
+
+### Implicit-flow fragment recovery (REW-57)
+
+Two defence-in-depth mechanisms exist in case the Task-4 email template or the Supabase Redirect URL allow-list is ever misconfigured again, so the reported "reset link opens Home" bug cannot recur even in that scenario:
+
+- **Home-route guard** (`src/routes/index.js`): if `GET /` is requested with both `token_hash` and `type` query params (i.e. a `redirect_to` fell back to the Site URL, which is Home), it 302s to `/auth/reset-password` (for `type=recovery`) or `/auth/callback` (for `type=signup`/`email`), forwarding only those two whitelisted params. Any other `type`, or extra params, are dropped and Home renders normally -- this can never become an open redirect, since only two fixed internal paths are ever targeted.
+- **Fragment-to-cookie bridge** (`public/js/auth-recovery.js` + `POST /auth/reset-password/session`): if the email template still uses Supabase's default `{{ .ConfirmationURL }}`, the browser receives the session as a URL **hash fragment** (`#access_token=...&refresh_token=...&type=recovery`), which the server never sees. `auth-recovery.js` is loaded on every page via `views/layouts/main.ejs`; it reads `window.location.hash`, immediately strips it via `history.replaceState`, and either:
+  - forwards a reported `error`/`error_code` to `/auth/reset-password?error_code=...` (code constrained to `[a-z_]+`), or
+  - `fetch`-POSTs the `access_token`/`refresh_token`/`type` to `POST /auth/reset-password/session`, which validates them (see Security Notes below) and responds with a same-origin `redirect` path to navigate to.
+
+Both mechanisms only ever navigate to fixed internal paths (`/auth/reset-password`, `/auth/callback`, or a `redirect` value produced by our own bridge endpoint) — never to a value taken from user input.
 
 ---
 
@@ -213,29 +242,57 @@ Sends a Supabase password-reset email.
 
 ### GET /auth/reset-password
 
-Verifies the Supabase password-recovery OTP from the emailed link and, on success, renders the "set a new password" form.
+Verifies the Supabase password-recovery OTP from the emailed link and renders one of three states — it **never redirects to Home and never dead-ends** (REW-57).
 
-**Authentication:** None required to reach the route (it *establishes* the recovery session); publicly reachable but only functions with a valid `token_hash`/`type=recovery` pair from Supabase.
+**Authentication:** None required to reach the route (it *establishes* the recovery session); publicly reachable, but only the `token_hash`/`type=recovery` branch actually verifies anything.
 
 **Query Parameters:**
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `token_hash` | string | Yes | The OTP token hash from the password-reset email |
-| `type` | string | Yes | Must equal `recovery` (`RECOVERY_OTP_TYPE`) — any other value is rejected |
+| `token_hash` | string | No | The OTP token hash from the password-reset email (Task 2 template path) |
+| `type` | string | No | Must equal `recovery` (`RECOVERY_OTP_TYPE`) when `token_hash` is present — any other value is rejected |
+| `error` / `error_code` | string | No | Set by Supabase in some flows, or by `public/js/auth-recovery.js` when it reads a fragment error, to report a failure via query string |
 
-**Success Response:**
-- Sets HTTP-only session cookies (`sb-access-token`, `sb-refresh-token`) via `verifyOtp()`'s returned session
-- Sets a short-lived (1 hour), httpOnly `recovery-session` marker cookie proving this session originated from a verified recovery link
-- Renders `auth/reset-password.ejs` (no redirect)
+**Render states** (`views/auth/reset-password.ejs`, local `state`):
 
-**Error Responses:**
+| State | When | Content |
+|-------|------|---------|
+| `form` | Valid `token_hash`/`type=recovery` just verified, or a still-valid `recovery-session` + `sb-access-token` pair already exists (e.g. returning from the fragment bridge, or a page refresh) | The "set a new password" form |
+| `error` | Missing/invalid `token_hash`/`type`; `verifyOtp()` failed; `error`/`error_code` present; or a `recovery-session` cookie exists but its access token is no longer valid | Heading "This reset link is invalid or has expired", a fixed message from `getRecoveryErrorMessage(code)`, a "Request a new reset email" button to `/auth/forgot-password`, and "Back to Sign In" |
+| `checking` | No query params and no existing recovery session yet | "Verifying your reset link…" plus `/js/auth-recovery.js` (reads a URL hash fragment, if any) and a `<noscript>` fallback showing the same error content as the `error` state |
 
-| Scenario | Flash Message | Redirect |
-|----------|---------------|----------|
-| Missing `token_hash` or `type !== "recovery"` | "This password reset link is invalid or has expired. Please request a new one." | `/auth/forgot-password` |
-| `verifyOtp()` fails or returns no session | Same as above | `/auth/forgot-password` |
-| Server error | Same as above | `/auth/forgot-password` |
+**Cookie hygiene:** every branch that renders `error` first clears `sb-access-token`, `sb-refresh-token`, and `recovery-session`, so an abandoned or expired recovery attempt never leaves stale cookies that could later trigger a `redirectIfAuthenticated` bounce to Home.
+
+**Error copy:** always fixed strings produced by `getRecoveryErrorMessage(code)` (`src/utils/authUtils.js`) — Supabase's raw `error_description` query value is never read or displayed.
+
+---
+
+### POST /auth/reset-password/session
+
+The implicit-flow fragment-to-cookie bridge (REW-57). Called by `public/js/auth-recovery.js` when it finds `access_token`/`refresh_token`/`type=recovery` in the URL hash fragment (i.e. the email template still used Supabase's default `{{ .ConfirmationURL }}`, or `redirect_to` fell back to the Site URL). Turns those browser-supplied tokens into httpOnly session cookies — the highest-risk surface added by this ticket, so every check below is mandatory:
+
+**Authentication:** None (it establishes the recovery session) — protected instead by the checks below.
+
+**Request Body** (JSON or form-encoded):
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `access_token` | string | Yes | From the URL fragment |
+| `refresh_token` | string | Yes | From the URL fragment |
+| `type` | string | Yes | Must equal `recovery` |
+| `_csrf` | string | No | Included for parity with other forms; currently a no-op (CSRF globally disabled) |
+
+**Validation, in order (all must pass):**
+1. `type` must equal `recovery`.
+2. `access_token`/`refresh_token` must be non-empty strings.
+3. The request's `Origin` header (falling back to `Referer`) must match `getAppUrl()` — same-origin check, since global CSRF protection is disabled.
+4. `access_token` must be accepted by `supabase.auth.getUser(access_token)`.
+5. (Recommended) the token's `amr` claim must include an entry with `method: "recovery"` (`hasRecoveryAmrClaim`), so an ordinary login token can't be replayed here to reach the password-change form without a real recovery email.
+
+**Success Response:** `200 { "redirect": "/auth/reset-password" }`; sets `sb-access-token`, `sb-refresh-token`, and `recovery-session` cookies.
+
+**Failure Response:** `401 { "redirect": "/auth/reset-password?error_code=invalid_link" }`; no cookies set. Token values are never logged, on success or failure.
 
 ---
 
@@ -262,10 +319,10 @@ Sets the new password on the recovery-granted session.
 
 | Scenario | Behavior |
 |----------|----------|
-| Missing `recovery-session` cookie | Flash "invalid or has expired" message, redirect to `/auth/forgot-password` |
-| Missing/mismatched/too-short password | Re-renders `auth/reset-password.ejs` with an inline error (no redirect, to preserve the recovery session) |
-| Session expired (`setSession` fails) | Re-renders with "Your session has expired. Please request a new password reset link." |
-| Supabase `updateUser()` rejects (e.g. stricter project password policy) | Re-renders with Supabase's own error message |
+| Missing `recovery-session` cookie | Renders `state: "error"` inline (REW-57: no longer redirects to `/auth/forgot-password`, which — combined with `redirectIfAuthenticated` — could bounce an already-logged-in user to Home) |
+| Missing/mismatched/too-short password | Re-renders `state: "form"` with an inline error (no redirect, to preserve the recovery session) |
+| Session expired (`setSession` fails) | Clears `sb-access-token`/`sb-refresh-token`/`recovery-session`, then renders `state: "error"` with "Your session has expired. Please request a new password reset link." |
+| Supabase `updateUser()` rejects (e.g. stricter project password policy) | Re-renders `state: "form"` with Supabase's own error message |
 
 **Implementation note:** Uses a freshly-instantiated Supabase client (`createSupabaseClient(req.accessToken)`, `src/config/supabase.js`) scoped to this request for `setSession()`/`updateUser()`, rather than the shared module-level `supabase` singleton, to avoid mutating session state on a client shared across concurrent requests.
 
@@ -277,7 +334,7 @@ Sets the new password on the recovery-granted session.
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `APP_URL` | Yes (production) | `http://localhost:3000` | Base URL for email confirmation links |
+| `APP_URL` | Yes (production) | `http://localhost:3000`, or `https://` + `VERCEL_PROJECT_PRODUCTION_URL` when running on Vercel without `APP_URL` set | Base URL for email confirmation and password-reset links, resolved by `getAppUrl()` (`src/utils/authUtils.js`). **Never** derived from the request's `Host`/`X-Forwarded-Host` headers (header-injection risk for emailed links). When `NODE_ENV=production` and `APP_URL` is unset, a one-time `console.warn` is logged naming the fallback used (REW-57) so a misconfigured deploy is visible in logs instead of silently emitting `localhost` links. |
 
 ### Supabase Dashboard Configuration
 
@@ -286,6 +343,7 @@ Sets the new password on the recovery-granted session.
    - **Redirect URLs**: Add all allowed callback and password-reset URLs:
      - Production: `https://your-domain.com/auth/callback`, `https://your-domain.com/auth/reset-password`
      - Development: `http://localhost:3000/auth/callback`, `http://localhost:3000/auth/reset-password`
+2. **Authentication > Email Templates > Reset Password** — must be the template in `docs/email-templates/reset-password.html`, which links via `{{ .SiteURL }}/auth/reset-password?token_hash={{ .TokenHash }}&type=recovery`. **Important:** the allow-list in step 1 alone is not sufficient — if this template still uses Supabase's default `{{ .ConfirmationURL }}`, the link goes through Supabase's own verify endpoint first, which delivers the session as a URL hash fragment that this server-rendered app cannot read from a redirect alone (see "Implicit-flow fragment recovery" above for the defence-in-depth that still recovers this case, and REW-57 for the root-cause writeup).
 
 ---
 
@@ -329,6 +387,30 @@ The OTP type used for password recovery links. Kept intentionally separate from 
 
 **Value:** `"recovery"`
 
+### getAppUrl(env) (REW-57)
+
+Resolves the app's own base URL for building emailed links. See Environment Variables above for the fallback order. Never derives the URL from request headers.
+
+**Location:** `src/utils/authUtils.js`
+
+### getRecoveryErrorMessage(code) (REW-57)
+
+Maps a Supabase/forwarded `error_code` to fixed, safe copy (`otp_expired` → expired-link message; anything else, including no code, → generic invalid/expired message). Never echoes Supabase's raw `error_description`.
+
+**Location:** `src/utils/authUtils.js`
+
+### getEmailLinkForwardPath(query) (REW-57)
+
+Used by the Home-route guard (`src/routes/index.js`) to decide whether a misdirected email link (`?token_hash=...&type=...` landing on `/`) should be forwarded to `/auth/reset-password` or `/auth/callback`. Returns one of those two fixed paths carrying only the whitelisted `token_hash`/`type` params, or `null`. Cannot become an open redirect — the base path is never derived from the request.
+
+**Location:** `src/utils/authUtils.js`
+
+### isSameOriginRequest(headers, appUrl) / hasRecoveryAmrClaim(accessToken) (REW-57)
+
+Used by `POST /auth/reset-password/session` — see that endpoint's Validation steps above.
+
+**Location:** `src/utils/authUtils.js`
+
 ---
 
 ## Error Handling
@@ -345,13 +427,15 @@ The callback handler catches and logs all errors to prevent exposing sensitive i
 
 ---
 
-## Known Limitations / Non-Blocking Follow-Ups (REW-54)
+## Known Limitations / Non-Blocking Follow-Ups (REW-54, REW-57)
 
 Flagged during review, not fixed in this ticket:
 
 - **`recovery-session` marker cookie is presence-only.** It proves *a* recovery link was verified recently, but it's not a random, single-use token tied to the specific OTP verification, and it isn't cleared on login/register. On a shared/public browser, a stale marker cookie could theoretically let a *different* logged-in user's own password-change request skip the "came from a recovery email" check within the 1-hour cookie lifetime (they'd still need to be authenticated as themselves — this doesn't let one account touch another's password). Recommended follow-up: make it a random, server-verified single-use token, and clear it on login/register too.
-- **No route-specific rate limiting** on `/auth/forgot-password` or `/auth/resend-confirmation` — only the app-wide general limiter (100 req/15 min/IP, production only) applies. This is a pre-existing gap for resend-confirmation; adding the new reset-request endpoint doubles the surface. Recommended as a follow-up ticket.
-- **CSRF protection is globally disabled** (`src/app.js`, pre-existing, unrelated to this ticket — `doubleCsrfProtection` is commented out pending a library debugging fix). The new forms include `_csrf` hidden fields for when it's re-enabled, but the field is currently a no-op.
+- **No route-specific rate limiting** on `/auth/forgot-password`, `/auth/resend-confirmation`, or the new `/auth/reset-password/session` bridge — only the app-wide general limiter (100 req/15 min/IP, production only) applies. The bridge does a Supabase `getUser()` call per request. Recommended as a follow-up ticket.
+- **CSRF protection is globally disabled** (`src/app.js`, pre-existing, unrelated to this ticket — `doubleCsrfProtection` is commented out pending a library debugging fix). Forms and the bridge fetch include `_csrf` fields for when it's re-enabled, but the field is currently a no-op. The bridge's same-origin `Origin`/`Referer` check (REW-57) is an added, independent defence, not a replacement for CSRF.
+- **`hasRecoveryAmrClaim` is best-effort.** It inspects the `amr` claim on an already-`getUser()`-validated token; if a future Supabase/GoTrue version stops setting `amr` on recovery sessions, this check would start rejecting legitimate recovery links. Verify against a real reset email if that ever happens, rather than silently disabling the check.
+- **`confirm-signup.html` has the same `{{ .ConfirmationURL }}` mismatch** that caused REW-57 for `reset-password.html`, so `/auth/callback` can in principle hit the same implicit-flow fragment case. Not fixed here beyond the generic Home-route guard and fragment forwarding (which happen to help it too) — tracked as a separate follow-up ticket.
 
 ---
 
@@ -359,13 +443,17 @@ Flagged during review, not fixed in this ticket:
 
 | File | Description |
 |------|-------------|
-| `src/routes/authRoutes.js` | Route handlers for callback, forgot-password, reset-password, and resend |
-| `src/utils/authUtils.js` | Cookie utilities and OTP type validation (`ALLOWED_OTP_TYPES`, `RECOVERY_OTP_TYPE`); see `authUtils.test.js` for the co-located test asserting the two stay disjoint |
+| `src/routes/authRoutes.js` | Route handlers for callback, forgot-password, reset-password (three-state), the `POST /auth/reset-password/session` fragment bridge, and resend |
+| `src/routes/index.js` | Home route; forwards misdirected email links (`?token_hash=...&type=...`) via `getEmailLinkForwardPath` (REW-57) |
+| `src/utils/authUtils.js` | Cookie utilities, OTP type validation (`ALLOWED_OTP_TYPES`, `RECOVERY_OTP_TYPE`), and the REW-57 helpers `getAppUrl`, `getRecoveryErrorMessage`, `getEmailLinkForwardPath`, `isSameOriginRequest`, `hasRecoveryAmrClaim`; see `authUtils.test.js` for unit tests of all of the above |
 | `src/config/supabase.js` | `createSupabaseClient(accessToken)` — used by `POST /auth/reset-password` for a per-request client instance |
 | `src/middleware/authMiddleware.js` | `requireAuth` gates `POST /auth/reset-password`; also fixed in REW-54 to attach `req.refreshToken` on every success path (previously only set on the token-refresh branch), preventing a stale/rotated refresh-token cookie from being paired with a freshly-refreshed access token and causing spurious "session expired" failures during password reset |
 | `views/auth/forgot-password.ejs` | Centralized account-recovery page (REW-54; supersedes `resend-confirmation.ejs`) |
-| `views/auth/reset-password.ejs` | "Set a new password" form shown after a valid recovery link (REW-54) |
+| `views/auth/reset-password.ejs` | Three states — `form` / `error` / `checking` (REW-57) |
 | `views/auth/login.ejs` | Contains link to the Forgot Password page (REW-54) |
+| `views/layouts/main.ejs` | Loads `/js/auth-recovery.js` on every page (REW-57) |
+| `public/js/auth-recovery.js` | Reads a URL hash fragment left by an implicit-flow recovery link, strips it, and forwards errors or posts tokens to the bridge endpoint (REW-57) |
+| `docs/email-templates/reset-password.html` | Reset-password email template; links via `{{ .TokenHash }}`/`{{ .SiteURL }}`, not `{{ .ConfirmationURL }}` (REW-57) |
 
 ---
 
@@ -381,11 +469,17 @@ Flagged during review, not fixed in this ticket:
 - [ ] Development callback URL defaults to localhost:3000
 - [ ] Forgot Password page renders with one email field and both actions (REW-54)
 - [ ] "Send Password Reset Email" triggers a Supabase reset email and shows the generic success message regardless of whether the email is registered (REW-54)
-- [ ] Reset-password link verifies successfully and renders the "set a new password" form; an expired/reused link redirects to `/auth/forgot-password` with an error (REW-54)
+- [ ] Reset-password link with `token_hash`/`type=recovery` verifies successfully and renders the "set a new password" form (REW-57)
+- [ ] An expired/reused/tampered reset link renders the inline "invalid or expired" error state (not a redirect to `/auth/forgot-password`, and never Home) with a working "Request a new reset email" action (REW-57)
+- [ ] `/auth/reset-password?error_code=otp_expired` shows the expired-link copy; an unknown `error_code` shows the generic copy; `error_description` is never rendered (REW-57)
 - [ ] Submitting a new password (matching, ≥8 characters) succeeds, clears the recovery session, and redirects to `/auth/login`; the old password no longer works and the new one does (REW-54)
-- [ ] `POST /auth/reset-password` without a valid `recovery-session` cookie is rejected (REW-54)
+- [ ] `POST /auth/reset-password` without a valid `recovery-session` cookie renders the inline error state, not a redirect (updated in REW-57)
+- [ ] With the Reset Password template temporarily set to `{{ .ConfirmationURL }}` in a dev project, clicking the emailed link still completes the reset via the fragment bridge, and the fragment is removed from the address bar (REW-57)
+- [ ] `?token_hash=...&type=recovery` on `/` forwards to `/auth/reset-password`; `type=signup`/`email` forwards to `/auth/callback`; any other `type` renders Home normally and forwards nothing (REW-57)
+- [ ] `POST /auth/reset-password/session` rejects a non-`recovery` type, a cross-origin `Origin`, and an invalid/expired `access_token`, without setting cookies (REW-57)
+- [ ] Password-reset emails sent from production contain the production origin, never `localhost` (REW-57)
 
 ---
 
-**Jira Issues:** REW-41, REW-54
+**Jira Issues:** REW-41, REW-54, REW-57
 **Status:** Complete

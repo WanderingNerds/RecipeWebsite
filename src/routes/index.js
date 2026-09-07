@@ -8,11 +8,28 @@ import publicRoutes from "./publicRoutes.js";
 import likeRoutes from "./likeRoutes.js";
 import { requireAuth } from "../middleware/authMiddleware.js";
 import { createSupabaseClient, supabase } from "../config/supabase.js";
+import { getEmailLinkForwardPath } from "../utils/authUtils.js";
 
 const router = Router();
 
 // Home page
+//
+// Guard against misdirected email links (REW-57): if a password-reset or
+// email-confirmation link's redirect_to wasn't allow-listed in Supabase, or
+// the email template links straight to the Site URL, the browser can land
+// here carrying ?token_hash=...&type=... instead of on /auth/reset-password
+// or /auth/callback. Forward those requests to the correct handler instead
+// of silently rendering Home (the reported bug) or ignoring the token.
+//
+// getEmailLinkForwardPath only ever returns one of two fixed internal
+// paths carrying a whitelisted token_hash/type pair -- this can never
+// become an open redirect.
 router.get("/", (req, res) => {
+  const forwardPath = getEmailLinkForwardPath(req.query);
+  if (forwardPath) {
+    return res.redirect(302, forwardPath);
+  }
+
   res.render("home", {
     title: "Recipe Website",
     isHomePage: true,

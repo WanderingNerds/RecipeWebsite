@@ -1,9 +1,47 @@
 import { Router } from "express";
 import { supabase, createSupabaseClient } from "../config/supabase.js";
 import { redirectIfAuthenticated, requireAuth } from "../middleware/authMiddleware.js";
-import { setAuthCookies, clearAuthCookies, ALLOWED_OTP_TYPES, RECOVERY_OTP_TYPE } from "../utils/authUtils.js";
+import {
+  setAuthCookies,
+  clearAuthCookies,
+  ALLOWED_OTP_TYPES,
+  RECOVERY_OTP_TYPE,
+  getAppUrl,
+  getRecoveryErrorMessage,
+  isSameOriginRequest,
+  hasRecoveryAmrClaim,
+} from "../utils/authUtils.js";
 
 const router = Router();
+
+// Short-lived (1h) httpOnly marker cookie proving the current session came
+// from a verified recovery link (verifyOtp or the fragment bridge), not
+// just any logged-in session. Checked and cleared by POST
+// /auth/reset-password so an already-logged-in user can't hit that
+// endpoint to change their password without going through the
+// recovery-email flow.
+function setRecoverySessionCookie(res) {
+  res.cookie("recovery-session", "true", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    maxAge: 60 * 60 * 1000, // matches access token lifetime
+    sameSite: "lax",
+  });
+}
+
+function clearRecoverySessionState(res) {
+  clearAuthCookies(res);
+  res.clearCookie("recovery-session");
+}
+
+function renderResetPassword(res, { state, error = null, message = null }) {
+  return res.render("auth/reset-password", {
+    title: "Reset Password",
+    state,
+    error,
+    message,
+  });
+}
 
 // Login page
 router.get("/login", redirectIfAuthenticated, (req, res) => {
@@ -77,8 +115,7 @@ router.post("/register", redirectIfAuthenticated, async (req, res) => {
     }
 
     // Build the email confirmation redirect URL
-    const appUrl = process.env.APP_URL || "http://localhost:3000";
-    const emailRedirectTo = `${appUrl}/auth/callback`;
+    const emailRedirectTo = `${getAppUrl()}/auth/callback`;
 
     const { data, error } = await supabase.auth.signUp({
       email,
@@ -201,8 +238,7 @@ router.post("/forgot-password", redirectIfAuthenticated, async (req, res) => {
     }
 
     // Build the password reset redirect URL
-    const appUrl = process.env.APP_URL || "http://localhost:3000";
-    const emailRedirectTo = `${appUrl}/auth/reset-password`;
+    const emailRedirectTo = `${getAppUrl()}/auth/reset-password`;
 
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: emailRedirectTo,
@@ -246,8 +282,7 @@ router.post("/resend-confirmation", redirectIfAuthenticated, async (req, res) =>
     }
 
     // Build the email confirmation redirect URL
-    const appUrl = process.env.APP_URL || "http://localhost:3000";
-    const emailRedirectTo = `${appUrl}/auth/callback`;
+    const emailRedirectTo = `${getAppUrl()}/auth/callback`;
 
     const { error } = await supabase.auth.resend({
       type: "signup",
@@ -279,50 +314,154 @@ router.post("/resend-confirmation", redirectIfAuthenticated, async (req, res) =>
 // ever accepts RECOVERY_OTP_TYPE tokens, so a recovery link can never log a
 // user straight into the dashboard - it always lands on the "set a new
 // password" form.
+//
+// Handles every arrival shape so this route never dead-ends on Home (REW-57):
+//   (a) token_hash + type=recovery -- the Task 2 email template's direct link.
+//   (b) error / error_code query params -- Supabase (or the fragment-bridge
+//       script) reporting a failure via query string instead of a fragment.
+//   (c) no query params, but a still-valid recovery session already exists --
+//       how the browser returns from the fragment bridge, and how a page
+//       refresh on the form keeps working.
+//   (d) no query params, no recovery session -- render a "checking" state
+//       that gives public/js/auth-recovery.js a chance to read a URL hash
+//       fragment (implicit-flow tokens) before giving up.
 router.get("/reset-password", async (req, res) => {
+  const { token_hash: tokenHash, type, error: errorParam, error_code: errorCode } = req.query;
+
+  const renderInvalidLink = (code) => {
+    // Never leave stale recovery/auth cookies behind on a failure path --
+    // closes the "abandoned recovery attempt bounces to Home later" bug.
+    clearRecoverySessionState(res);
+    return renderResetPassword(res, {
+      state: "error",
+      message: getRecoveryErrorMessage(code),
+    });
+  };
+
   try {
-    const { token_hash, type } = req.query;
+    // (a) Direct token_hash link (Task 2 template path).
+    if (tokenHash) {
+      if (typeof tokenHash !== "string" || type !== RECOVERY_OTP_TYPE) {
+        return renderInvalidLink();
+      }
 
-    if (!token_hash || type !== RECOVERY_OTP_TYPE) {
-      req.flash("error", "This password reset link is invalid or has expired. Please request a new one.");
-      return res.redirect("/auth/forgot-password");
+      const { data, error } = await supabase.auth.verifyOtp({
+        token_hash: tokenHash,
+        type,
+      });
+
+      if (error || !data.session) {
+        console.error("Reset password verification error:", error);
+        return renderInvalidLink();
+      }
+
+      // Set auth cookies so the "set a new password" form can be submitted
+      setAuthCookies(res, data.session);
+      setRecoverySessionCookie(res);
+
+      return renderResetPassword(res, { state: "form" });
     }
 
-    // Verify the OTP token from the password reset email
-    const { data, error } = await supabase.auth.verifyOtp({
-      token_hash,
-      type,
-    });
-
-    if (error || !data.session) {
-      console.error("Reset password verification error:", error);
-      req.flash("error", "This password reset link is invalid or has expired. Please request a new one.");
-      return res.redirect("/auth/forgot-password");
+    // (b) Forwarded/Supabase-reported error (query-string form).
+    if (errorParam || errorCode) {
+      return renderInvalidLink(typeof errorCode === "string" ? errorCode : undefined);
     }
 
-    // Set auth cookies so the "set a new password" form can be submitted
-    setAuthCookies(res, data.session);
+    // (c) No query params -- check for an already-established, still-valid
+    // recovery session (fragment bridge already ran, or a plain refresh).
+    const accessToken = req.cookies["sb-access-token"];
+    const hasRecoveryMarker = req.cookies["recovery-session"];
 
-    // Short-lived marker cookie proving this session came from a recovery
-    // link (verified above), not just any logged-in session. Checked and
-    // cleared by POST /auth/reset-password so an already-logged-in user
-    // can't hit that endpoint to change their password without going
-    // through the recovery-email flow.
-    res.cookie("recovery-session", "true", {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      maxAge: 60 * 60 * 1000, // matches access token lifetime
-      sameSite: "lax",
-    });
+    if (hasRecoveryMarker && accessToken) {
+      const { data: userData, error: userError } = await supabase.auth.getUser(accessToken);
 
-    res.render("auth/reset-password", {
-      title: "Reset Password",
-      error: null,
-    });
-  } catch (error) {
-    console.error("Reset password error:", error);
-    req.flash("error", "This password reset link is invalid or has expired. Please request a new one.");
-    res.redirect("/auth/forgot-password");
+      if (!userError && userData?.user) {
+        return renderResetPassword(res, { state: "form" });
+      }
+
+      // Marker cookie present but the session it refers to is gone/invalid
+      // (e.g. expired) -- treat as an expired link rather than silently
+      // falling through, so the user gets an actionable error instead of a
+      // "checking" state that will never resolve.
+      return renderInvalidLink();
+    }
+
+    // (d) Nothing to go on yet -- give the client-side fragment reader a
+    // chance to run. Real users never stay on this state: the script either
+    // forwards fragment tokens to the bridge or redirects to ?error_code=...
+    // `message` is only used by the <noscript> fallback in this state.
+    return renderResetPassword(res, { state: "checking", message: getRecoveryErrorMessage() });
+  } catch (err) {
+    console.error("Reset password error:", err);
+    return renderInvalidLink();
+  }
+});
+
+// Fragment-to-cookie bridge for implicit-flow recovery links (REW-57).
+//
+// When the "Reset Password" email still uses Supabase's default
+// {{ .ConfirmationURL }} (or a redirect_to isn't allow-listed), the browser
+// ends up on this app with the session delivered as a URL *hash fragment*
+// (#access_token=...&refresh_token=...&type=recovery) instead of a query
+// string. Fragments are never sent to the server, so
+// public/js/auth-recovery.js reads the fragment client-side and POSTs the
+// tokens here so they can be turned into httpOnly cookies.
+//
+// This is the highest-risk new surface added by REW-57 (it turns
+// browser-supplied tokens into session cookies), so every check below is
+// mandatory -- do not relax or reorder them:
+//   1. type must be exactly "recovery".
+//   2. Origin (falling back to Referer) must match this app's own origin --
+//      request-level defence against session injection while global CSRF
+//      protection is disabled elsewhere in the app.
+//   3. access_token must be accepted by supabase.auth.getUser() before any
+//      cookie is set.
+//   4. (recommended) the token's `amr` claim must include "recovery" so an
+//      ordinary login token can't be laundered into a recovery session.
+// Token values are never logged.
+router.post("/reset-password/session", async (req, res) => {
+  const INVALID_LINK_RESPONSE = { redirect: "/auth/reset-password?error_code=invalid_link" };
+
+  try {
+    const body = req.body || {};
+    const accessToken = body.access_token;
+    const refreshToken = body.refresh_token;
+    const { type } = body;
+
+    if (type !== RECOVERY_OTP_TYPE) {
+      return res.status(401).json(INVALID_LINK_RESPONSE);
+    }
+
+    if (typeof accessToken !== "string" || !accessToken || typeof refreshToken !== "string" || !refreshToken) {
+      return res.status(401).json(INVALID_LINK_RESPONSE);
+    }
+
+    const requestOrigin = { origin: req.get("origin"), referer: req.get("referer") };
+    if (!isSameOriginRequest(requestOrigin, getAppUrl())) {
+      return res.status(401).json(INVALID_LINK_RESPONSE);
+    }
+
+    // Validate the token with Supabase before trusting it for anything.
+    // Uses the shared client for a stateless getUser() call only -- does
+    // not call setSession() on it, so this can't bleed a session into other
+    // concurrent requests.
+    const { data: userData, error: userError } = await supabase.auth.getUser(accessToken);
+    if (userError || !userData?.user) {
+      return res.status(401).json(INVALID_LINK_RESPONSE);
+    }
+
+    if (!hasRecoveryAmrClaim(accessToken)) {
+      return res.status(401).json(INVALID_LINK_RESPONSE);
+    }
+
+    setAuthCookies(res, { access_token: accessToken, refresh_token: refreshToken });
+    setRecoverySessionCookie(res);
+
+    return res.json({ redirect: "/auth/reset-password" });
+  } catch (err) {
+    // Never log token values -- log only that the bridge failed.
+    console.error("Reset password session bridge error");
+    return res.status(401).json(INVALID_LINK_RESPONSE);
   }
 });
 
@@ -331,33 +470,39 @@ router.get("/reset-password", async (req, res) => {
 // fresh with the new password.
 router.post("/reset-password", requireAuth, async (req, res) => {
   try {
-    // Require the marker cookie set by GET /auth/reset-password so this
-    // endpoint can only be reached via a valid recovery link, not by any
-    // already-logged-in user with a normal session.
+    // Require the marker cookie set by GET /auth/reset-password (or the
+    // fragment bridge) so this endpoint can only be reached via a valid
+    // recovery link, not by any already-logged-in user with a normal
+    // session. Renders the dead-end error state inline instead of
+    // redirecting to /auth/forgot-password, which -- combined with
+    // redirectIfAuthenticated -- used to bounce a still-logged-in user to
+    // Home (REW-57 root cause 4).
     if (!req.cookies["recovery-session"]) {
-      req.flash("error", "This password reset link is invalid or has expired. Please request a new one.");
-      return res.redirect("/auth/forgot-password");
+      return renderResetPassword(res, {
+        state: "error",
+        message: getRecoveryErrorMessage(),
+      });
     }
 
     const { password, confirmPassword } = req.body;
 
     if (!password || !confirmPassword) {
-      return res.render("auth/reset-password", {
-        title: "Reset Password",
+      return renderResetPassword(res, {
+        state: "form",
         error: "Both password fields are required",
       });
     }
 
     if (password !== confirmPassword) {
-      return res.render("auth/reset-password", {
-        title: "Reset Password",
+      return renderResetPassword(res, {
+        state: "form",
         error: "Passwords do not match",
       });
     }
 
     if (password.length < 8) {
-      return res.render("auth/reset-password", {
-        title: "Reset Password",
+      return renderResetPassword(res, {
+        state: "form",
         error: "Password must be at least 8 characters",
       });
     }
@@ -376,9 +521,12 @@ router.post("/reset-password", requireAuth, async (req, res) => {
 
     if (sessionError) {
       console.error("Reset password session error:", sessionError);
-      return res.render("auth/reset-password", {
-        title: "Reset Password",
-        error: "Your session has expired. Please request a new password reset link.",
+      // Session is unusable -- clear cookies + marker before rendering the
+      // expired message so an abandoned/expired attempt can't linger.
+      clearRecoverySessionState(res);
+      return renderResetPassword(res, {
+        state: "error",
+        message: "Your session has expired. Please request a new password reset link.",
       });
     }
 
@@ -386,22 +534,21 @@ router.post("/reset-password", requireAuth, async (req, res) => {
 
     if (updateError) {
       console.error("Reset password update error:", updateError);
-      return res.render("auth/reset-password", {
-        title: "Reset Password",
+      return renderResetPassword(res, {
+        state: "form",
         error: updateError.message,
       });
     }
 
     // Clear the recovery-granted session; user signs in fresh with the new password
-    clearAuthCookies(res);
-    res.clearCookie("recovery-session");
+    clearRecoverySessionState(res);
 
     req.flash("success", "Password updated successfully! Please sign in with your new password.");
     res.redirect("/auth/login");
   } catch (error) {
     console.error("Reset password error:", error);
-    res.render("auth/reset-password", {
-      title: "Reset Password",
+    renderResetPassword(res, {
+      state: "form",
       error: "An error occurred while updating your password. Please try again.",
     });
   }
