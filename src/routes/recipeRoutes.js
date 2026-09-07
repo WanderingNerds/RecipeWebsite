@@ -376,6 +376,25 @@ router.get("/", requireAuth, async (req, res) => {
       return res.redirect("/dashboard");
     }
 
+    // Batch-fetch the current user's like status for these recipes to avoid
+    // an N+1 query pattern (REW-55, following the batching approach documented
+    // in docs/plans/REW-21-recipe-likes.md).
+    const recipeIds = (recipes || []).map((recipe) => recipe.id);
+    let likedRecipeIds = new Set();
+    if (recipeIds.length) {
+      const { data: likedRows, error: likesError } = await supabaseClient
+        .from("recipe_likes")
+        .select("recipe_id")
+        .eq("user_id", req.user.id)
+        .in("recipe_id", recipeIds);
+
+      if (likesError) {
+        console.error("Error fetching like status:", likesError);
+      } else {
+        likedRecipeIds = new Set((likedRows || []).map((row) => row.recipe_id));
+      }
+    }
+
     // Fetch categories and tags for each recipe
     const recipesWithRelations = await Promise.all(
       (recipes || []).map(async (recipe) => {
@@ -392,7 +411,8 @@ router.get("/", requireAuth, async (req, res) => {
         return {
           ...recipe,
           categories: recipeCategories?.map(rc => rc.categories) || [],
-          tags: recipeTags?.map(rt => rt.tags) || []
+          tags: recipeTags?.map(rt => rt.tags) || [],
+          isLiked: likedRecipeIds.has(recipe.id)
         };
       })
     );

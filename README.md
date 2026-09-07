@@ -83,7 +83,8 @@ recipe-website/
 │   │   ├── authRoutes.js       # Auth routes
 │   │   ├── recipeRoutes.js     # Recipe CRUD routes
 │   │   ├── categoryRoutes.js   # Category API routes
-│   │   └── tagRoutes.js        # Tag API routes
+│   │   ├── tagRoutes.js        # Tag API routes
+│   │   └── likeRoutes.js       # Recipe favorite/like API routes (REW-21)
 │   ├── utils/
 │   │   ├── imageUtils.js       # Image processing utilities
 │   │   ├── ingredientParser.js # Ingredient parsing
@@ -101,6 +102,7 @@ recipe-website/
 │   └── js/
 │       ├── main.js             # Client-side JavaScript
 │       ├── nav.js              # Mobile hamburger nav toggle (REW-50)
+│       ├── likes.js            # Favorite/like button optimistic UI (REW-21; also drives My Recipes cards, REW-55)
 │       ├── recipe-form.js      # Recipe form handling
 │       └── tags-input.js       # Tag input with autocomplete
 ├── database/
@@ -118,6 +120,11 @@ recipe-website/
 - Draft/Published status workflow
 - **Author Defaults to Account Name (REW-46)**: When creating a recipe manually or via import, the Author field is pre-filled with the logged-in user's account display name (their registered name, or email if no name is set) and this default is enforced server-side even if the field is submitted blank. Author remains fully editable, so a recipe can still be attributed to someone else (e.g. "Grandma's recipe").
 - **Required Prep Time / Total Time (REW-52)**: The manual "New Recipe" and "Edit Recipe" forms now require both Prep Time and Total Time before a recipe can be saved (draft or published), with inline validation that highlights the missing field(s) and clears as soon as a value is entered; enforced server-side too. "Total Time" is a display-only relabel of the existing Cook Time field — no new database column was added. The Import Recipe flow is unaffected and can still save with blank times.
+
+### Favorites / Recipe Likes (REW-21, REW-55)
+- **Heart-Toggle Favoriting**: Authenticated users can like/unlike any **published** recipe from a heart-shaped `.like-btn` control with optimistic UI (instant toggle, reverts on a failed request) and an "Undo" toast after unliking (`public/js/likes.js`, backed by `POST`/`DELETE /api/likes/:recipeId`).
+- **Liked Recipes Page**: A dedicated `/recipes/liked` page lists everything the logged-in user has favorited.
+- **Favorite Action on My Recipes (REW-55)**: The heart control now also appears directly on each recipe card under **My Recipes** (`/recipes`), not just the single-recipe view — so a user can favorite/unfavorite without opening the recipe. **Draft** recipe cards show the same heart in a disabled/muted state (not clickable) because the underlying `/api/likes/:recipeId` endpoint only allows liking `published` recipes; publishing the recipe enables the control. Favorite state set from My Recipes is immediately reflected on the recipe's detail page and on `/recipes/liked`, since all three surfaces read/write the same `recipe_likes` table.
 
 ### Instant Recipe Scaling (REW-11)
 - **Real-time Scaling**: Adjust recipe servings without page reloads
