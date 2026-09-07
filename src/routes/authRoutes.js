@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { supabase, createSupabaseClient } from "../config/supabase.js";
-import { redirectIfAuthenticated, requireAuth } from "../middleware/authMiddleware.js";
+import { redirectIfAuthenticated } from "../middleware/authMiddleware.js";
 import {
   setAuthCookies,
   clearAuthCookies,
@@ -459,8 +459,9 @@ router.post("/reset-password/session", async (req, res) => {
 
     return res.json({ redirect: "/auth/reset-password" });
   } catch (err) {
-    // Never log token values -- log only that the bridge failed.
-    console.error("Reset password session bridge error");
+    // Never log token values -- log only the error message so a real
+    // production failure (e.g. Supabase outage) is diagnosable from logs.
+    console.error("Reset password session bridge error:", err?.message);
     return res.status(401).json(INVALID_LINK_RESPONSE);
   }
 });
@@ -468,8 +469,59 @@ router.post("/reset-password/session", async (req, res) => {
 // Reset password POST handler - sets the new password on the
 // recovery-granted session, then signs the user out so they sign back in
 // fresh with the new password.
-router.post("/reset-password", requireAuth, async (req, res) => {
+//
+// Deliberately does NOT use the shared `requireAuth` middleware. On a
+// failed/expired session, `requireAuth` redirects straight to
+// /auth/login without clearing sb-access-token/sb-refresh-token/
+// recovery-session, which would leave those cookies stale (every other
+// failure branch in this route clears them via clearRecoverySessionState).
+// This inline check mirrors requireAuth's cookie/getUser/refresh logic
+// exactly, just with recovery-cookie cleanup added on the failure paths.
+router.post("/reset-password", async (req, res) => {
   try {
+    const accessToken = req.cookies["sb-access-token"];
+    const refreshToken = req.cookies["sb-refresh-token"];
+
+    if (!accessToken) {
+      clearRecoverySessionState(res);
+      req.flash("error", "Please log in to access this page");
+      return res.redirect("/auth/login");
+    }
+
+    const { data: { user }, error: userError } = await supabase.auth.getUser(accessToken);
+
+    if (userError || !user) {
+      let refreshed = false;
+
+      if (refreshToken) {
+        const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession({
+          refresh_token: refreshToken,
+        });
+
+        if (!refreshError && refreshData.session) {
+          setAuthCookies(res, refreshData.session);
+          req.user = refreshData.user;
+          req.accessToken = refreshData.session.access_token;
+          req.refreshToken = refreshData.session.refresh_token;
+          refreshed = true;
+        }
+      }
+
+      if (!refreshed) {
+        // Access token invalid/expired AND the refresh retry also failed
+        // (or there was no refresh token) -- clear all recovery-specific
+        // cookies before bouncing to login, same as every other failure
+        // branch in this route.
+        clearRecoverySessionState(res);
+        req.flash("error", "Session expired. Please log in again");
+        return res.redirect("/auth/login");
+      }
+    } else {
+      req.user = user;
+      req.accessToken = accessToken;
+      req.refreshToken = refreshToken;
+    }
+
     // Require the marker cookie set by GET /auth/reset-password (or the
     // fragment bridge) so this endpoint can only be reached via a valid
     // recovery link, not by any already-logged-in user with a normal
@@ -512,11 +564,10 @@ router.post("/reset-password", requireAuth, async (req, res) => {
     // session-mutating call can't bleed into other concurrent requests on
     // the shared client.
     const requestClient = createSupabaseClient(req.accessToken);
-    const refreshToken = req.refreshToken;
 
     const { error: sessionError } = await requestClient.auth.setSession({
       access_token: req.accessToken,
-      refresh_token: refreshToken,
+      refresh_token: req.refreshToken,
     });
 
     if (sessionError) {
