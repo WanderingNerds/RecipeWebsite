@@ -2405,6 +2405,15 @@ a.pagination-link:hover {
   opacity: 1;
 }
 
+.like-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.like-btn:disabled:hover {
+  border-color: var(--color-divider);
+}
+
 @keyframes like-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }

@@ -21,7 +21,7 @@ All API endpoints require authentication unless otherwise noted. Authentication 
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/recipes` | List user's recipes (with optional category/tag filtering) |
+| GET | `/recipes` | List user's recipes (with optional category/tag filtering); each recipe includes a server-rendered favorite/like state, batch-fetched from `recipe_likes` (REW-55) |
 | GET | `/recipes/new` | Get form data for creating a recipe (Author field pre-filled with account display name, REW-46; Prep Time and Total Time/`cookTime` are required, REW-52) |
 | POST | `/recipes` | Create a new recipe (Author defaults server-side to account display name if blank/missing, REW-46; rejects blank `prepTime`/`cookTime`, REW-52) |
 | GET | `/recipes/:id` | View a single recipe |
@@ -37,6 +37,17 @@ All API endpoints require authentication unless otherwise noted. Authentication 
 | GET | `/recipes/import` | Render import page with upload form (Author field pre-filled with account display name, REW-46) |
 | POST | `/recipes/import/parse` | Parse uploaded file, return JSON preview |
 | POST | `/recipes/import/save` | Save imported recipe after user confirmation (accepts `author`, defaults server-side to account display name if blank/missing, REW-46) |
+
+### Recipe Likes / Favorites (REW-21, REW-55)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/likes/:recipeId` | Get like status (if authenticated) and public like count for a recipe |
+| POST | `/api/likes/:recipeId` | Like a recipe (requires auth; recipe must be `status = 'published'`, otherwise `404`) |
+| DELETE | `/api/likes/:recipeId` | Unlike a recipe (requires auth) |
+| GET | `/recipes/liked` | Display the current user's liked (published) recipes |
+
+Favorite/like controls (`.like-btn`) call these endpoints from the recipe detail page (REW-21) and, as of REW-55, from each card on the My Recipes page (`/recipes`) as well. See [Recipe Likes API](recipe-likes.md) for full details, including why draft recipe cards render a disabled heart.
 
 ### Categories
 
@@ -77,6 +88,7 @@ All API endpoints require authentication unless otherwise noted. Authentication 
 - [Recipe Import - OCR/PDF Parsing](recipe-import-ocr-parsing.md) - Text extraction and parsing from PDFs and images
 - [Recipe Author Default](recipe-author-default.md) - Account-name defaulting on recipe create/import (REW-46)
 - [Required Prep Time / Total Time](recipe-required-times.md) - Required-field enforcement and the Cook Time → Total Time display rename (REW-52)
+- [Recipe Likes API](recipe-likes.md) - `/api/likes/:recipeId` endpoints, the My Recipes favorite control, and the draft-recipe restriction (REW-21, REW-55)
 - [Categories and Tags](../CATEGORIES_AND_TAGS.md) - Full categories/tags documentation
 - [Email Confirmation Flow](email-confirmation.md) - Email verification and callback handling (REW-41); also documents the Forgot Password / Account Recovery flow that supersedes the standalone resend page (REW-54)
 

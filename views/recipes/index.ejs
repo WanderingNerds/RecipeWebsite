@@ -74,17 +74,28 @@
             </a>
           <% } %>
 
-          <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.5rem;">
+          <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.5rem; gap: 0.5rem;">
             <h3 style="margin: 0; flex: 1;">
               <a href="/recipes/<%= recipe.id %>" style="color: inherit; text-decoration: none;">
                 <%= recipe.title %>
               </a>
             </h3>
-            <% if (recipe.status === 'draft') { %>
-              <span class="badge-draft badge-draft-sm">Draft</span>
-            <% } else { %>
-              <span class="badge-published badge-published-sm">Published</span>
-            <% } %>
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <% if (recipe.status === 'published') { %>
+                <button class="like-btn" data-recipe-id="<%= recipe.id %>" data-liked="<%= recipe.isLiked %>" aria-label="<%= recipe.isLiked ? 'Remove from favorites' : 'Favorite this recipe' %>">
+                  <span class="like-btn-icon">&#9829;</span>
+                </button>
+              <% } else { %>
+                <button class="like-btn" disabled aria-label="Publish this recipe to add it to favorites" title="Publish this recipe to add it to favorites">
+                  <span class="like-btn-icon">&#9829;</span>
+                </button>
+              <% } %>
+              <% if (recipe.status === 'draft') { %>
+                <span class="badge-draft badge-draft-sm">Draft</span>
+              <% } else { %>
+                <span class="badge-published badge-published-sm">Published</span>
+              <% } %>
+            </div>
           </div>
 
           <% if (recipe.author) { %>
