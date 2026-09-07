@@ -64,7 +64,9 @@ A recipe website built with Node.js, Express, and Supabase Auth.
    - **Redirect URLs**: Add your callback and password-reset URLs:
      - Production: `https://your-domain.com/auth/callback`, `https://your-domain.com/auth/reset-password`
      - Development: `http://localhost:3000/auth/callback`, `http://localhost:3000/auth/reset-password`
-4. Authentication is handled automatically by Supabase Auth
+4. **Reset Password email template (required — REW-57):** In **Authentication > Email Templates > Reset Password**, paste the template from `docs/email-templates/reset-password.html`. It links to `{{ .SiteURL }}/auth/reset-password?token_hash={{ .TokenHash }}&type=recovery`, **not** the default `{{ .ConfirmationURL }}`. The default variable points at Supabase's own verify endpoint, which delivers the session as a URL hash fragment; if the computed `redirect_to` isn't on the allow-list above, Supabase falls back further to the Site URL — i.e. the reset link opens the Home page instead of the reset-password form. See `docs/email-templates/README.md` for the full variable reference.
+5. **`APP_URL` must be set in Vercel (required — REW-57):** Set the `APP_URL` environment variable for the **Production** environment in Vercel Project Settings to the canonical production origin (scheme + host, no trailing slash). Without it, password-reset and email-confirmation links generated in production fall back to `http://localhost:3000`, which can never be reached by anyone but the developer and isn't on the Supabase Redirect URL allow-list.
+6. Authentication is handled automatically by Supabase Auth
 
 ## Project Structure
 
@@ -139,6 +141,7 @@ recipe-website/
 - Protected routes with middleware
 - Automatic session management via cookies
 - **Forgot Password / Account Recovery (REW-54)**: The Sign In page's "Forgot Password?" link opens a single centralized recovery page (`/auth/forgot-password`) where a user enters their email and chooses either "Send Password Reset Email" (new, built on Supabase Auth's `resetPasswordForEmail`) or "Resend Confirmation Email" (existing functionality, unchanged). The password reset link lands on `/auth/reset-password`, which requires `${APP_URL}/auth/reset-password` to be allow-listed in Supabase's dashboard alongside the existing `/auth/callback` entry.
+- **Robust Reset-Link Handling (REW-57)**: `/auth/reset-password` never dead-ends on the Home page, even with a misconfigured email template or redirect-URL allow-list. It renders one of three states — the password form, an inline "invalid or expired" error with a "Request a new reset email" action, or a brief "checking" state — and a small client-side script (`public/js/auth-recovery.js`) plus a `POST /auth/reset-password/session` bridge endpoint recover the flow even if a reset link arrives with the session in a URL fragment instead of a query string. See `docs/api/email-confirmation.md` for details.
 
 ### Potluck Brand Theme (REW-48)
 - **Dark Olive Hero**: Hero section with `#4f5c3f` background and botanical decorations

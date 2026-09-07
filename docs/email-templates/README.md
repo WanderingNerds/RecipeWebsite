@@ -17,10 +17,14 @@ These templates use Supabase's Go template syntax. Available variables:
 
 | Variable | Description | Used In |
 |----------|-------------|---------|
-| `{{ .ConfirmationURL }}` | The action link URL (confirm, reset, etc.) | All templates |
+| `{{ .ConfirmationURL }}` | Supabase's own `/auth/v1/verify` link (implicit flow). Supabase verifies the token itself and 302s the browser to `redirect_to` with the session delivered as a URL **hash fragment** (`#access_token=...&type=...`), never as query params. A server-rendered app like this one cannot read that fragment, so **do not use this variable for `reset-password.html`** — see the note below. | `confirm-signup.html`, `magic-link.html`, `change-email.html` (out of scope for REW-57) |
+| `{{ .TokenHash }}` | The raw OTP token hash, without Supabase's own verify/redirect hop. Used to build a direct link to this app's own handler (`/auth/reset-password?token_hash=...&type=recovery`), which reads it as a normal query parameter and calls `verifyOtp()` server-side. | `reset-password.html` (REW-57) |
 | `{{ .Email }}` | User's current email address | All templates |
-| `{{ .SiteURL }}` | Application base URL | Available but not used |
+| `{{ .SiteURL }}` | Application base URL (the project's configured Site URL) | `reset-password.html` (REW-57) |
+| `{{ .RedirectTo }}` | The `redirectTo` value passed to `resetPasswordForEmail()` (i.e. `APP_URL` from this app). An alternative base for the reset-password link when a per-environment (rather than fixed Site URL) link is preferred; if `redirect_to` isn't allow-listed it falls back to the Site URL root with the query string intact, which the app's Home-route guard (`src/routes/index.js`) forwards to `/auth/reset-password`. | Not currently used; documented as an option |
 | `{{ .NewEmail }}` | New email address being confirmed | `change-email.html` only |
+
+> **Why `reset-password.html` uses `{{ .TokenHash }}` instead of `{{ .ConfirmationURL }}` (REW-57):** this app's `/auth/reset-password` handler expects `token_hash`/`type` as query parameters so it can verify the OTP server-side. `{{ .ConfirmationURL }}` instead sends the browser through Supabase's own verify endpoint, which delivers the session in a URL fragment that Express never sees — and if the `redirect_to` it computes isn't on the Supabase Redirect URL allow-list, it falls back further to the Site URL (the Home page), which was the reported bug. Building the link from `{{ .SiteURL }}/auth/reset-password?token_hash={{ .TokenHash }}&type=recovery` avoids both failure modes. The app also ships defence-in-depth (a fragment-to-cookie bridge and a Home-route guard) in case this template or the allow-list is ever misconfigured again, but the template fix above is the actual root-cause fix.
 
 ## Design System
 
