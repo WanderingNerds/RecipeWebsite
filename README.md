@@ -84,17 +84,20 @@ recipe-website/
 │   │   ├── recipeRoutes.js     # Recipe CRUD routes
 │   │   ├── categoryRoutes.js   # Category API routes
 │   │   ├── tagRoutes.js        # Tag API routes
-│   │   └── likeRoutes.js       # Recipe favorite/like API routes (REW-21)
+│   │   ├── likeRoutes.js       # Recipe favorite/like API routes (REW-21)
+│   │   └── cookbookRoutes.js   # Cookbook CRUD + recipe membership routes (REW-62)
 │   ├── utils/
 │   │   ├── imageUtils.js       # Image processing utilities
 │   │   ├── ingredientParser.js # Ingredient parsing
-│   │   └── ingredientScaler.js # Recipe scaling logic
+│   │   ├── ingredientScaler.js # Recipe scaling logic
+│   │   └── cookbookUtils.js    # Cookbook title validation + recipe-id normalization (REW-62)
 │   └── app.js                  # Express app setup
 ├── views/
 │   ├── layouts/main.ejs        # Main layout
 │   ├── partials/navbar.ejs     # Navigation bar
 │   ├── auth/                   # Login/Register pages
 │   ├── recipes/                # Recipe views (index, new, edit, view)
+│   ├── cookbooks/               # Cookbook views (index, new, view, edit, add-recipes) (REW-62)
 │   ├── home.ejs                # Home page
 │   └── dashboard.ejs           # Protected dashboard
 ├── public/
@@ -125,6 +128,13 @@ recipe-website/
 - **Heart-Toggle Favoriting**: Authenticated users can like/unlike any **published** recipe from a heart-shaped `.like-btn` control with optimistic UI (instant toggle, reverts on a failed request) and an "Undo" toast after unliking (`public/js/likes.js`, backed by `POST`/`DELETE /api/likes/:recipeId`).
 - **Liked Recipes Page**: A dedicated `/recipes/liked` page lists everything the logged-in user has favorited.
 - **Favorite Action on My Recipes (REW-55)**: The heart control now also appears directly on each recipe card under **My Recipes** (`/recipes`), not just the single-recipe view — so a user can favorite/unfavorite without opening the recipe. **Draft** recipe cards show the same heart in a disabled/muted state (not clickable) because the underlying `/api/likes/:recipeId` endpoint only allows liking `published` recipes; publishing the recipe enables the control. Favorite state set from My Recipes is immediately reflected on the recipe's detail page and on `/recipes/liked`, since all three surfaces read/write the same `recipe_likes` table.
+
+### Cookbooks (REW-62)
+- **Create, Rename, and Delete Cookbooks**: Authenticated users can organize their own recipes into named, private collections ("cookbooks") from a dedicated "My Cookbooks" area (linked from the navbar). A cookbook holds any number of recipes, and the same recipe can belong to multiple cookbooks at once.
+- **Add/Remove Recipes**: From a cookbook's detail page, a checklist picker (`/cookbooks/:id/add-recipes`) lets a user bulk-add any of their own recipes — draft or published — into the cookbook. A "Save to Cookbook(s)" widget on the recipe detail page offers the same add/remove actions for one recipe at a time, without leaving the recipe page.
+- **Recipes Are Never Deleted by Cookbook Actions**: Deleting a cookbook removes only the cookbook and its membership records — the recipes in it are untouched and remain in "My Recipes" and any other cookbooks. Removing a recipe from a cookbook works the same way in reverse.
+- **Private by Default**: Cookbooks are visible only to their owner, enforced at the database level (Row Level Security) — there is no policy allowing another user to read a cookbook they don't own, so a direct URL/ID guess can't expose it. Cookbook sharing (REW-19) is a separate, not-yet-built feature.
+- See [Cookbooks API](docs/api/cookbooks.md) for the full endpoint list and `database/README.md` for the `cookbooks`/`cookbook_recipes` schema.
 
 ### Instant Recipe Scaling (REW-11)
 - **Real-time Scaling**: Adjust recipe servings without page reloads

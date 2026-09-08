@@ -1,6 +1,7 @@
 import { Router } from "express";
 import authRoutes from "./authRoutes.js";
 import recipeRoutes from "./recipeRoutes.js";
+import cookbookRoutes from "./cookbookRoutes.js";
 import importRoutes from "./importRoutes.js";
 import categoryRoutes from "./categoryRoutes.js";
 import tagRoutes from "./tagRoutes.js";
@@ -102,6 +103,9 @@ router.get("/recipes/liked", requireAuth, async (req, res) => {
 
 // Recipe routes
 router.use("/recipes", recipeRoutes);
+
+// Cookbook routes (REW-62)
+router.use("/cookbooks", cookbookRoutes);
 
 // API routes for categories, tags, and likes
 router.use("/api/categories", categoryRoutes);
