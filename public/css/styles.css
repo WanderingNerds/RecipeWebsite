@@ -2697,3 +2697,35 @@ a.pagination-link:hover {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Shared Browse/My Recipes cards must contain long titles and metadata. */
+.recipe-summary-card {
+  min-width: 0;
+}
+
+.recipe-summary-card h3,
+.recipe-summary-card > p,
+.recipe-summary-card .recipe-summary-metadata {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.recipe-summary-card .category-badge,
+.recipe-summary-card .tag-badge {
+  max-width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.recipe-summary-card .recipe-summary-actions {
+  width: 100%;
+  flex-wrap: wrap;
+}
+
+.recipe-summary-card .recipe-summary-actions > * {
+  min-width: max-content;
+}
+
+.recipe-summary-card .recipe-summary-actions .btn {
+  white-space: nowrap;
+}

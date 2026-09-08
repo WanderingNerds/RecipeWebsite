@@ -100,5 +100,6 @@ GIT_TROUBLESHOOTING.md
 # OCR / ML Model Files
 *.traineddata
 
-# AI / Claude Code
+# AI / Claude Code / Codex
 .claude/
+.codex/

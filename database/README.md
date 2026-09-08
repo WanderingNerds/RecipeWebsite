@@ -29,6 +29,7 @@ To set up the database in your Supabase project, follow these steps:
    | 10 | `010_create_cookbook_recipes_table.sql` | Cookbook-recipes junction table with dual-ownership (cookbook + recipe) RLS (REW-62) |
    | 11 | `011_create_meal_plans_table.sql` | Meal plans table (private, per-user, dated recipe collections) with owner-only RLS (REW-63) |
    | 12 | `012_create_meal_plan_recipes_table.sql` | Meal-plan-recipes junction table with plan-ownership + own-or-published-recipe RLS on INSERT (REW-63) |
+   | 13 | `013_public_recipe_card_metadata.sql` | Add public SELECT policies for published recipe categories/tags and their associations (REW-59) |
 
 4. **Verify the Setup**
    - Go to "Table Editor" in the left sidebar
@@ -214,15 +215,19 @@ All tables include Row Level Security (RLS) policies:
 
 ### categories
 - All authenticated users can read categories
+- Migration 013 also permits anonymous reads of categories attached to published recipes
 - Categories are system-managed (no user insert/update/delete)
 
 ### tags
-- Users can only CRUD their own tags
-- Tags are user-specific and not shared between users
+- Owners retain read/create/update/delete access to their own tags
+- Migration 013 permits anonymous and authenticated reads of tags attached to at least one published recipe; draft-only tags remain private to their owner
 
 ### recipe_categories / recipe_tags
 - Users can only manage associations for their own recipes
 - Junction table policies verify recipe ownership via subquery
+- Migration 013 adds anonymous/authenticated SELECT access to associations belonging to published recipes; draft associations and existing mutation policies remain unchanged
+
+Migration 013 adds four SELECT policies and SELECT grants, with no table or column changes. A tag used on both a published and a draft recipe is publicly readable, but its draft association remains private. Apply after earlier migrations and verify published/draft reads as anonymous, non-owner and owner users, plus owner mutation rights, in staging before release. SQL execution and live RLS verification remain pending; see the [REW-59 QA report](../docs/qa/rew-59-browse-recipe-cards.md).
 
 ### recipe_likes (REW-21)
 - SELECT/INSERT/DELETE all restricted to `user_id = auth.uid()` — a user can only view, create, or remove their own like rows

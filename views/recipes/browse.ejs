@@ -36,7 +36,7 @@
 
     <div class="recipe-grid">
       <% recipes.forEach(recipe => { %>
-        <%- include('../partials/recipe-card', { recipe }) %>
+        <%- include('../partials/recipe-summary-card', { recipe, isPublic: true }) %>
       <% }); %>
     </div>
 

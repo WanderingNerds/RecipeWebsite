@@ -130,6 +130,12 @@ recipe-website/
 - **Author Defaults to Account Name (REW-46)**: When creating a recipe manually or via import, the Author field is pre-filled with the logged-in user's account display name (their registered name, or email if no name is set) and this default is enforced server-side even if the field is submitted blank. Author remains fully editable, so a recipe can still be attributed to someone else (e.g. "Grandma's recipe").
 - **Required Prep Time / Total Time (REW-52)**: The manual "New Recipe" and "Edit Recipe" forms now require both Prep Time and Total Time before a recipe can be saved (draft or published), with inline validation that highlights the missing field(s) and clears as soon as a value is entered; enforced server-side too. "Total Time" is a display-only relabel of the existing Cook Time field — no new database column was added. The Import Recipe flow is unaffected and can still save with blank times.
 
+### Browse Recipe Cards (REW-59)
+
+Browse and My Recipes share their core card layout: thumbnail, title/status, author, all categories, tags, separate prep/cook times, servings, difficulty, and creation date. Browse keeps public recipe links and Meal Plan controls; My Recipes keeps favorite, filter, View/Edit/Delete controls. Browse badges are informational. Long titles and badges wrap within cards.
+
+This local implementation requires migration `013_public_recipe_card_metadata.sql` before release. Staging RLS verification and live end-to-end acceptance are pending; see [Browse route documentation](docs/api/browse-recipes.md) and the [QA report](docs/qa/rew-59-browse-recipe-cards.md). No new environment variables are required.
+
 ### Favorites / Recipe Likes (REW-21, REW-55)
 - **Heart-Toggle Favoriting**: Authenticated users can like/unlike any **published** recipe from a heart-shaped `.like-btn` control with optimistic UI (instant toggle, reverts on a failed request) and an "Undo" toast after unliking (`public/js/likes.js`, backed by `POST`/`DELETE /api/likes/:recipeId`).
 - **Liked Recipes Page**: A dedicated `/recipes/liked` page lists everything the logged-in user has favorited.

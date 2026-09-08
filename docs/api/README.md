@@ -19,6 +19,8 @@ All API endpoints require authentication unless otherwise noted. Authentication 
 
 ### Recipes
 
+`GET /browse?page=1` is a public HTML listing requiring no authentication. Its cards share the My Recipes metadata layout (REW-59); see [Browse Recipes](browse-recipes.md) for pagination, rendering and migration requirements.
+
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/recipes` | List user's recipes (with optional category/tag filtering); each recipe includes a server-rendered favorite/like state, batch-fetched from `recipe_likes` (REW-55) |

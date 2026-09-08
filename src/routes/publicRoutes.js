@@ -47,7 +47,7 @@ const MAX_QUERY_LENGTH = 100;
 // Columns safe to expose on a listing. Body fields (instructions, notes) are
 // only loaded on the detail page.
 const CARD_COLUMNS =
-  "id, title, author, prep_time, cook_time, servings, difficulty, thumbnail_url, created_at";
+  "id, title, status, author, prep_time, cook_time, servings, difficulty, thumbnail_url, created_at, recipe_categories(categories(id, name, slug, icon)), recipe_tags(tags(id, name, slug))";
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -135,7 +135,11 @@ router.get("/browse", async (req, res, next) => {
 
     res.render("recipes/browse", {
       title: "Browse Recipes",
-      recipes: data ?? [],
+      recipes: (data ?? []).map(({ recipe_categories, recipe_tags, ...recipe }) => ({
+        ...recipe,
+        categories: (recipe_categories ?? []).map(link => link?.categories).filter(Boolean),
+        tags: (recipe_tags ?? []).map(link => link?.tags).filter(Boolean),
+      })),
       page,
       totalPages: Math.ceil(totalCount / PAGE_SIZE),
       totalCount,
