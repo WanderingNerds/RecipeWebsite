@@ -1,0 +1,50 @@
+<div class="container" style="max-width: 800px; margin: 0 auto; padding: 2rem 1rem;">
+
+  <div style="margin-bottom: 2rem;">
+    <a href="/meal-plans/<%= mealPlan.id %>" style="color: var(--primary-color); text-decoration: none; display: inline-flex; align-items: center; margin-bottom: 1rem;">
+      ← Back to <%= mealPlan.title %>
+    </a>
+    <h1 style="margin-bottom: 0.5rem;">Add Recipes to <%= mealPlan.title %></h1>
+    <p style="color: var(--text-muted);">Select from your own recipes to add. Recipes already in this meal plan are checked and can be removed from the plan's page. To add another user's published recipe, use "Add to Meal Plan" on that recipe's card or page instead.</p>
+  </div>
+
+  <% if (recipes.length === 0) { %>
+    <div class="empty-state">
+      <h3>You don't have any recipes yet</h3>
+      <p>Create a recipe first, then come back to add it to this meal plan.</p>
+      <a href="/recipes/new" class="btn btn-primary">Add New Recipe</a>
+    </div>
+  <% } else { %>
+    <form action="/meal-plans/<%= mealPlan.id %>/add-recipes" method="POST">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <div style="background: var(--card-background); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; margin-bottom: 1.5rem;">
+        <% recipes.forEach(function(recipe, index) { %>
+          <label style="display: flex; align-items: center; gap: 1rem; padding: 1rem 1.5rem; cursor: <%= recipe.inMealPlan ? 'default' : 'pointer' %>; <%= index !== recipes.length - 1 ? 'border-bottom: 1px solid var(--border-color);' : '' %> <%= recipe.inMealPlan ? 'opacity: 0.6;' : '' %>">
+            <input
+              type="checkbox"
+              name="recipeIds"
+              value="<%= recipe.id %>"
+              <%= recipe.inMealPlan ? 'checked disabled' : '' %>
+              style="width: 1.125rem; height: 1.125rem; flex-shrink: 0;"
+            >
+            <span style="flex: 1;">
+              <span style="font-weight: 600;"><%= recipe.title %></span>
+              <% if (recipe.status === 'draft') { %>
+                <span class="badge-draft badge-draft-sm" style="margin-left: 0.5rem;">Draft</span>
+              <% } %>
+            </span>
+            <% if (recipe.inMealPlan) { %>
+              <span style="font-size: 0.8125rem; color: var(--text-muted);">Already added</span>
+            <% } %>
+          </label>
+        <% }); %>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 1rem;">
+        <a href="/meal-plans/<%= mealPlan.id %>" class="btn btn-outline">Cancel</a>
+        <button type="submit" class="btn btn-primary">Add Selected Recipes</button>
+      </div>
+    </form>
+  <% } %>
+
+</div>

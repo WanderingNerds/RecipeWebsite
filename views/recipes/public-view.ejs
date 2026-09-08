@@ -24,6 +24,18 @@
             <span class="like-btn-count"><%= likeCount %></span>
           </button>
         <% } %>
+        <!-- Add to Meal Plan (REW-63) -- available to any authenticated
+             viewer (not owner-restricted); guests get a login-prompting
+             variant, mirroring the like button's user/guest split above. -->
+        <% if (user) { %>
+          <button type="button" class="btn btn-outline meal-plan-add-btn" data-recipe-id="<%= recipe.id %>" aria-label="Add to Meal Plan">
+            Add to Meal Plan
+          </button>
+        <% } else { %>
+          <button type="button" class="btn btn-outline meal-plan-add-btn meal-plan-add-btn-guest" data-recipe-id="<%= recipe.id %>" aria-label="Log in to add to Meal Plan">
+            Add to Meal Plan
+          </button>
+        <% } %>
         <% if (isOwner) { %>
           <a href="/recipes/<%= recipe.id %>/edit" class="btn btn-outline">Edit Recipe</a>
         <% } %>

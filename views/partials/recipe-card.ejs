@@ -38,5 +38,17 @@
         <span>@<%= recipe.author %></span>
       </div>
     <% } %>
+
+    <div class="recipe-card-actions">
+      <% if (user) { %>
+        <button type="button" class="btn btn-outline meal-plan-add-btn" data-recipe-id="<%= recipe.id %>" aria-label="Add to Meal Plan">
+          + Meal Plan
+        </button>
+      <% } else { %>
+        <button type="button" class="btn btn-outline meal-plan-add-btn meal-plan-add-btn-guest" data-recipe-id="<%= recipe.id %>" aria-label="Log in to add to Meal Plan">
+          + Meal Plan
+        </button>
+      <% } %>
+    </div>
   </div>
 </article>

@@ -67,6 +67,27 @@ Favorite/like controls (`.like-btn`) call these endpoints from the recipe detail
 
 All `/cookbooks*` routes require auth and are private to the owner (no sharing — see REW-19, out of scope). Mutation endpoints share a 30-requests/minute-per-user rate limit. See [Cookbooks API](cookbooks.md) for full details, including the recipe-view integration and RLS enforcement.
 
+### Meal Plans (REW-63)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/meal-plans` | List the current user's meal plans with a per-plan recipe count |
+| GET | `/meal-plans/new` | Render the create-meal-plan form (title + start/end date) |
+| POST | `/meal-plans` | Create a meal plan (title required; start/end date required, `end >= start`) |
+| GET | `/meal-plans/:id` | View a meal plan and all recipes currently in it |
+| GET | `/meal-plans/:id/edit` | Render the rename/re-date form |
+| POST | `/meal-plans/:id/update` | Rename and/or re-date a meal plan |
+| POST | `/meal-plans/:id/delete` | Delete a meal plan (never deletes the recipes in it) |
+| GET | `/meal-plans/:id/add-recipes` | Render a checklist of the owner's own recipes (draft + published) to bulk-add to a plan |
+| POST | `/meal-plans/:id/add-recipes` | Bulk-add selected (owner's own) recipes to a meal plan |
+| POST | `/meal-plans/:id/recipes/:recipeId/remove` | Remove a recipe from a meal plan (never deletes the recipe itself) |
+| GET | `/api/meal-plans?recipeId=` | JSON: list the current user's meal plans, optionally flagging membership for `recipeId` |
+| POST | `/api/meal-plans` | JSON: quick-create a meal plan (backs the "Add to Meal Plan" modal) |
+| POST | `/api/meal-plans/:id/recipes/:recipeId` | JSON: add a recipe to a meal plan — allows the caller's own recipe (any status) or **any published recipe**, not owner-only |
+| DELETE | `/api/meal-plans/:id/recipes/:recipeId` | JSON: remove a recipe from a meal plan |
+
+All `/meal-plans*` page routes require auth and redirect to login if unauthenticated, consistent with `/cookbooks*`. All `/api/meal-plans*` routes require auth and return JSON `401` if unauthenticated, consistent with `/api/likes*` (there is no anonymous-GET case for meal plans). Mutation endpoints on both surfaces share a 30-requests/minute-per-user rate limit. Meal plans are private to their owner (RLS-enforced, no sharing), unlike Cookbooks' owner-only recipe rule — a meal plan can contain the owner's own recipes (any status) *or* any other user's published recipes, mirroring `recipe_likes`' visibility rule. See [Meal Plans API](meal-plans.md) for full details, including the RLS enforcement and two non-blocking reviewer-flagged follow-ups.
+
 ### Categories
 
 | Method | Endpoint | Description |
@@ -108,6 +129,7 @@ All `/cookbooks*` routes require auth and are private to the owner (no sharing �
 - [Required Prep Time / Total Time](recipe-required-times.md) - Required-field enforcement and the Cook Time → Total Time display rename (REW-52)
 - [Recipe Likes API](recipe-likes.md) - `/api/likes/:recipeId` endpoints, the My Recipes favorite control, and the draft-recipe restriction (REW-21, REW-55)
 - [Cookbooks API](cookbooks.md) - `/cookbooks*` endpoints, RLS-enforced privacy, and the recipe view "Save to Cookbook(s)" integration (REW-62)
+- [Meal Plans API](meal-plans.md) - `/meal-plans*` and `/api/meal-plans*` endpoints, the shared "Add to Meal Plan" modal, and the own-or-published recipe visibility rule (REW-63)
 - [Categories and Tags](../CATEGORIES_AND_TAGS.md) - Full categories/tags documentation
 - [Email Confirmation Flow](email-confirmation.md) - Email verification and callback handling (REW-41); also documents the Forgot Password / Account Recovery flow that supersedes the standalone resend page (REW-54)
 
