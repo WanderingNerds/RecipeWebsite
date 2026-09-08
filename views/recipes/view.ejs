@@ -19,6 +19,13 @@
             <span class="like-btn-count"><%= likeCount %></span>
           </button>
         <% } %>
+        <!-- Add to Meal Plan (REW-63) -- not owner-restricted; any
+             authenticated viewer of a recipe they're allowed to see (their
+             own, or a published recipe) can plan it. This page always has
+             a logged-in user (requireAuth), so no guest variant needed. -->
+        <button type="button" class="btn btn-outline meal-plan-add-btn" data-recipe-id="<%= recipe.id %>" aria-label="Add to Meal Plan">
+          Add to Meal Plan
+        </button>
         <% if (recipe.status === 'draft') { %>
           <span class="badge-draft">Draft</span>
         <% } else { %>

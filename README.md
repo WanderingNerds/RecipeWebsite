@@ -85,19 +85,24 @@ recipe-website/
 │   │   ├── categoryRoutes.js   # Category API routes
 │   │   ├── tagRoutes.js        # Tag API routes
 │   │   ├── likeRoutes.js       # Recipe favorite/like API routes (REW-21)
-│   │   └── cookbookRoutes.js   # Cookbook CRUD + recipe membership routes (REW-62)
+│   │   ├── cookbookRoutes.js   # Cookbook CRUD + recipe membership routes (REW-62)
+│   │   ├── mealPlanRoutes.js   # Meal plan CRUD + bulk-add page routes (REW-63)
+│   │   └── mealPlanApiRoutes.js # Meal plan JSON API backing the "Add to Meal Plan" modal (REW-63)
 │   ├── utils/
 │   │   ├── imageUtils.js       # Image processing utilities
 │   │   ├── ingredientParser.js # Ingredient parsing
 │   │   ├── ingredientScaler.js # Recipe scaling logic
-│   │   └── cookbookUtils.js    # Cookbook title validation + recipe-id normalization (REW-62)
+│   │   ├── cookbookUtils.js    # Cookbook title validation + recipe-id normalization (REW-62)
+│   │   └── mealPlanUtils.js    # Meal plan title + date-range validation (REW-63)
 │   └── app.js                  # Express app setup
 ├── views/
 │   ├── layouts/main.ejs        # Main layout
 │   ├── partials/navbar.ejs     # Navigation bar
+│   ├── partials/meal-plan-modal.ejs # Shared "Add to Meal Plan" modal (REW-63)
 │   ├── auth/                   # Login/Register pages
 │   ├── recipes/                # Recipe views (index, new, edit, view)
 │   ├── cookbooks/               # Cookbook views (index, new, view, edit, add-recipes) (REW-62)
+│   ├── meal-plans/              # Meal plan views (index, new, view, edit, add-recipes) (REW-63)
 │   ├── home.ejs                # Home page
 │   └── dashboard.ejs           # Protected dashboard
 ├── public/
@@ -106,6 +111,7 @@ recipe-website/
 │       ├── main.js             # Client-side JavaScript
 │       ├── nav.js              # Mobile hamburger nav toggle (REW-50)
 │       ├── likes.js            # Favorite/like button optimistic UI (REW-21; also drives My Recipes cards, REW-55)
+│       ├── meal-plans.js       # "Add to Meal Plan" modal fetch/toggle logic (REW-63)
 │       ├── recipe-form.js      # Recipe form handling
 │       └── tags-input.js       # Tag input with autocomplete
 ├── database/
@@ -135,6 +141,15 @@ recipe-website/
 - **Recipes Are Never Deleted by Cookbook Actions**: Deleting a cookbook removes only the cookbook and its membership records — the recipes in it are untouched and remain in "My Recipes" and any other cookbooks. Removing a recipe from a cookbook works the same way in reverse.
 - **Private by Default**: Cookbooks are visible only to their owner, enforced at the database level (Row Level Security) — there is no policy allowing another user to read a cookbook they don't own, so a direct URL/ID guess can't expose it. Cookbook sharing (REW-19) is a separate, not-yet-built feature.
 - See [Cookbooks API](docs/api/cookbooks.md) for the full endpoint list and `database/README.md` for the `cookbooks`/`cookbook_recipes` schema.
+
+### Meal Plans (REW-63)
+- **Create, Rename/Re-date, and Delete Meal Plans**: Authenticated users can organize recipes for a defined scheduled period (a required start/end date range) from a dedicated "My Meal Plans" area (linked from the navbar). A meal plan holds any number of recipes, and the same recipe can belong to multiple meal plans — and independently, to multiple cookbooks, since the two features don't interact.
+- **Add to Meal Plan from Cards and Recipe Pages**: An "Add to Meal Plan" button on recipe cards (`/browse`, `/search`, `/recipes/liked`) and on both the owner's recipe page and the public recipe page opens a shared modal (no full page reload) listing the user's meal plans with add/remove toggles, plus an inline "+ New meal plan" quick-create option. A plan's own detail page also offers a bulk checklist picker (`/meal-plans/:id/add-recipes`) scoped to the owner's own recipes.
+- **Own-or-Published Recipe Visibility (differs from Cookbooks)**: A user can add any of their own recipes (draft or published) to a meal plan, and can also add another user's *published* recipe — mirroring the same visibility rule already used by Recipe Likes. A user cannot add another user's draft/unpublished recipe; this is enforced at the database (RLS) level, not just in the UI.
+- **Recipes Are Never Deleted by Meal Plan Actions**: Deleting a meal plan removes only the plan and its membership records — the recipes in it are untouched and remain in "My Recipes," any cookbooks, and any other meal plans. Removing a recipe from a plan works the same way in reverse.
+- **Private by Default**: Meal plans are visible only to their owner, enforced at the database level (Row Level Security) — there is no policy allowing another user to read a meal plan they don't own, so a direct URL/ID guess can't expose it.
+- **Forward-compatible with Grocery Lists (REW-26, not built yet)**: The `meal_plan_recipes` junction table includes a nullable `planned_servings` column, unused by any current UI, so a future grocery-list feature can scale a recipe's ingredients per plan without another migration.
+- See [Meal Plans API](docs/api/meal-plans.md) for the full endpoint list (including two non-blocking reviewer-flagged follow-ups) and `database/README.md` for the `meal_plans`/`meal_plan_recipes` schema.
 
 ### Instant Recipe Scaling (REW-11)
 - **Real-time Scaling**: Adjust recipe servings without page reloads

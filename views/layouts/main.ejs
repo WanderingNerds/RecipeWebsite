@@ -38,10 +38,15 @@
     </div>
   </footer>
 
+  <% if (user) { %>
+    <%- include('../partials/meal-plan-modal') %>
+  <% } %>
+
   <script src="/js/nav.js"></script>
   <script src="/js/main.js"></script>
   <script src="/js/tags-input.js"></script>
   <script src="/js/likes.js"></script>
+  <script src="/js/meal-plans.js"></script>
   <script src="/js/auth-recovery.js"></script>
 </body>
 </html>

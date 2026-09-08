@@ -2,6 +2,8 @@ import { Router } from "express";
 import authRoutes from "./authRoutes.js";
 import recipeRoutes from "./recipeRoutes.js";
 import cookbookRoutes from "./cookbookRoutes.js";
+import mealPlanRoutes from "./mealPlanRoutes.js";
+import mealPlanApiRoutes from "./mealPlanApiRoutes.js";
 import importRoutes from "./importRoutes.js";
 import categoryRoutes from "./categoryRoutes.js";
 import tagRoutes from "./tagRoutes.js";
@@ -107,10 +109,14 @@ router.use("/recipes", recipeRoutes);
 // Cookbook routes (REW-62)
 router.use("/cookbooks", cookbookRoutes);
 
-// API routes for categories, tags, and likes
+// Meal plan routes (REW-63)
+router.use("/meal-plans", mealPlanRoutes);
+
+// API routes for categories, tags, likes, and meal plans
 router.use("/api/categories", categoryRoutes);
 router.use("/api/tags", tagRoutes);
 router.use("/api/likes", likeRoutes);
+router.use("/api/meal-plans", mealPlanApiRoutes);
 
 // Protected dashboard (example)
 router.get("/dashboard", requireAuth, (req, res) => {

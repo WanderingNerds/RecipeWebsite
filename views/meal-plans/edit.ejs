@@ -1,0 +1,39 @@
+<div class="container" style="max-width: 600px; margin: 0 auto; padding: 2rem 1rem;">
+
+  <div style="margin-bottom: 2rem;">
+    <a href="/meal-plans/<%= mealPlan.id %>" style="color: var(--primary-color); text-decoration: none; display: inline-flex; align-items: center; margin-bottom: 1rem;">
+      ← Back to meal plan
+    </a>
+    <span class="badge-edit" style="display: inline-block; margin-bottom: 1rem;">Edit meal plan</span>
+    <h1 style="margin-bottom: 0.5rem;">Edit <%= mealPlan.title %></h1>
+  </div>
+
+  <form action="/meal-plans/<%= mealPlan.id %>/update" method="POST">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+    <div style="background: var(--card-background); padding: 2rem; border-radius: var(--radius); box-shadow: var(--shadow);">
+
+      <div class="form-group">
+        <label>Title <span style="color: var(--error-color);">*</span></label>
+        <input type="text" name="title" placeholder="e.g. Week of Sept 8" required maxlength="200" value="<%= mealPlan.title %>" autofocus>
+      </div>
+
+      <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+        <div class="form-group" style="flex: 1; min-width: 150px;">
+          <label>Start date <span style="color: var(--error-color);">*</span></label>
+          <input type="date" name="startDate" required value="<%= mealPlan.start_date %>">
+        </div>
+        <div class="form-group" style="flex: 1; min-width: 150px;">
+          <label>End date <span style="color: var(--error-color);">*</span></label>
+          <input type="date" name="endDate" required value="<%= mealPlan.end_date %>">
+        </div>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color); margin-top: 1rem;">
+        <a href="/meal-plans/<%= mealPlan.id %>" class="btn btn-outline">Cancel</a>
+        <button type="submit" class="btn btn-primary">Save Changes</button>
+      </div>
+
+    </div>
+  </form>
+
+</div>

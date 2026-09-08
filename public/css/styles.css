@@ -1622,6 +1622,14 @@ textarea.input {
   object-fit: cover;
 }
 
+/* "Add to Meal Plan" action row on recipe cards (REW-63) -- see the
+   "Meal Plans" CSS section below for .meal-plan-add-btn itself. */
+.recipe-card-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--space-1);
+}
+
 /* ══════════════════════════════════════════════════════════════════════════
    Recipe Scaling Control
    ══════════════════════════════════════════════════════════════════════════ */
@@ -2202,6 +2210,79 @@ textarea.input {
 
 .cookbook-remove-btn:hover {
   opacity: 1;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Meal Plans (REW-63)
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* List page card badge -- same visual treatment as .cookbook-count-badge,
+   duplicated rather than shared since the two features render from
+   separate view templates (matches this repo's existing tolerance for
+   small per-feature CSS duplication). */
+.meal-plan-count-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  background: var(--color-neutral-100);
+  color: var(--color-neutral-800);
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* "Add to Meal Plan" button, used on recipe cards and recipe view/public
+   pages. Opens the shared modal (meal-plan-modal.ejs); the -guest variant
+   mirrors .like-btn-guest's dimmed-until-hover treatment. */
+.meal-plan-add-btn.is-loading {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.meal-plan-add-btn-guest {
+  opacity: 0.7;
+}
+
+.meal-plan-add-btn-guest:hover {
+  opacity: 1;
+}
+
+/* Shared "Add to Meal Plan" modal (meal-plan-modal.ejs) -- row list of the
+   user's meal plans with an inline add/remove toggle per row. Modal chrome
+   itself uses inline styles, matching import-modal.ejs's convention. */
+.meal-plan-modal-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.meal-plan-modal-row:last-child {
+  border-bottom: none;
+}
+
+.meal-plan-modal-row-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.meal-plan-modal-row-dates {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.meal-plan-toggle-btn {
+  flex-shrink: 0;
+  font-size: 0.8125rem;
+  padding: 0.375rem 0.75rem;
+}
+
+.meal-plan-toggle-btn[data-in-plan="true"] {
+  background-color: var(--color-accent-100);
+  border-color: var(--color-action);
 }
 
 /* ══════════════════════════════════════════════════════════════════════════

@@ -1,0 +1,37 @@
+<div class="container" style="max-width: 600px; margin: 0 auto; padding: 2rem 1rem;">
+
+  <div style="margin-bottom: 2rem;">
+    <span class="badge-new" style="display: inline-block; margin-bottom: 1rem;">New meal plan</span>
+    <h1 style="margin-bottom: 0.5rem;">Create a meal plan</h1>
+    <p style="color: var(--text-muted);">Give your meal plan a name and a date range. You can add recipes to it right after.</p>
+  </div>
+
+  <form action="/meal-plans" method="POST">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+    <div style="background: var(--card-background); padding: 2rem; border-radius: var(--radius); box-shadow: var(--shadow);">
+
+      <div class="form-group">
+        <label>Title <span style="color: var(--error-color);">*</span></label>
+        <input type="text" name="title" placeholder="e.g. Week of Sept 8" required maxlength="200" autofocus>
+      </div>
+
+      <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+        <div class="form-group" style="flex: 1; min-width: 150px;">
+          <label>Start date <span style="color: var(--error-color);">*</span></label>
+          <input type="date" name="startDate" required>
+        </div>
+        <div class="form-group" style="flex: 1; min-width: 150px;">
+          <label>End date <span style="color: var(--error-color);">*</span></label>
+          <input type="date" name="endDate" required>
+        </div>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color); margin-top: 1rem;">
+        <a href="/meal-plans" class="btn btn-outline">Cancel</a>
+        <button type="submit" class="btn btn-primary">Create Meal Plan</button>
+      </div>
+
+    </div>
+  </form>
+
+</div>
