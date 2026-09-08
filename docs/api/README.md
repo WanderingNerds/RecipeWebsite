@@ -49,6 +49,24 @@ All API endpoints require authentication unless otherwise noted. Authentication 
 
 Favorite/like controls (`.like-btn`) call these endpoints from the recipe detail page (REW-21) and, as of REW-55, from each card on the My Recipes page (`/recipes`) as well. See [Recipe Likes API](recipe-likes.md) for full details, including why draft recipe cards render a disabled heart.
 
+### Cookbooks (REW-62)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/cookbooks` | List the current user's cookbooks with a per-cookbook recipe count |
+| GET | `/cookbooks/new` | Render the create-cookbook form |
+| POST | `/cookbooks` | Create a cookbook (title required, trimmed, max 200 chars) |
+| GET | `/cookbooks/:id` | View a cookbook and all recipes currently in it |
+| GET | `/cookbooks/:id/edit` | Render the rename form |
+| POST | `/cookbooks/:id/update` | Rename a cookbook |
+| POST | `/cookbooks/:id/delete` | Delete a cookbook (never deletes the recipes in it) |
+| GET | `/cookbooks/:id/add-recipes` | Render a checklist of the owner's recipes (draft + published) to add to a cookbook |
+| POST | `/cookbooks/:id/add-recipes` | Bulk-add selected recipes to a cookbook |
+| POST | `/cookbooks/:id/recipes/:recipeId` | Add a single recipe to a cookbook (used by the recipe view's "Save to Cookbook(s)" widget) |
+| POST | `/cookbooks/:id/recipes/:recipeId/remove` | Remove a recipe from a cookbook (never deletes the recipe itself) |
+
+All `/cookbooks*` routes require auth and are private to the owner (no sharing — see REW-19, out of scope). Mutation endpoints share a 30-requests/minute-per-user rate limit. See [Cookbooks API](cookbooks.md) for full details, including the recipe-view integration and RLS enforcement.
+
 ### Categories
 
 | Method | Endpoint | Description |
@@ -89,6 +107,7 @@ Favorite/like controls (`.like-btn`) call these endpoints from the recipe detail
 - [Recipe Author Default](recipe-author-default.md) - Account-name defaulting on recipe create/import (REW-46)
 - [Required Prep Time / Total Time](recipe-required-times.md) - Required-field enforcement and the Cook Time → Total Time display rename (REW-52)
 - [Recipe Likes API](recipe-likes.md) - `/api/likes/:recipeId` endpoints, the My Recipes favorite control, and the draft-recipe restriction (REW-21, REW-55)
+- [Cookbooks API](cookbooks.md) - `/cookbooks*` endpoints, RLS-enforced privacy, and the recipe view "Save to Cookbook(s)" integration (REW-62)
 - [Categories and Tags](../CATEGORIES_AND_TAGS.md) - Full categories/tags documentation
 - [Email Confirmation Flow](email-confirmation.md) - Email verification and callback handling (REW-41); also documents the Forgot Password / Account Recovery flow that supersedes the standalone resend page (REW-54)
 

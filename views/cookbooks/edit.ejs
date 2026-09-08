@@ -1,0 +1,28 @@
+<div class="container" style="max-width: 600px; margin: 0 auto; padding: 2rem 1rem;">
+
+  <div style="margin-bottom: 2rem;">
+    <a href="/cookbooks/<%= cookbook.id %>" style="color: var(--primary-color); text-decoration: none; display: inline-flex; align-items: center; margin-bottom: 1rem;">
+      ← Back to cookbook
+    </a>
+    <span class="badge-edit" style="display: inline-block; margin-bottom: 1rem;">Rename cookbook</span>
+    <h1 style="margin-bottom: 0.5rem;">Rename <%= cookbook.title %></h1>
+  </div>
+
+  <form action="/cookbooks/<%= cookbook.id %>/update" method="POST">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+    <div style="background: var(--card-background); padding: 2rem; border-radius: var(--radius); box-shadow: var(--shadow);">
+
+      <div class="form-group">
+        <label>Title <span style="color: var(--error-color);">*</span></label>
+        <input type="text" name="title" placeholder="e.g. Weeknight Dinners" required maxlength="200" value="<%= cookbook.title %>" autofocus>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color); margin-top: 1rem;">
+        <a href="/cookbooks/<%= cookbook.id %>" class="btn btn-outline">Cancel</a>
+        <button type="submit" class="btn btn-primary">Save Changes</button>
+      </div>
+
+    </div>
+  </form>
+
+</div>

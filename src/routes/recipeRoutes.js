@@ -171,6 +171,44 @@ async function hasUserLiked(supabaseClient, recipeId) {
 }
 
 /**
+ * Helper to fetch the current owner's cookbooks and which of them already
+ * contain the given recipe, for the "Save to Cookbook(s)" widget on the
+ * recipe view page (REW-62). Only called when the viewer is the recipe's
+ * owner. Batches both queries instead of doing an N+1 per-cookbook lookup,
+ * mirroring the like-status batching approach elsewhere in this file.
+ */
+async function getOwnerCookbooksForRecipe(supabaseClient, userId, recipeId) {
+  const { data: cookbooks, error: cookbooksError } = await supabaseClient
+    .from("cookbooks")
+    .select("id, title")
+    .eq("user_id", userId)
+    .order("title", { ascending: true });
+
+  if (cookbooksError) {
+    console.error("Error fetching owner cookbooks:", cookbooksError);
+    return [];
+  }
+
+  if (!cookbooks || !cookbooks.length) return [];
+
+  const { data: memberRows, error: memberError } = await supabaseClient
+    .from("cookbook_recipes")
+    .select("cookbook_id")
+    .eq("recipe_id", recipeId);
+
+  if (memberError) {
+    console.error("Error fetching cookbook membership for recipe:", memberError);
+  }
+
+  const memberCookbookIds = new Set((memberRows || []).map((row) => row.cookbook_id));
+
+  return cookbooks.map((cookbook) => ({
+    ...cookbook,
+    containsRecipe: memberCookbookIds.has(cookbook.id),
+  }));
+}
+
+/**
  * Helper to fetch recipe with categories and tags
  */
 async function fetchRecipeWithRelations(supabaseClient, recipeId, userId = null) {
@@ -670,6 +708,12 @@ router.get("/:id", requireAuth, async (req, res) => {
     const likeCount = await getLikeCount(id);
     const isLiked = await hasUserLiked(supabaseClient, id);
 
+    // Owner-only: which of the viewer's cookbooks contain this recipe,
+    // for the "Save to Cookbook(s)" widget (REW-62).
+    const ownerCookbooks = isOwner
+      ? await getOwnerCookbooksForRecipe(supabaseClient, req.user.id, id)
+      : [];
+
     // Convert the free-text ingredients into quantity / unit / ingredient rows
     const ingredientRows = parseIngredients(recipe.ingredients);
 
@@ -686,6 +730,7 @@ router.get("/:id", requireAuth, async (req, res) => {
       isOwner,
       likeCount,
       isLiked,
+      ownerCookbooks,
       ingredientRows: scaleIngredients(ingredientRows, scaling.factor),
       scaling,
       quickScaleFactors: QUICK_SCALE_FACTORS,
