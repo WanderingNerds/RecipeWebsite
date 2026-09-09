@@ -103,3 +103,4 @@ GIT_TROUBLESHOOTING.md
 # AI / Claude Code / Codex
 .claude/
 .codex/
+/AGENTS.md
