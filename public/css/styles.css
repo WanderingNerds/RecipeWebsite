@@ -1479,6 +1479,105 @@ textarea.input {
   margin-bottom: 0;
 }
 
+.dashboard-actions h2 {
+  margin-bottom: var(--space-4);
+}
+
+.quick-actions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+  gap: var(--space-4);
+}
+
+.quick-action-card {
+  --quick-action-color: var(--potluck-olive-700);
+  --quick-action-tint: var(--potluck-sage-100);
+  display: flex;
+  min-width: 0;
+  min-height: 12rem;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  color: var(--color-text);
+  text-decoration: none;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  transition: border-color var(--transition), box-shadow var(--transition), transform var(--transition);
+}
+
+.quick-action-card:hover {
+  color: var(--color-text);
+  border-color: var(--quick-action-color);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+.quick-action-card:focus-visible {
+  border-color: var(--quick-action-color);
+  box-shadow: var(--shadow-md);
+}
+
+.quick-action-card__icon {
+  display: grid;
+  width: 3rem;
+  aspect-ratio: 1;
+  place-items: center;
+  color: var(--quick-action-color);
+  background: var(--quick-action-tint);
+  border-radius: var(--radius-md);
+}
+
+.quick-action-card__icon svg {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+.quick-action-card__content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.quick-action-card__title {
+  color: var(--quick-action-color);
+  font-family: var(--font-heading);
+  font-size: var(--text-lg);
+  line-height: 1.2;
+}
+
+.quick-action-card__description {
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}
+
+.quick-action-card--cookbooks {
+  --quick-action-color: var(--potluck-blue-700);
+  --quick-action-tint: var(--potluck-blue-100);
+}
+
+.quick-action-card--favorites {
+  --quick-action-color: var(--potluck-pink-700);
+  --quick-action-tint: var(--potluck-pink-100);
+}
+
+.quick-action-card--meal-plans {
+  --quick-action-color: var(--potluck-orange-700);
+  --quick-action-tint: var(--potluck-orange-100);
+}
+
+@media (max-width: 36rem) {
+  .quick-actions-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .quick-action-card {
+    min-height: auto;
+  }
+}
+
 /* ══════════════════════════════════════════════════════════════════════════
    Recipe Cards — Seven-slot spec
    ══════════════════════════════════════════════════════════════════════════ */
@@ -1495,15 +1594,16 @@ textarea.input {
   }
 }
 
-/* My Recipes list grid (auto-fill variant, used with .feature-card items) */
-.recipe-grid-fill {
+/* Personal recipe-organization destinations keep sparse rows at card width. */
+.organization-card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 22rem));
+  justify-content: start;
+  gap: var(--space-6);
 }
 
 @media (max-width: 480px) {
-  .recipe-grid-fill {
+  .organization-card-grid {
     grid-template-columns: 1fr;
   }
 }
