@@ -31,7 +31,7 @@
       <a href="/meal-plans/<%= mealPlan.id %>/add-recipes" class="btn btn-primary">Add Recipes</a>
     </div>
   <% } else { %>
-    <div class="recipe-grid-fill">
+    <div class="organization-card-grid">
       <% recipes.forEach(function(recipe) { %>
         <div class="feature-card" style="position: relative; display: flex; flex-direction: column;">
           <% if (recipe.thumbnail_url) { %>

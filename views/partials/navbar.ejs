@@ -39,10 +39,6 @@
 
         <% if (user) { %>
           <li><a href="/dashboard" class="<%= currentPath === '/dashboard' ? 'active' : '' %>">Dashboard</a></li>
-          <li><a href="/recipes" class="<%= currentPath === '/recipes' || (currentPath.startsWith('/recipes/') && currentPath !== '/recipes/liked') ? 'active' : '' %>">My Recipes</a></li>
-          <li><a href="/recipes/liked" class="<%= currentPath === '/recipes/liked' ? 'active' : '' %>">Liked</a></li>
-          <li><a href="/cookbooks" class="<%= currentPath === '/cookbooks' || currentPath.startsWith('/cookbooks/') ? 'active' : '' %>">Cookbooks</a></li>
-          <li><a href="/meal-plans" class="<%= currentPath === '/meal-plans' || currentPath.startsWith('/meal-plans/') ? 'active' : '' %>">Meal Plans</a></li>
           <li class="navbar-user">
             <span>Hello, <%= user.user_metadata?.name || user.email %></span>
             <a href="/auth/logout" class="btn btn-outline-light">Logout</a>

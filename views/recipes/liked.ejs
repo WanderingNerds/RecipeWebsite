@@ -13,7 +13,7 @@
   <% } else { %>
     <p class="result-count"><%= recipes.length %> recipe<%= recipes.length !== 1 ? 's' : '' %></p>
 
-    <div class="recipe-grid">
+    <div class="organization-card-grid">
       <% recipes.forEach(function(recipe) { %>
         <article class="recipe-card">
           <a href="/r/<%= recipe.id %>" class="recipe-card-media" aria-hidden="<%= recipe.thumbnail_url ? 'false' : 'true' %>" tabindex="-1">

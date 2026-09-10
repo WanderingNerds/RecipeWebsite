@@ -122,6 +122,10 @@ recipe-website/
 
 ## Features
 
+### Dashboard Quick Actions (REW-65)
+
+The authenticated dashboard is the primary navigation surface for the user's recipe-organization areas. It provides four consistent, fully clickable cards for **My Recipes** (`/recipes`), **My Cookbooks** (`/cookbooks`), **My Favorites** (`/recipes/liked`), and **My Meal Plans** (`/meal-plans`). These duplicate links are intentionally omitted from the authenticated global navbar, which retains Home, Browse, Dashboard, search, the user greeting, and Logout. The cards use the Potluck design tokens, reflow responsively, and include hover and visible keyboard-focus states. Content-card grids on all four destination areas use the shared `.organization-card-grid` contract: cards remain start-aligned and capped at `22rem` above `480px`, regardless of item count, and switch to one fluid column at `480px` and below.
+
 ### Recipe Management
 - Create, view, edit, and delete recipes
 - Rich recipe metadata (prep time, cook time, servings, difficulty)
