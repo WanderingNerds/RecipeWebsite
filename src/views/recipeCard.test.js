@@ -58,6 +58,9 @@ test('Private controls retain filters, favorites and protected deletion', async 
   const html = await render(false);
   for (const text of ['/recipes/recipe-1/edit', '/recipes/recipe-1/delete', '/recipes?category=dinner', '/recipes?tags=safe', 'data-liked="true"', 'name="_csrf" value="csrf-test"', "return confirm("]) assert.ok(html.includes(text), text);
   assert.match(html, /href="\/recipes\/recipe-1"/);
+  assert.match(html, /aria-label="Remove from favorites"/);
+  const notFavorited = await render(false, { isLiked: false });
+  assert.match(notFavorited, /aria-label="Favorite this recipe"/);
   const draft = await render(false, { status: 'draft' });
   assert.match(draft, /class="like-btn" disabled/);
   assert.match(draft, />Draft<\/span>/);

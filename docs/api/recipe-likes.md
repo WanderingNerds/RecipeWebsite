@@ -1,17 +1,18 @@
-# Recipe Likes / Favorites (REW-21, REW-55)
+# Favorites (legacy Recipe Likes API; REW-21, REW-55, REW-66)
 
 **Feature:** REW-21 — Recipe Likes (base feature); REW-55 — Add Favorite Action to Recipe Cards on My Recipes
 **Component:** `src/routes/likeRoutes.js`, `src/routes/recipeRoutes.js`, `public/js/likes.js`, `views/recipes/view.ejs`, `views/recipes/index.ejs`, `views/recipes/liked.ejs`, `database/migrations/008_create_recipe_likes_table.sql`
-**Last Updated:** 2026-09-07
+**Last Updated:** 2026-09-10
 
 ---
 
 ## Overview
 
-This page documents the `/api/likes/:recipeId` endpoints that back the heart-shaped "favorite" control (`.like-btn`) used across the app. **This documentation did not previously exist** — REW-21 shipped the feature without an entry in `docs/api/`; this page was created as part of documenting REW-55, which is the first change to reuse/extend this API surface after the original build. It covers both the original REW-21 behavior and the REW-55 addition.
+This page documents the legacy-named `/api/likes/:recipeId` endpoints that back the heart-shaped Favorite control. The technical contracts—`.like-btn`, `likes.js`, `likeRoutes.js`, `recipe_likes`, `/recipes/liked`, and the `liked` state/response key—remain unchanged for compatibility. User-facing copy calls the action **Favorite** and the collection **Favorites**.
 
 - REW-21 (original): added the `recipe_likes` table, the three `/api/likes/:recipeId` endpoints below, the `.like-btn` component with optimistic UI + undo toast (`public/js/likes.js`), and a `/recipes/liked` page. The heart control originally only appeared on the single-recipe detail view (`views/recipes/view.ejs`).
-- REW-55 (this change): surfaces the same `.like-btn` control on each recipe card under **My Recipes** (`GET /recipes`), so a user can favorite/unfavorite a recipe without opening it. No new endpoint, no new table, no changes to `likeRoutes.js` — purely a new caller of the existing API. Draft recipe cards render the control in a disabled/muted state (see "Draft recipes cannot be liked" below).
+- REW-55: surfaces the same `.like-btn` control on each recipe card under **My Recipes** (`GET /recipes`), so a user can add or remove a favorite without opening it. Draft recipe cards render the control in a disabled/muted state (see "Draft recipes cannot be favorited" below).
+- REW-66: updates user-facing terminology to Favorite/Favorites without renaming technical compatibility contracts or migrating data.
 
 ---
 
@@ -19,7 +20,7 @@ This page documents the `/api/likes/:recipeId` endpoints that back the heart-sha
 
 ### `GET /api/likes/:recipeId`
 
-**Auth:** Optional. If the request carries a valid `sb-access-token` cookie, the response includes the current user's like status; otherwise `liked` is always `false`.
+**Auth:** Optional. If the request carries a valid `sb-access-token` cookie, the response includes the current user's favorite state; otherwise the legacy `liked` key is always `false`.
 
 **Response:**
 ```json
@@ -37,11 +38,11 @@ This page documents the `/api/likes/:recipeId` endpoints that back the heart-sha
 **Auth:** Required (`requireApiAuth` — validates the `sb-access-token` cookie via Supabase, returns JSON `401` rather than redirecting).
 **Rate limit:** 30 requests/minute, keyed by `user_id` (`likeLimiter`).
 
-Likes a recipe on behalf of the current user.
+Favorites a recipe on behalf of the current user.
 
 - `400` if `:recipeId` is not a well-formed UUID.
 - **`404` if the recipe does not exist *or* its `status` is not `'published'`** (`recipeExists()` checks both `id` and `status = 'published'` in the same query). This is the source of the draft-recipe restriction described below.
-- If the recipe is already liked by this user, returns the current state (`liked: true`) without erroring — the endpoint is idempotent.
+- If the recipe is already a favorite for this user, it returns the current state (`liked: true`) without erroring—the endpoint is idempotent.
 - On success, inserts a `recipe_likes` row and returns the updated count.
 
 **Response (success):**
@@ -54,15 +55,15 @@ Likes a recipe on behalf of the current user.
 **Auth:** Required (`requireApiAuth`).
 **Rate limit:** Same `likeLimiter` as `POST` (shared 30/minute/user budget).
 
-Unlikes a recipe. `400` for a malformed UUID. If the recipe isn't currently liked by this user, returns the current state (`liked: false`) without erroring. On success, deletes the `recipe_likes` row and returns the updated count.
+Removes a recipe from Favorites. `400` for a malformed UUID. If the recipe is not currently a favorite for this user, it returns the current state (`liked: false`) without erroring. On success, it deletes the `recipe_likes` row and returns the updated count.
 
-Note: unlike `POST`, `DELETE` does **not** call `recipeExists()` — a user can always remove an existing like row for a recipe they already liked, even if that recipe's status later changed (see "Draft recipes cannot be liked" below).
+Note: unlike `POST`, `DELETE` does **not** call `recipeExists()`—a user can always remove an existing `recipe_likes` row for a favorite even if that recipe's status later changed (see "Draft recipes cannot be favorited" below).
 
 ---
 
-## Draft recipes cannot be liked (relevant to REW-55)
+## Draft recipes cannot be favorited (relevant to REW-55)
 
-`POST /api/likes/:recipeId`'s `recipeExists()` check only matches `status = 'published'` recipes, so **liking a draft recipe always 404s**, regardless of which page the request originates from. This rule predates REW-55 (it also governs `/recipes/liked`, which filters `.eq("status", "published")`) and was not changed by REW-55.
+`POST /api/likes/:recipeId`'s `recipeExists()` check only matches `status = 'published'` recipes, so **favoriting a draft recipe always returns 404**, regardless of which page the request originates from. This rule predates REW-55 and also governs the legacy `/recipes/liked` route, which filters `.eq("status", "published")`.
 
 **My Recipes list (`GET /recipes`) lists both draft and published recipes**, unlike the single-recipe view (which only ever renders the like button for `status === 'published'`). To surface *some* Favorite control on every card (per REW-55's acceptance criteria) without triggering a 404, draft cards render the same `.like-btn` markup with a native `disabled` attribute, muted styling (`.like-btn:disabled` in `public/css/styles.css`), and a `title`/`aria-label` of "Publish this recipe to add it to favorites." Publishing the recipe (via Edit → Publish) makes the control active on the next page load.
 
@@ -95,7 +96,7 @@ Because My Recipes, the recipe detail view, and `/recipes/liked` all read/write 
 
 - **Auth:** `POST`/`DELETE` require `requireApiAuth`; `GET` is optional-auth.
 - **Authorization:** RLS on `recipe_likes` (`user_id = auth.uid()` for SELECT/INSERT/DELETE) guarantees a user can only create/remove their own like rows, regardless of which UI surface issued the request.
-- **Rate limiting:** 30 like/unlike actions per minute per user (`likeLimiter`), shared across every page that renders `.like-btn`, including the new My Recipes surface.
+- **Rate limiting:** 30 favorite add/remove actions per minute per user (`likeLimiter`), shared across every page that renders `.like-btn`, including My Recipes.
 - **Input validation:** `recipeId` is validated against a UUID regex server-side before any query runs.
 - **CSRF:** CSRF protection is currently disabled repo-wide (`doubleCsrfProtection` commented out in `src/app.js`, `res.locals.csrfToken` hard-coded to `''`). This is a pre-existing, cross-cutting gap unrelated to REW-21/REW-55.
 
@@ -115,4 +116,5 @@ Because My Recipes, the recipe detail view, and `/recipes/liked` all read/write 
 
 | Date | Change |
 |------|--------|
+| 2026-09-10 | REW-66 updated current user-facing terminology to Favorite/Favorites while preserving legacy technical contracts and data. |
 | 2026-09-07 | Page created (retroactively documenting REW-21) alongside REW-55 documentation; added the "Draft recipes cannot be liked" and `GET /recipes` `isLiked` sections for REW-55. |

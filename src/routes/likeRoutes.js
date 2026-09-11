@@ -9,7 +9,7 @@ const router = Router();
 const likeLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
   max: 30, // 30 actions per minute
-  message: { error: "Too many like actions. Please slow down." },
+  message: { error: "Too many favorite actions. Please slow down." },
   standardHeaders: true,
   legacyHeaders: false,
   // Use user ID for rate limiting (auth middleware runs before this)
@@ -127,7 +127,7 @@ router.get("/:recipeId", async (req, res) => {
     });
   } catch (error) {
     console.error("Error getting like status:", error);
-    res.status(500).json({ error: "Failed to get like status" });
+    res.status(500).json({ error: "Failed to get favorite status" });
   }
 });
 
@@ -169,7 +169,7 @@ router.post("/:recipeId", requireApiAuth, likeLimiter, async (req, res) => {
 
     if (error) {
       console.error("Error liking recipe:", error);
-      return res.status(500).json({ error: "Failed to like recipe" });
+      return res.status(500).json({ error: "Failed to favorite recipe" });
     }
 
     // Get updated count
@@ -182,7 +182,7 @@ router.post("/:recipeId", requireApiAuth, likeLimiter, async (req, res) => {
     });
   } catch (error) {
     console.error("Error liking recipe:", error);
-    res.status(500).json({ error: "Failed to like recipe" });
+    res.status(500).json({ error: "Failed to favorite recipe" });
   }
 });
 
@@ -219,7 +219,7 @@ router.delete("/:recipeId", requireApiAuth, likeLimiter, async (req, res) => {
 
     if (error) {
       console.error("Error unliking recipe:", error);
-      return res.status(500).json({ error: "Failed to unlike recipe" });
+      return res.status(500).json({ error: "Failed to remove recipe from favorites" });
     }
 
     // Get updated count
@@ -232,7 +232,7 @@ router.delete("/:recipeId", requireApiAuth, likeLimiter, async (req, res) => {
     });
   } catch (error) {
     console.error("Error unliking recipe:", error);
-    res.status(500).json({ error: "Failed to unlike recipe" });
+    res.status(500).json({ error: "Failed to remove recipe from favorites" });
   }
 });
 

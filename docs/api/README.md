@@ -23,7 +23,7 @@ All API endpoints require authentication unless otherwise noted. Authentication 
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/recipes` | List user's recipes (with optional category/tag filtering); each recipe includes a server-rendered favorite/like state, batch-fetched from `recipe_likes` (REW-55) |
+| GET | `/recipes` | List user's recipes (with optional category/tag filtering); each recipe includes server-rendered favorite state, batch-fetched from `recipe_likes` (REW-55) |
 | GET | `/recipes/new` | Get form data for creating a recipe (Author field pre-filled with account display name, REW-46; Prep Time and Total Time/`cookTime` are required, REW-52) |
 | POST | `/recipes` | Create a new recipe (Author defaults server-side to account display name if blank/missing, REW-46; rejects blank `prepTime`/`cookTime`, REW-52) |
 | GET | `/recipes/:id` | View a single recipe |
@@ -40,16 +40,16 @@ All API endpoints require authentication unless otherwise noted. Authentication 
 | POST | `/recipes/import/parse` | Parse uploaded file, return JSON preview |
 | POST | `/recipes/import/save` | Save imported recipe after user confirmation (accepts `author`, defaults server-side to account display name if blank/missing, REW-46) |
 
-### Recipe Likes / Favorites (REW-21, REW-55)
+### Favorites (legacy `/api/likes` contract; REW-21, REW-55, REW-66)
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/likes/:recipeId` | Get like status (if authenticated) and public like count for a recipe |
-| POST | `/api/likes/:recipeId` | Like a recipe (requires auth; recipe must be `status = 'published'`, otherwise `404`) |
-| DELETE | `/api/likes/:recipeId` | Unlike a recipe (requires auth) |
-| GET | `/recipes/liked` | Display the current user's liked (published) recipes |
+| GET | `/api/likes/:recipeId` | Get favorite state (returned in the legacy `liked` key) and public favorite count for a recipe |
+| POST | `/api/likes/:recipeId` | Favorite a recipe (requires auth; recipe must be `status = 'published'`, otherwise `404`) |
+| DELETE | `/api/likes/:recipeId` | Remove a recipe from Favorites (requires auth) |
+| GET | `/recipes/liked` | Display the current user's favorite published recipes |
 
-Favorite/like controls (`.like-btn`) call these endpoints from the recipe detail page (REW-21) and, as of REW-55, from each card on the My Recipes page (`/recipes`) as well. See [Recipe Likes API](recipe-likes.md) for full details, including why draft recipe cards render a disabled heart.
+Favorite controls retain the `.like-btn` class and call these compatibility endpoints from the recipe detail page (REW-21) and, as of REW-55, from each card on the My Recipes page (`/recipes`) as well. See [Favorites API](recipe-likes.md) for full details, including why draft recipe cards render a disabled heart.
 
 ### Cookbooks (REW-62)
 
@@ -129,7 +129,7 @@ All `/meal-plans*` page routes require auth and redirect to login if unauthentic
 - [Recipe Import - OCR/PDF Parsing](recipe-import-ocr-parsing.md) - Text extraction and parsing from PDFs and images
 - [Recipe Author Default](recipe-author-default.md) - Account-name defaulting on recipe create/import (REW-46)
 - [Required Prep Time / Total Time](recipe-required-times.md) - Required-field enforcement and the Cook Time → Total Time display rename (REW-52)
-- [Recipe Likes API](recipe-likes.md) - `/api/likes/:recipeId` endpoints, the My Recipes favorite control, and the draft-recipe restriction (REW-21, REW-55)
+- [Favorites API](recipe-likes.md) - legacy `/api/likes/:recipeId` endpoints, the My Recipes favorite control, and the draft-recipe restriction (REW-21, REW-55, REW-66)
 - [Cookbooks API](cookbooks.md) - `/cookbooks*` endpoints, RLS-enforced privacy, and the recipe view "Save to Cookbook(s)" integration (REW-62)
 - [Meal Plans API](meal-plans.md) - `/meal-plans*` and `/api/meal-plans*` endpoints, the shared "Add to Meal Plan" modal, and the own-or-published recipe visibility rule (REW-63)
 - [Categories and Tags](../CATEGORIES_AND_TAGS.md) - Full categories/tags documentation

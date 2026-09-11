@@ -35,6 +35,15 @@ test('dashboard renders the four required full-card destinations in source order
   }
 });
 
+test('dashboard uses Favorites terminology for saved recipes', async () => {
+  const html = await renderDashboard();
+  const favoritesCard = [...html.matchAll(cardPattern)].find(([, href]) => href === '/recipes/liked');
+  assert.ok(favoritesCard);
+  assert.match(html, /class="quick-action-card__title">My Favorites</);
+  assert.match(favoritesCard[2], /Return to your favorite recipes\./);
+  assert.doesNotMatch(favoritesCard[2], /\blik(?:e|ed|es|ing)\b/i);
+});
+
 test('each quick action uses one card-level anchor with no nested interactive controls', async () => {
   const html = await renderDashboard();
   const grid = html.match(/<div class="quick-actions-grid">([\s\S]*?)<\/div>\s*<\/div>\s*<\/section>/);

@@ -42,7 +42,7 @@ function initializeLikeButtons() {
         // Revert on error
         toggleLikeUI(likeBtn, isCurrentlyLiked);
         const data = await response.json();
-        showErrorToast(data.error || "Failed to update like");
+        showErrorToast(data.error || "Failed to update favorite");
         return;
       }
 
@@ -70,7 +70,7 @@ function toggleLikeUI(likeBtn, isLiked) {
   likeBtn.dataset.liked = isLiked ? "true" : "false";
   likeBtn.setAttribute(
     "aria-label",
-    isLiked ? "Unlike this recipe" : "Like this recipe"
+    isLiked ? "Remove this recipe from favorites" : "Favorite this recipe"
   );
 
   // Update count optimistically
@@ -92,7 +92,7 @@ function updateLikeCount(likeBtn, count) {
 function showLoginPrompt() {
   // Create and show a dialog or redirect to login
   const shouldLogin = confirm(
-    "You need to log in to like recipes. Would you like to log in now?"
+    "You need to log in to favorite recipes. Would you like to log in now?"
   );
   if (shouldLogin) {
     window.location.href = "/auth/login";
@@ -106,7 +106,7 @@ function showUndoToast(recipeId, likeBtn) {
   const toast = document.createElement("div");
   toast.className = "toast toast-undo";
   toast.innerHTML = `
-    Recipe unliked.
+    Recipe removed from favorites.
     <button class="toast-undo-btn" type="button">Undo</button>
   `;
 

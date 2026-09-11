@@ -127,19 +127,19 @@ Junction table linking recipes to tags (many-to-many):
 
 ### recipe_likes (REW-21)
 
-Junction table recording which users have favorited/"liked" which recipes:
+Junction table recording each user's Favorites. The `recipe_likes` name is retained as a compatibility contract:
 
 | Column | Type | Description |
 |--------|------|-------------|
 | `user_id` | UUID | Foreign Key to `auth.users` |
 | `recipe_id` | UUID | Foreign Key to `recipes` |
-| `created_at` | TIMESTAMPTZ | When the like was created (used to sort the Liked Recipes page by recency) |
+| `created_at` | TIMESTAMPTZ | When the favorite was created (used to sort the Favorites page by recency) |
 
-**Primary Key:** Composite `(user_id, recipe_id)` — prevents a user from liking the same recipe twice.
+**Primary Key:** Composite `(user_id, recipe_id)` — prevents a user from favoriting the same recipe twice.
 
-**Helper function:** `get_recipe_like_count(p_recipe_id UUID) RETURNS INTEGER` — `SECURITY DEFINER`, granted to both `anon` and `authenticated`, so like counts can be read without a per-user session.
+**Helper function:** `get_recipe_like_count(p_recipe_id UUID) RETURNS INTEGER` — `SECURITY DEFINER`, granted to both `anon` and `authenticated`, so favorite counts can be read without a per-user session. Its legacy name remains unchanged for compatibility.
 
-Consumed by `POST`/`DELETE`/`GET /api/likes/:recipeId` (`src/routes/likeRoutes.js`), the `/recipes/liked` page, the recipe detail view's like button, and — as of REW-55 — the My Recipes list view (`GET /recipes`), which batch-fetches this table for the current user's recipe IDs to render the favorite state on every card. See [Recipe Likes API](../docs/api/recipe-likes.md).
+Consumed by the legacy `POST`/`DELETE`/`GET /api/likes/:recipeId` contract (`src/routes/likeRoutes.js`), the `/recipes/liked` Favorites page, the recipe detail view's Favorite button, and the My Recipes list view (`GET /recipes`). These technical identifiers remain unchanged so existing rows and callers continue to work. See [Favorites API](../docs/api/recipe-likes.md).
 
 ### cookbooks (REW-62)
 
@@ -266,9 +266,9 @@ Performance indexes are created on:
 - `tags.slug` - Fast lookups by slug
 - `recipe_categories.recipe_id` / `category_id` - Junction lookups
 - `recipe_tags.recipe_id` / `tag_id` - Junction lookups
-- `recipe_likes.recipe_id` - Fast like-count queries
-- `recipe_likes.user_id` - Fast "which recipes has this user liked" queries (My Recipes batch-fetch, Liked Recipes page)
-- `recipe_likes.created_at` (descending) - Sorting the Liked Recipes page by recency
+- `recipe_likes.recipe_id` - Fast favorite-count queries
+- `recipe_likes.user_id` - Fast "which recipes has this user favorited" queries (My Recipes batch-fetch, Favorites page)
+- `recipe_likes.created_at` (descending) - Sorting the Favorites page by recency
 - `cookbooks.user_id` - Fast "list this user's cookbooks" queries
 - `cookbook_recipes.cookbook_id` - Fast "recipes in this cookbook" lookups
 - `cookbook_recipes.recipe_id` - Fast "which cookbooks contain this recipe" lookups (recipe view's "Save to Cookbook(s)" widget)

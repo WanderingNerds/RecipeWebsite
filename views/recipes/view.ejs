@@ -14,7 +14,7 @@
       </div>
       <div style="display: flex; align-items: center; gap: 1rem;">
         <% if (recipe.status === 'published') { %>
-          <button class="like-btn" data-recipe-id="<%= recipe.id %>" data-liked="<%= isLiked %>" aria-label="<%= isLiked ? 'Unlike this recipe' : 'Like this recipe' %>">
+          <button class="like-btn" data-recipe-id="<%= recipe.id %>" data-liked="<%= isLiked %>" aria-label="<%= isLiked ? 'Remove this recipe from favorites' : 'Favorite this recipe' %>">
             <span class="like-btn-icon">&#9829;</span>
             <span class="like-btn-count"><%= likeCount %></span>
           </button>

@@ -61,13 +61,13 @@ router.get("/recipes/liked", requireAuth, async (req, res) => {
 
     if (likesError) {
       console.error("Error fetching liked recipes:", likesError);
-      req.flash("error", "Failed to load liked recipes");
+      req.flash("error", "Failed to load favorites");
       return res.redirect("/dashboard");
     }
 
     if (!likes || likes.length === 0) {
       return res.render("recipes/liked", {
-        title: "Liked Recipes",
+        title: "Favorites",
         recipes: [],
       });
     }
@@ -93,7 +93,7 @@ router.get("/recipes/liked", requireAuth, async (req, res) => {
       .filter(Boolean);
 
     res.render("recipes/liked", {
-      title: "Liked Recipes",
+      title: "Favorites",
       recipes: sortedRecipes,
     });
   } catch (error) {

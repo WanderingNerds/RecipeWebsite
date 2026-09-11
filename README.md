@@ -140,10 +140,10 @@ Browse and My Recipes share their core card layout: thumbnail, title/status, aut
 
 This local implementation requires migration `013_public_recipe_card_metadata.sql` before release. Staging RLS verification and live end-to-end acceptance are pending; see [Browse route documentation](docs/api/browse-recipes.md) and the [QA report](docs/qa/rew-59-browse-recipe-cards.md). No new environment variables are required.
 
-### Favorites / Recipe Likes (REW-21, REW-55)
-- **Heart-Toggle Favoriting**: Authenticated users can like/unlike any **published** recipe from a heart-shaped `.like-btn` control with optimistic UI (instant toggle, reverts on a failed request) and an "Undo" toast after unliking (`public/js/likes.js`, backed by `POST`/`DELETE /api/likes/:recipeId`).
-- **Liked Recipes Page**: A dedicated `/recipes/liked` page lists everything the logged-in user has favorited.
-- **Favorite Action on My Recipes (REW-55)**: The heart control now also appears directly on each recipe card under **My Recipes** (`/recipes`), not just the single-recipe view — so a user can favorite/unfavorite without opening the recipe. **Draft** recipe cards show the same heart in a disabled/muted state (not clickable) because the underlying `/api/likes/:recipeId` endpoint only allows liking `published` recipes; publishing the recipe enables the control. Favorite state set from My Recipes is immediately reflected on the recipe's detail page and on `/recipes/liked`, since all three surfaces read/write the same `recipe_likes` table.
+### Favorites (legacy Recipe Likes implementation; REW-21, REW-55, REW-66)
+- **Heart-Toggle Favoriting**: Authenticated users can favorite or remove any **published** recipe from Favorites using a heart-shaped `.like-btn` control with optimistic UI (instant toggle, reverts on a failed request) and an "Undo" toast after removal (`public/js/likes.js`, backed by the compatibility endpoints `POST`/`DELETE /api/likes/:recipeId`).
+- **Favorites Page**: A dedicated `/recipes/liked` compatibility route lists the logged-in user's Favorites.
+- **Favorite Action on My Recipes (REW-55)**: The heart control also appears directly on each recipe card under **My Recipes** (`/recipes`), so a user can add or remove a favorite without opening the recipe. **Draft** recipe cards show the same heart in a disabled/muted state because the compatibility endpoint only allows favoriting `published` recipes; publishing the recipe enables the control. Favorite state set from My Recipes is reflected on the recipe's detail page and on `/recipes/liked`, since all three surfaces read/write the same `recipe_likes` table.
 
 ### Cookbooks (REW-62)
 - **Create, Rename, and Delete Cookbooks**: Authenticated users can organize their own recipes into named, private collections ("cookbooks") from a dedicated "My Cookbooks" area (linked from the navbar). A cookbook holds any number of recipes, and the same recipe can belong to multiple cookbooks at once.
