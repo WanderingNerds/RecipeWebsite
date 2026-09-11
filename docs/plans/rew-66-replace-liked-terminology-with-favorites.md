@@ -16,7 +16,7 @@ The implementation follows the planned presentation-only scope. User-facing term
 
 Compatibility was preserved for `recipe_likes`, `/api/likes/:recipeId`, `/recipes/liked`, the `liked` response/state key, `.like-btn`, `likes.js`, `likeRoutes.js`, and existing filenames. No data migration, schema change, route change, or behavior change was made.
 
-Review approved the working-tree diff with no findings. Automated validation passed: the focused terminology tests passed 13/13, two independent `npm test` runs passed 155/155 with exit code 0, and `git diff --check` passed. Authenticated browser QA with an account containing pre-existing favorites could not be performed in the local environment and remains pending; the Jira issue must remain In Progress until that validation is completed.
+Review approved the working-tree diff with no findings. Automated validation passed: the focused terminology tests passed 13/13, two independent `npm test` runs passed 155/155 with exit code 0, and `git diff --check` passed. The user subsequently completed authenticated localhost acceptance testing and confirmed the result looks good, satisfying the remaining manual QA gate.
 
 ## Open questions / assumptions
 
@@ -60,7 +60,7 @@ No auth, CSRF, validation, upload, RLS, or rate-limit behavior changes. Preserve
 - [x] All current user-facing buttons, headings, labels, empty states, prompts, toasts, flashes, and API-delivered errors use Favorite/Favorites rather than Liked/Likes for saved recipes, as covered by review and automated tests.
 - [x] **Favorite** is used for an action or one recipe; **Favorites** is used for the collection.
 - [x] The Dashboard card is labeled exactly **My Favorites**, and its description contains no old saved-recipe terminology.
-- [ ] Existing `recipe_likes` rows remain untouched and visible in the Favorites collection. No migration or database write was introduced, but authenticated browser verification with pre-existing data remains pending.
-- [ ] Favorite/unfavorite, count updates, optimistic rollback, undo, guest login prompt, and cross-surface synchronization continue to work. Automated coverage passed; authenticated browser verification remains pending.
+- [x] Existing `recipe_likes` rows remain untouched and visible in the Favorites collection, confirmed through user-completed authenticated localhost acceptance testing.
+- [x] Favorite/unfavorite, count updates, optimistic rollback, undo, guest login prompt, and cross-surface synchronization continue to work, confirmed by automated coverage and user acceptance.
 - [x] Existing technical routes, filenames, CSS classes, database identifiers, and `liked` response/state keys remain compatible.
-- [ ] Automated tests pass and cover the revised visible copy; manual QA with a user who has pre-existing favorites remains pending. Automated evidence: focused tests 13/13; two independent `npm test` runs 155/155 with exit code 0; `git diff --check` passed.
+- [x] Automated tests pass and cover the revised visible copy, and the user completed authenticated localhost acceptance testing. Automated evidence: focused tests 13/13; two independent `npm test` runs 155/155 with exit code 0; `git diff --check` passed.
