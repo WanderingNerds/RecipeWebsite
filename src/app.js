@@ -8,7 +8,7 @@ import session from "express-session";
 import flash from "connect-flash";
 import cookieParser from "cookie-parser";
 import rateLimit from "express-rate-limit";
-import { doubleCsrf } from "csrf-csrf";
+import { csrfProtectionExceptMultipart, generateCsrfToken } from "./middleware/csrfMiddleware.js";
 import { optionalAuth } from "./middleware/authMiddleware.js";
 import { notFoundHandler, errorHandler } from "./middleware/errorHandler.js";
 import routes from "./routes/index.js";
@@ -79,31 +79,8 @@ if (process.env.NODE_ENV === 'production') {
   app.use(generalLimiter);
 }
 
-// CSRF Protection - TEMPORARILY DISABLED
-// TODO: Re-enable CSRF protection after debugging library issues
-// const {
-//   invalidCsrfTokenError,
-//   generateToken,
-//   doubleCsrfProtection,
-// } = doubleCsrf({
-//   getSecret: () => process.env.SESSION_SECRET || "dev-secret-key-change-in-production",
-//   cookieName: "csrf-token",
-//   cookieOptions: {
-//     sameSite: "lax",
-//     path: "/",
-//     secure: process.env.NODE_ENV === "production",
-//   },
-//   size: 64,
-//   ignoredMethods: ["GET", "HEAD", "OPTIONS"],
-// });
-
-// app.use(doubleCsrfProtection);
-
-// Make empty CSRF token available to all views (for compatibility)
-app.use((req, res, next) => {
-  res.locals.csrfToken = '';
-  next();
-});
+app.use(csrfProtectionExceptMultipart);
+app.use((req, res, next) => { res.locals.csrfToken = generateCsrfToken(req, res); next(); });
 
 // Static files
 app.use(express.static(path.join(projectRoot, "public")));

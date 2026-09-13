@@ -9,6 +9,7 @@ const renderNavbar = (overrides = {}) => ejs.renderFile(navbarView, {
   currentPath: '/',
   query: '',
   user: null,
+  csrfToken: 'test-csrf-token',
   ...overrides,
 });
 
@@ -37,7 +38,9 @@ test('authenticated navbar omits dashboard Quick Action destinations', async () 
   assert.match(html, /href="\/dashboard"[^>]*>Dashboard<\/a>/);
   assert.match(html, /action="\/search" method="GET" role="search"/);
   assert.match(html, /Hello, Test Cook/);
-  assert.match(html, /href="\/auth\/logout"[^>]*>Logout<\/a>/);
+  assert.match(html, /action="\/auth\/logout" method="POST"/);
+  assert.match(html, /name="_csrf" value="test-csrf-token"/);
+  assert.match(html, />Logout<\/button>/);
   assert.doesNotMatch(html, /href="\/auth\/(?:login|register)"/);
 });
 
@@ -51,6 +54,7 @@ test('guest navbar retains public, search, and authentication controls', async (
   assert.match(html, /href="\/auth\/register"[^>]*>Sign Up<\/a>/);
   assert.doesNotMatch(html, /href="\/dashboard"/);
   assert.doesNotMatch(html, /href="\/auth\/logout"/);
+  assert.doesNotMatch(html, /action="\/auth\/logout"/);
 
   for (const path of personalOrganizationPaths) {
     assert.doesNotMatch(html, new RegExp(`href="${path}"`));

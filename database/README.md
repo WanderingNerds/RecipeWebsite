@@ -31,6 +31,7 @@ To set up the database in your Supabase project, follow these steps:
    | 12 | `012_create_meal_plan_recipes_table.sql` | Meal-plan-recipes junction table with plan-ownership + own-or-published-recipe RLS on INSERT (REW-63) |
    | 13 | `013_public_recipe_card_metadata.sql` | Add public SELECT policies for published recipe categories/tags and their associations (REW-59) |
    | 14 | `014_create_help_feedback_submissions_table.sql` | Authenticated feedback intake with owner-bound INSERT-only RLS (REW-70) |
+   | 15 | `015_add_admin_feedback_management.sql` | Admin profiles, workflow/assignment, narrow grants, and admin-only RLS (REW-71) |
 
 4. **Verify the Setup**
    - Go to "Table Editor" in the left sidebar
@@ -46,6 +47,7 @@ To set up the database in your Supabase project, follow these steps:
      - `meal_plans`
      - `meal_plan_recipes`
      - `help_feedback_submissions`
+     - `admin_profiles`
 
 ---
 
@@ -206,7 +208,20 @@ Consumed by `GET/POST /meal-plans*` (`src/routes/mealPlanRoutes.js`), the "My Me
 
 ### help_feedback_submissions (REW-70)
 
-Durable submission-time snapshots with `id`, `user_id`, contact name/email, category, subject, message, initial `new` status, and timestamps. Text constraints mirror the application limits: name 120, email 254, subject 200, and message 5,000 characters. The user foreign key intentionally uses PostgreSQL's default `NO ACTION`; live account-deletion behavior remains to be verified.
+Durable submission-time snapshots with `id`, `user_id`, contact name/email, category, subject, message, workflow status, optional `assignee_id`, and timestamps. Migration 015 expands status to `new`, `in_progress`, and `done`; assignment references `admin_profiles(id) ON DELETE SET NULL`. Text constraints mirror the application limits. The user foreign key intentionally uses PostgreSQL's default `NO ACTION`; live account-deletion behavior remains to be verified.
+
+### admin_profiles (REW-71)
+
+Assignable administrator roster keyed one-to-one to Supabase Auth users.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | UUID | Primary key and foreign key to `auth.users(id)` with `ON DELETE CASCADE` |
+| `display_name` | TEXT | Required trimmed assignment label, 1–120 characters |
+| `active` | BOOLEAN | Whether the profile can be newly assigned; defaults to `TRUE` |
+| `created_at` | TIMESTAMPTZ | Creation timestamp |
+
+A profile row does not grant administrator access. The matching Auth user must independently carry the trusted `app_metadata.role = 'admin'` claim.
 
 ---
 
@@ -260,9 +275,15 @@ Migration 013 adds four SELECT policies and SELECT grants, with no table or colu
 - No UPDATE policy needed for membership rows, same reasoning as `recipe_likes`/`cookbook_recipes` — if `planned_servings` becomes user-editable in a future ticket (REW-26), an UPDATE policy scoped the same way as SELECT/DELETE will need to be added then
 
 ### help_feedback_submissions (REW-70)
-- Authenticated INSERT requires `user_id = auth.uid()` and `status = 'new'`.
-- Ordinary users have no SELECT, UPDATE, or DELETE policy. REW-71 owns administrator access.
-- Live owner/mismatched-owner and ordinary-user policy verification remains pending.
+- Authenticated intake requires `user_id = auth.uid()`, `status = 'new'`, and `assignee_id IS NULL`.
+- Only trusted admin JWTs may SELECT submissions or UPDATE them. Authenticated UPDATE privilege is limited to `status` and `assignee_id`; owner/contact/content/timestamp columns are not writable through PostgREST.
+- Assignment changes to a non-null value must target an active profile. OLD/NEW-aware trigger enforcement allows a status-only update to retain an existing assignee that later became inactive.
+- Ordinary users have no SELECT, UPDATE, or DELETE policy and cannot read `admin_profiles`.
+- Live owner/mismatched-owner, forced-field, regular-user, and admin policy verification remains pending.
+
+### admin_profiles (REW-71)
+- SELECT requires the verified JWT's `app_metadata.role` to equal `admin`.
+- No browser-facing INSERT, UPDATE, or DELETE policy exists. Provisioning and roster maintenance are privileged out-of-band operations.
 
 ---
 
@@ -289,6 +310,7 @@ Performance indexes are created on:
 - `meal_plan_recipes.recipe_id` - Fast "which plans contain this recipe" lookups (the "Add to Meal Plan" modal's membership check)
 - `help_feedback_submissions.created_at` (descending) - Chronological intake ordering
 - `help_feedback_submissions.(status, created_at)` - Status-filtered queue ordering for REW-71
+- `help_feedback_submissions.assignee_id` - Assignment lookup support for REW-71
 
 ---
 
@@ -308,6 +330,8 @@ Performance indexes are created on:
 - Meal plans can contain a mix of the owner's own draft and published recipes, **and** any other user's published recipes — meal plan membership does not require recipe ownership, unlike cookbook membership. If a recipe added to someone else's plan while published is later reverted to draft by its owner, existing `meal_plan_recipes` rows referencing it are **not** automatically removed (same known-gap pattern already documented above for `recipe_likes`); this edge case was not in scope for REW-63.
 - `meal_plan_recipes.planned_servings` is schema-only in this ticket (REW-63) — no route or view reads or writes it yet. It exists purely so REW-26 (grocery list generation) can be built on top of `meal_plans`/`meal_plan_recipes` without a further migration.
 - **REW-70 deployment:** apply migration 014 after migration 013. Live migration, RLS, account-delete `NO ACTION`, and successful storage/refresh checks remain pending.
+- **REW-71 deployment:** apply migration 015 after 014, set a user's trusted Auth `app_metadata.role` to `admin`, insert the matching `admin_profiles` row, and refresh/re-authenticate. The application does not use a service-role key or expose self-promotion.
+- **REW-71 acceptance:** the configured live project currently lacks the required tables/migrations and safe admin/regular fixtures. Verify intake invariants, role denial, direct RLS/grants, inactive-assignee behavior, queue/detail/status/assignment, CSRF, auth refresh/logout, and responsive browser behavior before release.
 
 ---
 

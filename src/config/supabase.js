@@ -33,3 +33,9 @@ export function createSupabaseClient(accessToken) {
     },
   });
 }
+
+export function createServerAuthClient(accessToken) {
+  const options = { auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false } };
+  if (accessToken) options.global = { headers: { Authorization: `Bearer ${accessToken}` } };
+  return createClient(supabaseUrl, supabaseAnonKey, options);
+}

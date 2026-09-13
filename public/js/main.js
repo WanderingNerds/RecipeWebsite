@@ -222,3 +222,18 @@ function escapeHtml(text) {
   div.textContent = text;
   return div.innerHTML;
 }
+// Attach the server-issued CSRF token to same-origin state-changing fetches.
+// Native HTML forms submit their hidden `_csrf` field instead.
+const nativeFetch = window.fetch.bind(window);
+window.fetch = (input, init = {}) => {
+  const requestMethod = typeof input !== "string" ? input.method : undefined;
+  const method = (init.method || requestMethod || "GET").toUpperCase();
+  const url = new URL(typeof input === "string" ? input : input.url, window.location.href);
+  if (url.origin === window.location.origin && !["GET", "HEAD", "OPTIONS"].includes(method)) {
+    const headers = new Headers(init.headers || (typeof input !== "string" ? input.headers : undefined));
+    const token = document.querySelector('meta[name="csrf-token"]')?.content;
+    if (token) headers.set("x-csrf-token", token);
+    init = { ...init, headers };
+  }
+  return nativeFetch(input, init);
+};

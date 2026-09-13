@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { supabase, createSupabaseClient } from "../config/supabase.js";
+import { supabase, createSupabaseClient, createServerAuthClient } from "../config/supabase.js";
 import { redirectIfAuthenticated } from "../middleware/authMiddleware.js";
 import {
   setAuthCookies,
@@ -151,26 +151,27 @@ router.post("/register", redirectIfAuthenticated, async (req, res) => {
   }
 });
 
-// Logout
-router.get("/logout", async (req, res) => {
+export async function logoutUser(req, res, { createAuthClient = createServerAuthClient } = {}) {
+  const accessToken = req.cookies["sb-access-token"];
+  const refreshToken = req.cookies["sb-refresh-token"];
   try {
-    const accessToken = req.cookies["sb-access-token"];
-
-    if (accessToken) {
-      await supabase.auth.signOut();
+    if (accessToken && refreshToken) {
+      const authClient = createAuthClient(accessToken);
+      await authClient.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+      await authClient.auth.signOut();
     }
-
-    // Clear cookies
     clearAuthCookies(res);
-
     req.flash("success", "You have been logged out");
-    res.redirect("/");
+    return res.redirect(303, "/");
   } catch (error) {
     console.error("Logout error:", error);
     clearAuthCookies(res);
-    res.redirect("/");
+    return res.redirect(303, "/");
   }
-});
+}
+
+// Logout is state-changing and must remain CSRF-protected by the application middleware.
+router.post("/logout", logoutUser);
 
 // Email confirmation callback handler
 // Supabase redirects here after user clicks the confirmation link in their email
