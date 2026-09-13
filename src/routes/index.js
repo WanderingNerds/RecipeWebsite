@@ -10,6 +10,8 @@ import tagRoutes from "./tagRoutes.js";
 import publicRoutes from "./publicRoutes.js";
 import likeRoutes from "./likeRoutes.js";
 import helpFeedbackRoutes from "./helpFeedbackRoutes.js";
+import adminAuthRoutes from "./adminAuthRoutes.js";
+import adminFeedbackRoutes from "./adminFeedbackRoutes.js";
 import { requireAuth } from "../middleware/authMiddleware.js";
 import { createSupabaseClient, supabase } from "../config/supabase.js";
 import { getEmailLinkForwardPath } from "../utils/authUtils.js";
@@ -45,6 +47,8 @@ router.use("/", publicRoutes);
 
 // Auth routes
 router.use("/auth", authRoutes);
+router.use("/admin", adminAuthRoutes);
+router.use("/admin/feedback", adminFeedbackRoutes);
 
 // Import routes (must be BEFORE /recipes to prevent /:id matching "import")
 router.use("/recipes/import", importRoutes);

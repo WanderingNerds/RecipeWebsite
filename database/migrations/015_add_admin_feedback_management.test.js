@@ -1,0 +1,4 @@
+import test from "node:test"; import assert from "node:assert/strict"; import { readFile } from "node:fs/promises";
+const sql=await readFile(new URL("./015_add_admin_feedback_management.sql",import.meta.url),"utf8");
+test("migration pins workflow, narrow privileges, intake and OLD/NEW assignment rules",()=>{assert.match(sql,/status IN \('new', 'in_progress', 'done'\)/);assert.match(sql,/REVOKE UPDATE ON help_feedback_submissions FROM authenticated/);assert.match(sql,/GRANT UPDATE \(status, assignee_id\)/);assert.match(sql,/assignee_id IS NULL/);assert.match(sql,/NEW\.assignee_id IS DISTINCT FROM OLD\.assignee_id/);assert.match(sql,/ap\.active = TRUE/);assert.match(sql,/auth\.jwt\(\) -> 'app_metadata'/);});
+test("migration reuses migration 014 queue indexes",()=>{assert.doesNotMatch(sql,/status_created_at_idx|\(status, created_at DESC\)/);assert.match(sql,/assignee_id_idx/)});

@@ -7,6 +7,7 @@ import { generateThumbnail, optimizeImage, validateImageFile } from "../utils/im
 import { parseIngredients } from "../utils/ingredientParser.js";
 import { resolveScaling, scaleIngredients, QUICK_SCALE_FACTORS } from "../utils/ingredientScaler.js";
 import { getAccountDisplayName } from "../utils/userUtils.js";
+import { csrfProtection } from "../middleware/csrfMiddleware.js";
 
 const router = Router();
 
@@ -280,7 +281,7 @@ router.get("/new", requireAuth, async (req, res) => {
 });
 
 // POST /recipes - Create a new recipe
-router.post("/", requireAuth, uploadLimiter, upload.single("photo"), async (req, res) => {
+router.post("/", requireAuth, uploadLimiter, upload.single("photo"), csrfProtection, async (req, res) => {
   try {
     const {
       title,
@@ -532,7 +533,7 @@ router.get("/:id/edit", requireAuth, async (req, res) => {
 });
 
 // POST /recipes/:id/update - Update a recipe
-router.post("/:id/update", requireAuth, uploadLimiter, upload.single("photo"), async (req, res) => {
+router.post("/:id/update", requireAuth, uploadLimiter, upload.single("photo"), csrfProtection, async (req, res) => {
   try {
     const { id } = req.params;
     const {

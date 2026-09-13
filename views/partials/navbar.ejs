@@ -39,9 +39,13 @@
 
         <% if (user) { %>
           <li><a href="/dashboard" class="<%= currentPath === '/dashboard' ? 'active' : '' %>">Dashboard</a></li>
+          <% if (typeof isAdmin !== 'undefined' && isAdmin) { %><li><a href="/admin/feedback" class="<%= currentPath.startsWith('/admin/feedback') ? 'active' : '' %>">Admin Feedback</a></li><% } %>
           <li class="navbar-user">
             <span>Hello, <%= user.user_metadata?.name || user.email %></span>
-            <a href="/auth/logout" class="btn btn-outline-light">Logout</a>
+            <form action="/auth/logout" method="POST" class="navbar-logout-form">
+              <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+              <button type="submit" class="btn btn-outline-light">Logout</button>
+            </form>
           </li>
         <% } else { %>
           <li><a href="/auth/login" class="<%= currentPath === '/auth/login' ? 'active' : '' %>">Login</a></li>

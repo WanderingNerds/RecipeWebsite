@@ -99,6 +99,19 @@ All `/meal-plans*` page routes require auth and redirect to login if unauthentic
 
 See [Help & Feedback](help-feedback.md) for validation, RLS, and pending live verification.
 
+### Admin Help & Feedback Management (REW-71)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/admin/login` | Render the separate administrator sign-in form |
+| POST | `/admin/login` | Authenticate through an isolated Supabase client and verify the trusted admin claim |
+| POST | `/admin/logout` | Bind/revoke the caller's token pair and clear local cookies |
+| GET | `/admin/feedback` | List submissions newest-first with All, Unresolved, or Done filtering |
+| GET | `/admin/feedback/:id` | Show escaped submission details and assignable profiles |
+| POST | `/admin/feedback/:id` | Validate and update status/assignment, then redirect |
+
+All management routes require `requireAdmin` and use the request-scoped access token so RLS remains active. See [Admin Help & Feedback](admin-feedback.md).
+
 ### Categories
 
 | Method | Endpoint | Description |
@@ -121,7 +134,7 @@ See [Help & Feedback](help-feedback.md) for validation, RLS, and pending live ve
 | POST | `/auth/login` | Process login |
 | GET | `/auth/register` | Registration page |
 | POST | `/auth/register` | Process registration |
-| GET | `/auth/logout` | Log out |
+| POST | `/auth/logout` | Log out with CSRF protection; the former GET route returns 404 |
 | GET | `/auth/callback` | Email confirmation callback (REW-41) |
 | GET | `/auth/forgot-password` | Centralized account-recovery page — email field, "Send Password Reset Email" / "Resend Confirmation Email" actions (REW-54) |
 | POST | `/auth/forgot-password` | Send a Supabase password-reset email (enumeration-safe) (REW-54) |
@@ -142,6 +155,7 @@ See [Help & Feedback](help-feedback.md) for validation, RLS, and pending live ve
 - [Cookbooks API](cookbooks.md) - `/cookbooks*` endpoints, RLS-enforced privacy, and the recipe view "Save to Cookbook(s)" integration (REW-62)
 - [Meal Plans API](meal-plans.md) - `/meal-plans*` and `/api/meal-plans*` endpoints, the shared "Add to Meal Plan" modal, and the own-or-published recipe visibility rule (REW-63)
 - [Help & Feedback](help-feedback.md) - authenticated form routes, validation, durable intake, and RLS boundaries (REW-70)
+- [Admin Help & Feedback](admin-feedback.md) - isolated admin authentication, queue/detail workflow, provisioning, CSRF, and RLS boundaries (REW-71)
 - [Categories and Tags](../CATEGORIES_AND_TAGS.md) - Full categories/tags documentation
 - [Email Confirmation Flow](email-confirmation.md) - Email verification and callback handling (REW-41); also documents the Forgot Password / Account Recovery flow that supersedes the standalone resend page (REW-54)
 
@@ -200,10 +214,10 @@ When rate limited, requests receive:
 
 ## CSRF Protection
 
-All POST/PUT/DELETE requests require a CSRF token. For form submissions, include:
+All unsafe non-multipart requests require a CSRF token. For form submissions, include:
 
 ```html
 <input type="hidden" name="_csrf" value="<%= csrfToken %>">
 ```
 
-For AJAX requests, the token should be included in the request body or headers.
+Same-origin JavaScript requests receive the token through the shared fetch wrapper's `x-csrf-token` header. Multipart routes bypass the pre-parser middleware and apply the same CSRF validation after Multer exposes `_csrf`; cross-origin requests do not receive a token.

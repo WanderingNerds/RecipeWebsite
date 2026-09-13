@@ -68,6 +68,10 @@ A recipe website built with Node.js, Express, and Supabase Auth.
 5. **`APP_URL` must be set in Vercel (required — REW-57):** Set the `APP_URL` environment variable for the **Production** environment in Vercel Project Settings to the canonical production origin (scheme + host, no trailing slash). Without it, password-reset and email-confirmation links generated in production fall back to `http://localhost:3000`, which can never be reached by anyone but the developer and isn't on the Supabase Redirect URL allow-list.
 6. Authentication is handled automatically by Supabase Auth
 
+### Administrator feedback setup (REW-71)
+
+Apply migrations 014 and 015 in order. Provision administrators out of band by setting the Supabase Auth user's trusted `app_metadata.role` to `admin`, then inserting the same Auth user ID and a display name into `admin_profiles`. Refresh or re-authenticate so the issued token carries the claim. Never expose a service-role key in the application. See [Admin Help & Feedback](docs/api/admin-feedback.md) and [database setup](database/README.md).
+
 ## Project Structure
 
 ```
@@ -88,14 +92,17 @@ recipe-website/
 │   │   ├── cookbookRoutes.js   # Cookbook CRUD + recipe membership routes (REW-62)
 │   │   ├── mealPlanRoutes.js   # Meal plan CRUD + bulk-add page routes (REW-63)
 │   │   ├── mealPlanApiRoutes.js # Meal plan JSON API backing the "Add to Meal Plan" modal (REW-63)
-│   │   └── helpFeedbackRoutes.js # Authenticated feedback routes (REW-70)
+│   │   ├── helpFeedbackRoutes.js # Authenticated feedback routes (REW-70)
+│   │   ├── adminAuthRoutes.js   # Isolated administrator sign-in/logout (REW-71)
+│   │   └── adminFeedbackRoutes.js # Admin-only feedback queue and workflow (REW-71)
 │   ├── utils/
 │   │   ├── imageUtils.js       # Image processing utilities
 │   │   ├── ingredientParser.js # Ingredient parsing
 │   │   ├── ingredientScaler.js # Recipe scaling logic
 │   │   ├── cookbookUtils.js    # Cookbook title validation + recipe-id normalization (REW-62)
 │   │   ├── mealPlanUtils.js    # Meal plan title + date-range validation (REW-63)
-│   │   └── helpFeedbackUtils.js # Feedback validation (REW-70)
+│   │   ├── helpFeedbackUtils.js # Feedback validation (REW-70)
+│   │   └── adminUtils.js        # Admin claim and workflow validation (REW-71)
 │   └── app.js                  # Express app setup
 ├── views/
 │   ├── layouts/main.ejs        # Main layout
@@ -131,6 +138,14 @@ The authenticated dashboard is the primary navigation surface for recipe organiz
 ### Help & Feedback (REW-70)
 
 Authenticated users can submit support requests from the fifth Dashboard Quick Action. `/help-feedback` validates category, subject, message, and editable account-derived contact snapshots, then redirects after a successful authenticated Supabase insert. Apply migration 014 before deployment; live database/RLS/storage and browser acceptance remain pending. See [Help & Feedback](docs/api/help-feedback.md).
+
+### Admin Help & Feedback Management (REW-71)
+
+Administrators sign in separately at `/admin/login` and manage submissions at `/admin/feedback`. The newest-first queue supports All, Unresolved, and Done filters. Ticket detail shows escaped submission data and lets an administrator update status (`new`, `in_progress`, `done`) or assign an active `admin_profiles` member. An inactive current assignee remains visible and can be retained during status-only updates.
+
+Express validates the Supabase user's trusted `app_metadata.role = "admin"`; migration 015 independently enforces admin-only reads and workflow updates through RLS, column-level UPDATE privileges, and OLD/NEW-aware assignment validation. Auth operations use fresh non-persisting Supabase clients, while data access remains tied to the verified request token. Global CSRF protection covers non-multipart unsafe requests; multipart routes validate after Multer parsing. Logout is POST-only.
+
+Local/static QA passes 185/185 with zero skips, including listener-backed CSRF/auth/logout/fetch/multipart and migration contracts. Live Supabase/browser acceptance is blocked until migrations 014/015 and safe admin/regular fixtures are available. See [Admin Help & Feedback](docs/api/admin-feedback.md) and the [QA record](docs/qa/rew-71-admin-feedback-management.md).
 
 ### Recipe Management
 - Create, view, edit, and delete recipes

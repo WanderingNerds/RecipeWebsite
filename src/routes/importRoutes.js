@@ -12,6 +12,7 @@ import { requireAuth } from "../middleware/authMiddleware.js";
 import { createSupabaseClient } from "../config/supabase.js";
 import { importRecipe, SUPPORTED_MIME_TYPES, sanitizeUrl } from "../utils/recipeImporter.js";
 import { getAccountDisplayName } from "../utils/userUtils.js";
+import { csrfProtection } from "../middleware/csrfMiddleware.js";
 
 const router = Router();
 
@@ -64,7 +65,7 @@ router.get("/", requireAuth, (req, res) => {
  * POST /recipes/import/parse
  * Parse uploaded file and return JSON preview
  */
-router.post("/parse", requireAuth, importLimiter, importUpload.single("file"), async (req, res) => {
+router.post("/parse", requireAuth, importLimiter, importUpload.single("file"), csrfProtection, async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({
