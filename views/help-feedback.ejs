@@ -1,0 +1,68 @@
+<section class="help-feedback">
+  <header class="help-feedback__header">
+    <span class="badge-new">Support</span>
+    <h1>Help &amp; Feedback</h1>
+    <p>Ask a question, report an issue, or share feedback about Potluck.</p>
+  </header>
+
+  <aside class="help-feedback__notice" id="admin-review-notice">
+    <strong>What happens next?</strong>
+    <p>An administrator will review your submission. Submissions are not automatically acted upon, and the team may contact you for more information.</p>
+  </aside>
+
+  <% if (Object.keys(validationErrors).length > 0) { %>
+    <div class="alert alert-error" role="alert" aria-labelledby="validation-heading">
+      <strong id="validation-heading">Please correct the highlighted fields.</strong>
+    </div>
+  <% } %>
+
+  <% if (typeof submissionError !== 'undefined' && submissionError) { %>
+    <div class="alert alert-error" role="alert"><%= submissionError %></div>
+  <% } %>
+
+  <form class="help-feedback__form" action="/help-feedback" method="POST" aria-describedby="admin-review-notice">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+
+    <div class="form-group<%= validationErrors.category ? ' has-error' : '' %>">
+      <label for="category">Category <span class="required-indicator" aria-hidden="true">*</span></label>
+      <select id="category" name="category" required aria-required="true" <%- validationErrors.category ? 'aria-invalid="true" aria-describedby="category-error"' : '' %>>
+        <option value="">Choose a category</option>
+        <% categories.forEach((category) => { %>
+          <option value="<%= category %>" <%= values.category === category ? 'selected' : '' %>><%= category %></option>
+        <% }) %>
+      </select>
+      <% if (validationErrors.category) { %><span class="field-error-message" id="category-error"><%= validationErrors.category %></span><% } %>
+    </div>
+
+    <div class="form-group<%= validationErrors.subject ? ' has-error' : '' %>">
+      <label for="subject">Subject <span class="required-indicator" aria-hidden="true">*</span></label>
+      <input id="subject" name="subject" type="text" required aria-required="true" maxlength="<%= limits.subject %>" value="<%= values.subject %>" <%- validationErrors.subject ? 'aria-invalid="true" aria-describedby="subject-error"' : '' %>>
+      <% if (validationErrors.subject) { %><span class="field-error-message" id="subject-error"><%= validationErrors.subject %></span><% } %>
+    </div>
+
+    <div class="form-group<%= validationErrors.message ? ' has-error' : '' %>">
+      <label for="message">Message <span class="required-indicator" aria-hidden="true">*</span></label>
+      <textarea id="message" name="message" required aria-required="true" maxlength="<%= limits.message %>" rows="8" <%- validationErrors.message ? 'aria-invalid="true" aria-describedby="message-error"' : '' %>><%= values.message %></textarea>
+      <% if (validationErrors.message) { %><span class="field-error-message" id="message-error"><%= validationErrors.message %></span><% } %>
+    </div>
+
+    <div class="help-feedback__contact-grid">
+      <div class="form-group<%= validationErrors.contactName ? ' has-error' : '' %>">
+        <label for="contactName">Name <span class="required-indicator" aria-hidden="true">*</span></label>
+        <input id="contactName" name="contactName" type="text" autocomplete="name" required aria-required="true" maxlength="<%= limits.name %>" value="<%= values.contactName %>" <%- validationErrors.contactName ? 'aria-invalid="true" aria-describedby="contact-name-error"' : '' %>>
+        <% if (validationErrors.contactName) { %><span class="field-error-message" id="contact-name-error"><%= validationErrors.contactName %></span><% } %>
+      </div>
+
+      <div class="form-group<%= validationErrors.contactEmail ? ' has-error' : '' %>">
+        <label for="contactEmail">Email address <span class="required-indicator" aria-hidden="true">*</span></label>
+        <input id="contactEmail" name="contactEmail" type="email" autocomplete="email" required aria-required="true" maxlength="<%= limits.email %>" value="<%= values.contactEmail %>" <%- validationErrors.contactEmail ? 'aria-invalid="true" aria-describedby="contact-email-error"' : '' %>>
+        <% if (validationErrors.contactEmail) { %><span class="field-error-message" id="contact-email-error"><%= validationErrors.contactEmail %></span><% } %>
+      </div>
+    </div>
+
+    <div class="help-feedback__actions">
+      <a href="/dashboard" class="btn btn-outline">Back to Dashboard</a>
+      <button type="submit" class="btn btn-primary">Submit for review</button>
+    </div>
+  </form>
+</section>

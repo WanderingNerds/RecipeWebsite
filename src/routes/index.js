@@ -9,6 +9,7 @@ import categoryRoutes from "./categoryRoutes.js";
 import tagRoutes from "./tagRoutes.js";
 import publicRoutes from "./publicRoutes.js";
 import likeRoutes from "./likeRoutes.js";
+import helpFeedbackRoutes from "./helpFeedbackRoutes.js";
 import { requireAuth } from "../middleware/authMiddleware.js";
 import { createSupabaseClient, supabase } from "../config/supabase.js";
 import { getEmailLinkForwardPath } from "../utils/authUtils.js";
@@ -111,6 +112,9 @@ router.use("/cookbooks", cookbookRoutes);
 
 // Meal plan routes (REW-63)
 router.use("/meal-plans", mealPlanRoutes);
+
+// Authenticated Help & Feedback intake (REW-70)
+router.use("/help-feedback", helpFeedbackRoutes);
 
 // API routes for categories, tags, likes, and meal plans
 router.use("/api/categories", categoryRoutes);
