@@ -30,6 +30,7 @@ To set up the database in your Supabase project, follow these steps:
    | 11 | `011_create_meal_plans_table.sql` | Meal plans table (private, per-user, dated recipe collections) with owner-only RLS (REW-63) |
    | 12 | `012_create_meal_plan_recipes_table.sql` | Meal-plan-recipes junction table with plan-ownership + own-or-published-recipe RLS on INSERT (REW-63) |
    | 13 | `013_public_recipe_card_metadata.sql` | Add public SELECT policies for published recipe categories/tags and their associations (REW-59) |
+   | 14 | `014_create_help_feedback_submissions_table.sql` | Authenticated feedback intake with owner-bound INSERT-only RLS (REW-70) |
 
 4. **Verify the Setup**
    - Go to "Table Editor" in the left sidebar
@@ -44,6 +45,7 @@ To set up the database in your Supabase project, follow these steps:
      - `cookbook_recipes`
      - `meal_plans`
      - `meal_plan_recipes`
+     - `help_feedback_submissions`
 
 ---
 
@@ -202,6 +204,10 @@ Junction table linking meal plans to recipes (many-to-many) — a single recipe 
 
 Consumed by `GET/POST /meal-plans*` (`src/routes/mealPlanRoutes.js`), the "My Meal Plans" list/detail pages, the bulk recipe picker (`/meal-plans/:id/add-recipes`), and the shared "Add to Meal Plan" modal (`views/partials/meal-plan-modal.ejs`, backed by `src/routes/mealPlanApiRoutes.js` at `/api/meal-plans*`). See [Meal Plans API](../docs/api/meal-plans.md).
 
+### help_feedback_submissions (REW-70)
+
+Durable submission-time snapshots with `id`, `user_id`, contact name/email, category, subject, message, initial `new` status, and timestamps. Text constraints mirror the application limits: name 120, email 254, subject 200, and message 5,000 characters. The user foreign key intentionally uses PostgreSQL's default `NO ACTION`; live account-deletion behavior remains to be verified.
+
 ---
 
 ## Security
@@ -253,6 +259,11 @@ Migration 013 adds four SELECT policies and SELECT grants, with no table or colu
 - **INSERT requires plan ownership PLUS a recipe-visibility check that differs from `cookbook_recipes`:** `(recipes.user_id = auth.uid() OR recipes.status = 'published')` — a user can add their own recipe (any status) or any other user's published recipe, but **not** another user's draft/unpublished recipe. A direct insert attempt as another authenticated user targeting a draft recipe they don't own is rejected by Postgres even if application code were buggy. This mirrors the visibility rule already used by `recipe_likes`, not the ownership-only rule used by `cookbook_recipes`.
 - No UPDATE policy needed for membership rows, same reasoning as `recipe_likes`/`cookbook_recipes` — if `planned_servings` becomes user-editable in a future ticket (REW-26), an UPDATE policy scoped the same way as SELECT/DELETE will need to be added then
 
+### help_feedback_submissions (REW-70)
+- Authenticated INSERT requires `user_id = auth.uid()` and `status = 'new'`.
+- Ordinary users have no SELECT, UPDATE, or DELETE policy. REW-71 owns administrator access.
+- Live owner/mismatched-owner and ordinary-user policy verification remains pending.
+
 ---
 
 ## Indexes
@@ -276,6 +287,8 @@ Performance indexes are created on:
 - `meal_plans.(user_id, start_date)` - Composite index to cheaply support a future "upcoming/past plans" sort on the list page
 - `meal_plan_recipes.meal_plan_id` - Fast "recipes in this plan" lookups
 - `meal_plan_recipes.recipe_id` - Fast "which plans contain this recipe" lookups (the "Add to Meal Plan" modal's membership check)
+- `help_feedback_submissions.created_at` (descending) - Chronological intake ordering
+- `help_feedback_submissions.(status, created_at)` - Status-filtered queue ordering for REW-71
 
 ---
 
@@ -294,6 +307,7 @@ Performance indexes are created on:
 - **Meal plan cascade behavior (REW-63):** deleting a meal plan (`ON DELETE CASCADE` on `meal_plan_recipes.meal_plan_id`) removes only its `meal_plan_recipes` membership rows — it never touches `recipes`, satisfying "deleting a meal plan does not delete any recipes." Deleting a recipe cascades via `ON DELETE CASCADE` on `meal_plan_recipes.recipe_id` and silently removes it from any meal plans (and cookbooks) it was in — the same junction-table behavior as `cookbook_recipes`, intentional and not a regression.
 - Meal plans can contain a mix of the owner's own draft and published recipes, **and** any other user's published recipes — meal plan membership does not require recipe ownership, unlike cookbook membership. If a recipe added to someone else's plan while published is later reverted to draft by its owner, existing `meal_plan_recipes` rows referencing it are **not** automatically removed (same known-gap pattern already documented above for `recipe_likes`); this edge case was not in scope for REW-63.
 - `meal_plan_recipes.planned_servings` is schema-only in this ticket (REW-63) — no route or view reads or writes it yet. It exists purely so REW-26 (grocery list generation) can be built on top of `meal_plans`/`meal_plan_recipes` without a further migration.
+- **REW-70 deployment:** apply migration 014 after migration 013. Live migration, RLS, account-delete `NO ACTION`, and successful storage/refresh checks remain pending.
 
 ---
 

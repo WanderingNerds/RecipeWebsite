@@ -16,7 +16,7 @@ const renderDashboard = () => ejs.renderFile(dashboardView, {
 
 const cardPattern = /<a class="quick-action-card[^"]*" href="([^"]+)">([\s\S]*?)<\/a>/g;
 
-test('dashboard renders the four required full-card destinations in source order', async () => {
+test('dashboard renders the five required full-card destinations in source order', async () => {
   const html = await renderDashboard();
   const cards = [...html.matchAll(cardPattern)];
   const expectedCards = [
@@ -24,6 +24,7 @@ test('dashboard renders the four required full-card destinations in source order
     ['/cookbooks', 'My Cookbooks'],
     ['/recipes/liked', 'My Favorites'],
     ['/meal-plans', 'My Meal Plans'],
+    ['/help-feedback', 'Help &amp; Feedback'],
   ];
 
   assert.equal(cards.length, expectedCards.length);
@@ -41,7 +42,7 @@ test('each quick action uses one card-level anchor with no nested interactive co
   assert.ok(grid, 'quick actions grid should render');
 
   const cards = [...html.matchAll(cardPattern)];
-  assert.equal((grid[1].match(/<a\b/g) || []).length, 4);
+  assert.equal((grid[1].match(/<a\b/g) || []).length, 5);
   for (const [, , contents] of cards) {
     assert.doesNotMatch(contents, /<(?:a|button|input|select|textarea)\b/);
   }

@@ -90,6 +90,15 @@ All `/cookbooks*` routes require auth and are private to the owner (no sharing â
 
 All `/meal-plans*` page routes require auth and redirect to login if unauthenticated, consistent with `/cookbooks*`. All `/api/meal-plans*` routes require auth and return JSON `401` if unauthenticated, consistent with `/api/likes*` (there is no anonymous-GET case for meal plans). Mutation endpoints on both surfaces share a 30-requests/minute-per-user rate limit. Meal plans are private to their owner (RLS-enforced, no sharing), unlike Cookbooks' owner-only recipe rule â€” a meal plan can contain the owner's own recipes (any status) *or* any other user's published recipes, mirroring `recipe_likes`' visibility rule. See [Meal Plans API](meal-plans.md) for full details, including the RLS enforcement and two non-blocking reviewer-flagged follow-ups.
 
+### Help & Feedback (REW-70)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/help-feedback` | Render the authenticated form with account contact defaults |
+| POST | `/help-feedback` | Validate and store one owner-bound submission, then redirect |
+
+See [Help & Feedback](help-feedback.md) for validation, RLS, and pending live verification.
+
 ### Categories
 
 | Method | Endpoint | Description |
@@ -132,6 +141,7 @@ All `/meal-plans*` page routes require auth and redirect to login if unauthentic
 - [Recipe Likes API](recipe-likes.md) - `/api/likes/:recipeId` endpoints, the My Recipes favorite control, and the draft-recipe restriction (REW-21, REW-55)
 - [Cookbooks API](cookbooks.md) - `/cookbooks*` endpoints, RLS-enforced privacy, and the recipe view "Save to Cookbook(s)" integration (REW-62)
 - [Meal Plans API](meal-plans.md) - `/meal-plans*` and `/api/meal-plans*` endpoints, the shared "Add to Meal Plan" modal, and the own-or-published recipe visibility rule (REW-63)
+- [Help & Feedback](help-feedback.md) - authenticated form routes, validation, durable intake, and RLS boundaries (REW-70)
 - [Categories and Tags](../CATEGORIES_AND_TAGS.md) - Full categories/tags documentation
 - [Email Confirmation Flow](email-confirmation.md) - Email verification and callback handling (REW-41); also documents the Forgot Password / Account Recovery flow that supersedes the standalone resend page (REW-54)
 
