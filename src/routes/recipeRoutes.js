@@ -8,6 +8,7 @@ import { parseIngredients } from "../utils/ingredientParser.js";
 import { resolveScaling, scaleIngredients, QUICK_SCALE_FACTORS } from "../utils/ingredientScaler.js";
 import { getAccountDisplayName } from "../utils/userUtils.js";
 import { csrfProtection } from "../middleware/csrfMiddleware.js";
+import { assignRecipeToMealPlan } from "../utils/mealPlanAssignment.js";
 
 const router = Router();
 
@@ -265,12 +266,23 @@ router.get("/new", requireAuth, async (req, res) => {
       .eq("user_id", req.user.id)
       .order("name", { ascending: true });
 
+    const { data: mealPlans, error: mealPlansError } = await supabaseClient
+      .from("meal_plans")
+      .select("id, title, start_date, end_date")
+      .eq("user_id", req.user.id)
+      .order("start_date", { ascending: true });
+
+    if (mealPlansError) {
+      console.error("Error fetching meal plans for recipe form:", mealPlansError);
+    }
+
     res.render("recipes/new", {
       title: "Add New Recipe",
       categories: categories || [],
       userTags: userTags || [],
       selectedCategories: [],
       selectedTags: [],
+      mealPlans: mealPlansError ? [] : (mealPlans || []),
       accountDisplayName: getAccountDisplayName(req.user)
     });
   } catch (error) {
@@ -280,8 +292,9 @@ router.get("/new", requireAuth, async (req, res) => {
   }
 });
 
-// POST /recipes - Create a new recipe
-router.post("/", requireAuth, uploadLimiter, upload.single("photo"), csrfProtection, async (req, res) => {
+// POST /recipes - Create a new recipe. Exported for behavior-level route tests;
+// production routing supplies the normal request-scoped client factory.
+export async function handleRecipeCreate(req, res, { createClient = createSupabaseClient } = {}) {
   try {
     const {
       title,
@@ -296,6 +309,7 @@ router.post("/", requireAuth, uploadLimiter, upload.single("photo"), csrfProtect
       action, // 'draft' or 'publish'
       categories,
       tags,
+      mealPlanId,
     } = req.body;
 
     // Validate required fields
@@ -305,7 +319,7 @@ router.post("/", requireAuth, uploadLimiter, upload.single("photo"), csrfProtect
     }
 
     // Create Supabase client with user's access token
-    const supabaseClient = createSupabaseClient(req.accessToken);
+    const supabaseClient = createClient(req.accessToken);
 
     // Process uploaded image if present
     let photoUrl = null;
@@ -367,19 +381,35 @@ router.post("/", requireAuth, uploadLimiter, upload.single("photo"), csrfProtect
     const tagNames = tags ? (typeof tags === 'string' ? tags.split(',') : tags) : [];
     await saveRecipeTags(supabaseClient, data.id, req.user.id, tagNames);
 
+    const assignment = await assignRecipeToMealPlan(supabaseClient, {
+      mealPlanId,
+      recipeId: data.id,
+      userId: req.user.id,
+    });
+
     // Success message based on action
     const successMessage = action === 'publish'
       ? "Recipe published successfully!"
       : "Recipe saved as draft!";
 
-    req.flash("success", successMessage);
+    const fullSuccessMessage = assignment.status === "assigned"
+      ? `${successMessage} Added to ${assignment.mealPlanTitle}.`
+      : successMessage;
+
+    req.flash("success", fullSuccessMessage);
+    if (assignment.status === "failed") {
+      console.error("Meal plan assignment failed after manual recipe creation");
+      req.flash("error", "Recipe saved, but it could not be added to the selected meal plan.");
+    }
     res.redirect("/recipes");
   } catch (error) {
     console.error("Error in recipe creation:", error);
     req.flash("error", "An unexpected error occurred");
     res.redirect("/recipes/new");
   }
-});
+}
+
+router.post("/", requireAuth, uploadLimiter, upload.single("photo"), csrfProtection, (req, res) => handleRecipeCreate(req, res));
 
 // GET /recipes - List all recipes for the current user
 router.get("/", requireAuth, async (req, res) => {

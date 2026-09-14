@@ -13,6 +13,7 @@ import { createSupabaseClient } from "../config/supabase.js";
 import { importRecipe, SUPPORTED_MIME_TYPES, sanitizeUrl } from "../utils/recipeImporter.js";
 import { getAccountDisplayName } from "../utils/userUtils.js";
 import { csrfProtection } from "../middleware/csrfMiddleware.js";
+import { assignRecipeToMealPlan } from "../utils/mealPlanAssignment.js";
 
 const router = Router();
 
@@ -49,7 +50,25 @@ const importUpload = multer({
  * GET /recipes/import
  * Render the import page with upload form
  */
-router.get("/", requireAuth, (req, res) => {
+export async function handleImportForm(req, res, { createClient = createSupabaseClient } = {}) {
+  let mealPlans = [];
+  try {
+    const supabaseClient = createClient(req.accessToken);
+    const { data, error } = await supabaseClient
+      .from("meal_plans")
+      .select("id, title, start_date, end_date")
+      .eq("user_id", req.user.id)
+      .order("start_date", { ascending: true });
+
+    if (error) {
+      console.error("Error fetching meal plans for import form:", error);
+    } else {
+      mealPlans = data || [];
+    }
+  } catch (error) {
+    console.error("Error loading meal plans for import form:", { name: error?.name });
+  }
+
   res.render("recipes/import", {
     title: "Import Recipe",
     supportedFormats: [
@@ -58,8 +77,11 @@ router.get("/", requireAuth, (req, res) => {
       { extension: ".jpg/.png/.webp", description: "Recipe image (OCR)" },
     ],
     accountDisplayName: getAccountDisplayName(req.user),
+    mealPlans,
   });
-});
+}
+
+router.get("/", requireAuth, (req, res) => handleImportForm(req, res));
 
 /**
  * POST /recipes/import/parse
@@ -136,7 +158,7 @@ router.post("/check-title", requireAuth, async (req, res) => {
  * POST /recipes/import/save
  * Save the imported recipe after user confirmation
  */
-router.post("/save", requireAuth, async (req, res) => {
+export async function handleImportSave(req, res, { createClient = createSupabaseClient } = {}) {
   try {
     const {
       title,
@@ -149,6 +171,7 @@ router.post("/save", requireAuth, async (req, res) => {
       servings,
       sourceUrl,
       action, // 'draft' or 'publish'
+      mealPlanId,
     } = req.body;
 
     // Validate required fields
@@ -160,7 +183,7 @@ router.post("/save", requireAuth, async (req, res) => {
       return res.status(400).json({ error: "Instructions are required" });
     }
 
-    const supabaseClient = createSupabaseClient(req.accessToken);
+    const supabaseClient = createClient(req.accessToken);
 
     // Check for duplicate title
     const { data: existingRecipe, error: checkError } = await supabaseClient
@@ -225,15 +248,35 @@ router.post("/save", requireAuth, async (req, res) => {
       return res.status(500).json({ error: "Failed to save recipe. Please try again." });
     }
 
+    const assignment = await assignRecipeToMealPlan(supabaseClient, {
+      mealPlanId,
+      recipeId: data.id,
+      userId: req.user.id,
+    });
+
+    const baseMessage = action === "publish" ? "Recipe imported and published!" : "Recipe imported as draft!";
+    const message = assignment.status === "assigned"
+      ? `${baseMessage} Added to ${assignment.mealPlanTitle}.`
+      : baseMessage;
+
+    req.flash("success", message);
+    if (assignment.status === "failed") {
+      console.error("Meal plan assignment failed after recipe import");
+      req.flash("error", "Recipe saved, but it could not be added to the selected meal plan.");
+    }
+
     res.json({
       success: true,
       recipeId: data.id,
-      message: action === "publish" ? "Recipe imported and published!" : "Recipe imported as draft!",
+      message,
+      mealPlanAssignment: assignment,
     });
   } catch (error) {
     console.error("Import save error:", error);
     res.status(500).json({ error: "An unexpected error occurred" });
   }
-});
+}
+
+router.post("/save", requireAuth, (req, res) => handleImportSave(req, res));
 
 export default router;

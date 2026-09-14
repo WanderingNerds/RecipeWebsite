@@ -126,6 +126,22 @@
         <textarea name="notes" rows="3" style="background: white; width: 100%; padding: 0.75rem 1rem; border: 1px solid var(--border-color); border-radius: var(--radius); font-size: 1rem; font-family: inherit; resize: vertical;" placeholder="This freezes well for up to 3 months. Swap butter for olive oil for a dairy-free version."></textarea>
       </div>
 
+      <!-- Optional meal plan assignment -->
+      <div class="form-group" style="margin-bottom: 1.5rem;">
+        <label for="mealPlanId" style="font-weight: 600;">Add to a meal plan (optional)</label>
+        <% if (mealPlans.length) { %>
+          <select id="mealPlanId" name="mealPlanId" style="width: 100%; padding: 0.75rem 1rem; border: 1px solid var(--border-color); border-radius: var(--radius); font-size: 1rem;">
+            <option value="">Don't add to a meal plan</option>
+            <% mealPlans.forEach(mealPlan => { %>
+              <option value="<%= mealPlan.id %>"><%= mealPlan.title %> (<%= mealPlan.start_date %> – <%= mealPlan.end_date %>)</option>
+            <% }); %>
+          </select>
+          <p style="font-size: 0.875rem; color: var(--text-muted); margin-top: 0.5rem;">The recipe will be saved first, then added to the selected plan.</p>
+        <% } else { %>
+          <p style="font-size: 0.875rem; color: var(--text-muted); margin-top: 0.5rem;">You don't have any meal plans yet. <a href="/meal-plans/new">Create a meal plan</a> if you'd like to organize this recipe later.</p>
+        <% } %>
+      </div>
+
       <!-- Submit buttons -->
       <div style="display: flex; justify-content: flex-end; gap: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
         <button type="submit" name="action" value="draft" class="btn btn-outline">Save as draft</button>
