@@ -136,6 +136,25 @@ test("the print button exists with a script hook and no inline handler", async (
   assert.match(client, /window\.print\(\)/);
 });
 
+test("categories render inside one wrapper for the print column layout", async () => {
+  const html = await renderList(sampleList());
+  const start = html.indexOf('<div class="grocery-categories">');
+  const end = html.lastIndexOf("</div>");
+
+  assert.ok(start !== -1, "the print CSS needs a single element to apply column-count to");
+  assert.ok(html.indexOf(">Produce</h2>", start) > start && html.indexOf(">Produce</h2>", start) < end);
+});
+
+test("checking an item off hides it via the native hidden attribute, with no inline handler", async () => {
+  const html = await renderList(sampleList());
+  assert.doesNotMatch(html, /onchange|onclick/);
+
+  const client = await readFile(new URL("../../public/js/meal-plans.js", import.meta.url), "utf8");
+  assert.match(client, /initializeGroceryListChecklist/);
+  assert.match(client, /closest\(["']\.grocery-item-checkbox["']\)/);
+  assert.match(client, /item\.hidden = true/);
+});
+
 test("the plan detail page links to the grocery list only when it has recipes", async () => {
   const withRecipes = await renderPlanView([
     { id: "r1", title: "Pancakes", status: "published" },

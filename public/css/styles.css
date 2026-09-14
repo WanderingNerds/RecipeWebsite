@@ -3088,8 +3088,13 @@ a.pagination-link:hover {
 }
 
 /* ── Printing ──────────────────────────────────────────────────────────────
-   The grocery list is meant to be carried around the store, so printing drops
-   the site chrome and every control, and keeps a category with its items. */
+   The grocery list is meant to be carried around the store: printing drops
+   the site chrome and every control, lays categories out in two condensed
+   columns, and keeps a heading with its first item -- but deliberately does
+   NOT forbid a long category from splitting across a page/column. Forcing an
+   entire category to stay together is what used to blow this out to 4 pages:
+   one long "Produce" list couldn't fit in the remaining space, so it (and
+   everything visually below it) got pushed to a mostly-blank next page. */
 @media print {
   .navbar,
   .footer,
@@ -3115,31 +3120,74 @@ a.pagination-link:hover {
     padding: 0 !important;
   }
 
+  .grocery-list-header {
+    margin-bottom: 0.5rem;
+  }
+
+  .grocery-list-title {
+    font-size: 1.15rem;
+    margin-bottom: 0.1rem;
+  }
+
+  .grocery-list-plan,
+  .grocery-list-dates,
+  .grocery-list-summary {
+    font-size: 0.75rem;
+    margin-bottom: 0.1rem;
+  }
+
+  .grocery-list-notice {
+    margin-top: 0.35rem;
+    padding: 0.35rem 0.5rem;
+  }
+
+  /* Two columns roughly halve the page count for a typical list; a category
+     that doesn't fit the remaining column space simply continues in the
+     next column/page instead of dragging the whole page down with it. */
+  .grocery-categories {
+    column-count: 2;
+    column-gap: 1.5rem;
+  }
+
   .grocery-category {
     border: 0;
-    break-inside: avoid;
-    padding: 0 0 0.5rem;
-    page-break-inside: avoid;
+    break-inside: avoid-column;
+    margin-bottom: 0.5rem;
+    padding: 0 0 0.15rem;
   }
 
   .grocery-category-heading {
     border-bottom: 1px solid #000;
     break-after: avoid;
+    font-size: 0.9rem;
+    margin: 0 0 0.15rem;
+    padding-bottom: 0.1rem;
     page-break-after: avoid;
   }
 
   .grocery-item {
     border-top: 0;
     break-inside: avoid;
+    font-size: 0.75rem;
+    padding: 0.1rem 0;
     page-break-inside: avoid;
+  }
+
+  .grocery-item-label {
+    gap: 0.4rem;
   }
 
   .grocery-item-checkbox {
     -webkit-appearance: none;
     appearance: none;
     border: 1px solid #000;
-    height: 0.9rem;
-    width: 0.9rem;
+    height: 0.7rem;
+    width: 0.7rem;
+  }
+
+  .grocery-item-hint,
+  .grocery-item-recipes {
+    font-size: 0.65rem;
   }
 
   .grocery-item-hint,
@@ -3147,5 +3195,12 @@ a.pagination-link:hover {
   .grocery-list-dates,
   .grocery-list-summary {
     color: #333 !important;
+  }
+
+  /* Checked off on screen -> left off the printout entirely (see
+     initializeGroceryListChecklist in meal-plans.js). Belt-and-suspenders:
+     the `hidden` attribute it sets already does this on its own. */
+  .grocery-item:has(.grocery-item-checkbox:checked) {
+    display: none !important;
   }
 }

@@ -37,32 +37,34 @@
       <a href="/meal-plans/<%= mealPlan.id %>" class="btn btn-primary">Back to meal plan</a>
     </div>
   <% } else { %>
-    <% groceryList.categories.forEach(function(category) { %>
-      <section class="grocery-category">
-        <h2 class="grocery-category-heading"><%= category.label %></h2>
-        <ul class="grocery-item-list">
-          <% category.items.forEach(function(item) { %>
-            <li class="grocery-item">
-              <label class="grocery-item-label">
-                <input type="checkbox" class="grocery-item-checkbox">
-                <span class="grocery-item-text">
-                  <% if (item.amounts.length > 0) { %>
-                    <span class="grocery-item-amount"><%= item.amounts.join(' + ') %></span>
-                  <% } %>
-                  <span class="grocery-item-name"><%= item.name %></span>
-                  <% if (item.needsCheck && item.amounts.length === 0) { %>
-                    <span class="grocery-item-hint">(check recipe)</span>
-                  <% } %>
-                  <span class="grocery-item-recipes">
-                    <%= item.recipes.map(function(recipe) { return recipe.title; }).join(', ') %>
+    <div class="grocery-categories">
+      <% groceryList.categories.forEach(function(category) { %>
+        <section class="grocery-category">
+          <h2 class="grocery-category-heading"><%= category.label %></h2>
+          <ul class="grocery-item-list">
+            <% category.items.forEach(function(item) { %>
+              <li class="grocery-item">
+                <label class="grocery-item-label">
+                  <input type="checkbox" class="grocery-item-checkbox" title="Check off to remove from the list">
+                  <span class="grocery-item-text">
+                    <% if (item.amounts.length > 0) { %>
+                      <span class="grocery-item-amount"><%= item.amounts.join(' + ') %></span>
+                    <% } %>
+                    <span class="grocery-item-name"><%= item.name %></span>
+                    <% if (item.needsCheck && item.amounts.length === 0) { %>
+                      <span class="grocery-item-hint">(check recipe)</span>
+                    <% } %>
+                    <span class="grocery-item-recipes">
+                      <%= item.recipes.map(function(recipe) { return recipe.title; }).join(', ') %>
+                    </span>
                   </span>
-                </span>
-              </label>
-            </li>
-          <% }); %>
-        </ul>
-      </section>
-    <% }); %>
+                </label>
+              </li>
+            <% }); %>
+          </ul>
+        </section>
+      <% }); %>
+    </div>
   <% } %>
 
 </div>

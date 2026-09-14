@@ -12,6 +12,7 @@
 document.addEventListener("DOMContentLoaded", () => {
   initializeMealPlanModal();
   initializeGroceryListPrint();
+  initializeGroceryListChecklist();
 });
 
 // Grocery list print button (REW-26). Lives here rather than in an inline
@@ -24,6 +25,25 @@ function initializeGroceryListPrint() {
 
   printButton.addEventListener("click", () => {
     window.print();
+  });
+}
+
+// Checking an item off the grocery list means "I already have this" -- so it
+// is removed from view (and therefore from the printout, which never renders
+// a hidden element) rather than just marked done. One-way and unpersisted,
+// same as every other piece of state on this page (see REW-26 plan): a
+// refresh brings everything back. Delegated to the list container instead of
+// one listener per checkbox since the page can render dozens of items.
+function initializeGroceryListChecklist() {
+  const list = document.querySelector(".grocery-categories");
+  if (!list) return;
+
+  list.addEventListener("change", (event) => {
+    const checkbox = event.target.closest(".grocery-item-checkbox");
+    if (!checkbox || !checkbox.checked) return;
+
+    const item = checkbox.closest(".grocery-item");
+    if (item) item.hidden = true;
   });
 }
 
