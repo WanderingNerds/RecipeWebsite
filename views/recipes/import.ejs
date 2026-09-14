@@ -116,8 +116,9 @@
             <input type="text" id="importPrepTime" name="prepTime" placeholder="15 min" style="width: 100%; padding: 0.5rem 0.75rem; border: 1px solid var(--border-color); border-radius: var(--radius);">
           </div>
           <div class="form-group">
-            <label for="importCookTime" style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Cook Time</label>
-            <input type="text" id="importCookTime" name="cookTime" placeholder="40 min" style="width: 100%; padding: 0.5rem 0.75rem; border: 1px solid var(--border-color); border-radius: var(--radius);">
+            <label for="importCookTime" style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Cook Time <span style="color: var(--error-color);">*</span></label>
+            <input type="text" id="importCookTime" name="cookTime" placeholder="40 min" required aria-required="true" aria-describedby="importCookTimeError" style="width: 100%; padding: 0.5rem 0.75rem; border: 1px solid var(--border-color); border-radius: var(--radius);">
+            <span class="field-error-message" id="importCookTimeError">Required</span>
           </div>
           <div class="form-group">
             <label for="importServings" style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Servings</label>

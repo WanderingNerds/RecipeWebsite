@@ -16,6 +16,12 @@ import { csrfProtection } from "../middleware/csrfMiddleware.js";
 
 const router = Router();
 
+export function validateImportCookTime(cookTime) {
+  return typeof cookTime === "string" && cookTime.trim()
+    ? null
+    : "Cook Time is required";
+}
+
 // Rate limiter for imports: 5 imports per 15 minutes
 const importLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -136,9 +142,10 @@ router.post("/check-title", requireAuth, async (req, res) => {
  * POST /recipes/import/save
  * Save the imported recipe after user confirmation
  */
-router.post("/save", requireAuth, async (req, res) => {
-  try {
-    const {
+export function createSaveImportHandler({ createClient = createSupabaseClient } = {}) {
+  return async (req, res) => {
+    try {
+      const {
       title,
       author,
       description,
@@ -149,7 +156,7 @@ router.post("/save", requireAuth, async (req, res) => {
       servings,
       sourceUrl,
       action, // 'draft' or 'publish'
-    } = req.body;
+      } = req.body;
 
     // Validate required fields
     if (!title || !title.trim()) {
@@ -160,7 +167,12 @@ router.post("/save", requireAuth, async (req, res) => {
       return res.status(400).json({ error: "Instructions are required" });
     }
 
-    const supabaseClient = createSupabaseClient(req.accessToken);
+    const cookTimeError = validateImportCookTime(cookTime);
+    if (cookTimeError) {
+      return res.status(400).json({ error: cookTimeError });
+    }
+
+    const supabaseClient = createClient(req.accessToken);
 
     // Check for duplicate title
     const { data: existingRecipe, error: checkError } = await supabaseClient
@@ -205,7 +217,7 @@ router.post("/save", requireAuth, async (req, res) => {
       ingredients: ingredients?.trim() || null,
       instructions: instructions.trim(),
       prep_time: prepTime?.trim() || null,
-      cook_time: cookTime?.trim() || null,
+      cook_time: cookTime.trim(),
       servings: servings?.trim() || null,
       notes: description?.trim() || null, // Use description as notes
       source_url: sanitizedSourceUrl,
@@ -230,10 +242,13 @@ router.post("/save", requireAuth, async (req, res) => {
       recipeId: data.id,
       message: action === "publish" ? "Recipe imported and published!" : "Recipe imported as draft!",
     });
-  } catch (error) {
-    console.error("Import save error:", error);
-    res.status(500).json({ error: "An unexpected error occurred" });
-  }
-});
+    } catch (error) {
+      console.error("Import save error:", error);
+      res.status(500).json({ error: "An unexpected error occurred" });
+    }
+  };
+}
+
+router.post("/save", requireAuth, createSaveImportHandler());
 
 export default router;

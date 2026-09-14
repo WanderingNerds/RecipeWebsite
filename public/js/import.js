@@ -31,6 +31,7 @@ document.addEventListener("DOMContentLoaded", function () {
   const importSourceUrl = document.getElementById("importSourceUrl");
   const importDescription = document.getElementById("importDescription");
   const titleError = document.getElementById("titleError");
+  const cookTimeError = document.getElementById("importCookTimeError");
   const warningsSection = document.getElementById("warningsSection");
   const warningsList = document.getElementById("warningsList");
   const confidenceFill = document.getElementById("confidenceFill");
@@ -55,6 +56,14 @@ document.addEventListener("DOMContentLoaded", function () {
 
   // Title validation debounce timer
   let titleValidationTimer = null;
+
+  function setCookTimeError(hasError) {
+    const group = importCookTime.closest(".form-group");
+    if (!group || !cookTimeError) return;
+
+    group.classList.toggle("has-error", hasError);
+    importCookTime.setAttribute("aria-invalid", hasError ? "true" : "false");
+  }
 
   /**
    * Show error message
@@ -205,8 +214,11 @@ document.addEventListener("DOMContentLoaded", function () {
     uploadSection.style.display = "none";
     previewSection.style.display = "block";
 
-    // Focus on title for immediate editing
-    importTitle.focus();
+    const cookTimeMissing = !importCookTime.value.trim();
+    setCookTimeError(cookTimeMissing);
+
+    // Prompt immediately when extraction did not provide required Cook Time.
+    (cookTimeMissing ? importCookTime : importTitle).focus();
 
     // Validate title
     validateTitle(recipe.title);
@@ -277,6 +289,12 @@ document.addEventListener("DOMContentLoaded", function () {
     if (!importInstructions.value.trim()) {
       alert("Instructions are required");
       importInstructions.focus();
+      return;
+    }
+
+    if (!importCookTime.value.trim()) {
+      setCookTimeError(true);
+      importCookTime.focus();
       return;
     }
 
@@ -384,6 +402,27 @@ document.addEventListener("DOMContentLoaded", function () {
         validateTitle(importTitle.value);
       }, 500);
     });
+  }
+
+  if (importCookTime) {
+    importCookTime.addEventListener("input", function () {
+      if (importCookTime.value.trim()) {
+        setCookTimeError(false);
+      }
+    });
+  }
+
+  // Native constraint validation prevents the submit event from firing. Capture
+  // Cook Time's non-bubbling invalid event so both submit buttons still expose
+  // the same custom inline state while retaining native required semantics.
+  if (importForm && importCookTime) {
+    importForm.addEventListener("invalid", function (event) {
+      if (event.target === importCookTime) {
+        event.preventDefault();
+        setCookTimeError(true);
+        importCookTime.focus();
+      }
+    }, true);
   }
 
   // Form submission
