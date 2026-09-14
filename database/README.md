@@ -34,6 +34,7 @@ To set up the database in your Supabase project, follow these steps:
    | 15 | `015_add_admin_feedback_management.sql` | Admin profiles, workflow/assignment, narrow grants, and admin-only RLS (REW-71) |
    | 16 | `016_backfill_rew78_admin_profiles.sql` | Idempotently provision Andrew and Victoria's already-authorized admin profiles (REW-78) |
    | 17 | `017_add_feedback_progress_comments.sql` | Append-only, admin-only feedback progress history with durable author snapshots (REW-80) |
+   | 18 | `018_add_recipe_clone_provenance.sql` | Immutable clone lineage and durable original-author attribution (REW-84) |
 
 4. **Verify the Setup**
    - Go to "Table Editor" in the left sidebar
@@ -65,6 +66,8 @@ The main recipes table with the following columns:
 | `user_id` | UUID | Foreign Key to auth.users |
 | `title` | TEXT | Recipe title |
 | `author` | TEXT | Recipe author |
+| `cloned_from_recipe_id` | UUID | Nullable direct-source recipe reference; cleared if that source is deleted |
+| `original_author` | TEXT | Immutable, trimmed root-author snapshot for a cloned recipe |
 | `prep_time` | TEXT | Preparation time |
 | `cook_time` | TEXT | Cooking time |
 | `servings` | TEXT | Number of servings (free text, parsed for scaling) |
@@ -298,6 +301,7 @@ Migration 013 adds four SELECT policies and SELECT grants, with no table or colu
 Performance indexes are created on:
 - `recipes.user_id` - Fast user queries
 - `recipes.status` - Draft/published filtering
+- `recipes.cloned_from_recipe_id` - Direct clone-lineage lookups
 - `categories.slug` - Fast lookups by slug
 - `categories.display_order` - Efficient sorting
 - `tags.user_id` - Fast queries by user
@@ -324,9 +328,10 @@ Performance indexes are created on:
 ## Notes
 
 - `recipes.author` has no database-level default. When it arrives blank/missing on create (manual entry or import), the application defaults it to the logged-in user's account display name in the route handler, not via a SQL default or trigger — see [Recipe Author Default (REW-46)](../docs/api/recipe-author-default.md). Editing an existing recipe does not retroactively apply this default.
+- **Clone provenance (REW-84):** cloned recipes are inserted with both `cloned_from_recipe_id` (the direct source) and `original_author` (the root author's durable snapshot). Non-clones have both values null. The snapshot must be trimmed and 1–255 characters, and a fixed-search-path trigger rejects incomplete provenance at insert or attempts to rewrite either value later. The trigger runs as its migration owner so its narrow source-existence check cannot mistake an RLS-hidden source for a deleted one. Deleting a source sets only the direct reference to null; the snapshot remains so attribution survives. Migration 018 does not change recipe grants or RLS policies. After deployment, verify owner writes still obey existing RLS and that selecting a clone does not expose a private source row through the self-reference.
 - `recipes.prep_time` and `recipes.cook_time` remain nullable `TEXT` with no `NOT NULL` constraint. The manual "New Recipe"/"Edit Recipe" forms and their `POST` handlers require both values to be non-blank (REW-52), while the Import Recipe flow requires `cook_time` and keeps `prep_time` optional (REW-77). Enforcement is application-layer only, with no migration or historical-row backfill. Note: on the create/edit forms only, `cook_time` is labeled "Total Time" in the UI — the column itself was **not** renamed and there is no separate `total_time` column; see [Required Prep Time / Total Time (REW-52)](../docs/api/recipe-required-times.md) for the full rationale. The import and detail views display this same column as "Cook Time."
 - The `status` field defaults to 'draft' and accepts 'draft' or 'published'
-- Recipe forms describe `draft` as **Private** and `published` as **Public**. Missing or invalid visibility input fails closed to `draft`. Cloning copies only editable recipe text and category/tag selections into a new owner-scoped row; it never copies images, IDs, timestamps, likes, cookbook memberships, or meal-plan memberships, and always starts Private.
+- Recipe forms describe `draft` as **Private** and `published` as **Public**. Missing or invalid visibility input fails closed to `draft`. Add Recipe copies only allowlisted recipe text, the source URL, and category selections into a new owner-scoped row; it intentionally omits user-owned tags, images, IDs, timestamps, likes, cookbook memberships, and meal-plan memberships, and always starts Private.
 - The `difficulty` field accepts 'Easy', 'Medium', or 'Hard'
 - The `updated_at` field on recipes is automatically updated via a trigger
 - Tags with the same slug can exist for different users (unique per user_id)

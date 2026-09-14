@@ -30,6 +30,7 @@ All API endpoints require authentication unless otherwise noted. Authentication 
 | GET | `/recipes/:id/edit` | Get form data for editing a recipe (Prep Time and Total Time/`cookTime` are required, REW-52) |
 | POST | `/recipes/:id/update` | Update a recipe (rejects blank `prepTime`/`cookTime`, REW-52) |
 | POST | `/recipes/:id/delete` | Delete a recipe |
+| POST | `/recipes/:id/clone` | Add another user's Public recipe as a new Private, independently owned recipe (REW-84) |
 | GET | `/recipes/:id/scale` | Get scaled ingredient data (JSON) |
 
 ### Recipe Import (REW-12)
@@ -39,7 +40,6 @@ All API endpoints require authentication unless otherwise noted. Authentication 
 | GET | `/recipes/import` | Render import page with upload form (Author field pre-filled with account display name, REW-46) |
 | POST | `/recipes/import/parse` | Parse uploaded file, return JSON preview |
 | POST | `/recipes/import/save` | Save imported recipe after user confirmation (requires non-blank `cookTime`; accepts fail-closed Private/Public visibility and server-defaulted `author`) |
-| GET | `/recipes/:id/clone` | Prefill an authenticated, Private-by-default copy from an RLS-visible recipe (REW-85) |
 
 ### Recipe Likes / Favorites (REW-21, REW-55)
 
@@ -153,6 +153,7 @@ All management routes require `requireAdmin` and use the request-scoped access t
 - [Recipe Import - OCR/PDF Parsing](recipe-import-ocr-parsing.md) - Text extraction and parsing from PDFs and images
 - [Recipe Import Save API](recipe-import-save.md) - Authenticated draft/publish persistence and required Cook Time validation (REW-77)
 - [Recipe Visibility](recipe-visibility.md) - Private/Public mapping, fail-closed inputs, cloning, and public read enforcement (REW-85)
+- [Add Recipe / Cloning](recipe-cloning.md) - authenticated copy contract, immutable attribution, copied fields and relationship isolation (REW-84)
 - [Recipe Author Default](recipe-author-default.md) - Account-name defaulting on recipe create/import (REW-46)
 - [Required Prep Time / Total Time](recipe-required-times.md) - Required-field enforcement and the Cook Time → Total Time display rename (REW-52)
 - [Recipe Likes API](recipe-likes.md) - `/api/likes/:recipeId` endpoints, the My Recipes favorite control, and the draft-recipe restriction (REW-21, REW-55)

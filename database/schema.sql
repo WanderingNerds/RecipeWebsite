@@ -4,22 +4,41 @@
 -- Note: Supabase creates the auth.users table automatically
 -- You can access user data via auth.users() in RLS policies
 
--- Example: Future recipe tables (add when implementing recipe features)
+-- Reference shape for the recipes table after migrations 001, 002, 007, and 018.
 --
 -- CREATE TABLE public.recipes (
---     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+--     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
 --     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
 --     title TEXT NOT NULL,
---     description TEXT,
---     ingredients JSONB NOT NULL,
---     instructions JSONB NOT NULL,
---     prep_time INTEGER,
---     cook_time INTEGER,
---     servings INTEGER,
---     image_url TEXT,
---     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
---     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+--     author TEXT,
+--     prep_time TEXT,
+--     cook_time TEXT,
+--     servings TEXT,
+--     difficulty TEXT CHECK (difficulty IN ('Easy', 'Medium', 'Hard')),
+--     ingredients TEXT,
+--     instructions TEXT NOT NULL,
+--     notes TEXT,
+--     photo_url TEXT,
+--     status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'published')),
+--     created_at TIMESTAMPTZ DEFAULT NOW(),
+--     updated_at TIMESTAMPTZ DEFAULT NOW(),
+--     thumbnail_url TEXT,
+--     source_url TEXT,
+--     cloned_from_recipe_id UUID REFERENCES public.recipes(id) ON DELETE SET NULL,
+--     original_author TEXT CHECK (
+--         original_author IS NULL OR (
+--             original_author = btrim(original_author)
+--             AND char_length(original_author) BETWEEN 1 AND 255
+--         )
+--     )
 -- );
+--
+-- Clone provenance is supplied only when a row is created. Migration 018 adds
+-- an insert/update trigger that requires both provenance values at creation,
+-- makes them immutable afterward, and permits only the foreign key's
+-- ON DELETE SET NULL action while preserving original_author.
+-- CREATE INDEX recipes_cloned_from_recipe_id_idx
+--     ON public.recipes (cloned_from_recipe_id);
 --
 -- -- Enable Row Level Security
 -- ALTER TABLE public.recipes ENABLE ROW LEVEL SECURITY;

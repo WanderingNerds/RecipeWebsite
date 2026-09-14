@@ -11,6 +11,9 @@
         <% if (recipe.author) { %>
           <p style="color: var(--text-muted);">By <%= recipe.author %></p>
         <% } %>
+        <% if (recipe.original_author) { %>
+          <p style="color: var(--text-muted); font-size: 0.875rem;">Originally by <%= recipe.original_author %></p>
+        <% } %>
       </div>
       <div style="display: flex; align-items: center; gap: 1rem;">
         <span class="badge-published">Public</span>
@@ -40,8 +43,11 @@
         <% if (isOwner) { %>
           <a href="/recipes/<%= recipe.id %>/edit" class="btn btn-outline">Edit Recipe</a>
         <% } %>
-        <% if (user) { %>
-          <a href="/recipes/<%= recipe.id %>/clone" class="btn btn-outline">Clone Recipe</a>
+        <% if (user && !isOwner) { %>
+          <form action="/recipes/<%= recipe.id %>/clone" method="POST" style="margin: 0;">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+            <button type="submit" class="btn btn-outline">Add Recipe</button>
+          </form>
         <% } %>
       </div>
     </div>
