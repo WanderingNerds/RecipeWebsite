@@ -626,7 +626,8 @@ function createItem(key, name) {
     name,
     recipes: [],
     recipeIds: new Set(),
-    volume: null, // { ml, metric }
+    needsCheck: false,
+    volumeMl: null,
     weight: null, // { grams, metric }
     counts: new Map(), // unit ("" for a bare count) -> bucket
     extraAmounts: [], // measured amounts that could not be combined
@@ -691,13 +692,13 @@ function accumulate(item, row) {
   if (!hasQuantity) {
     // "Salt and pepper to taste" -- no number to add, so keep what was written.
     item.needsCheck = true;
-    pushVerbatim(item, row.note, true);
+    pushNote(item, row.note);
     return;
   }
 
   // A range ("2-3 cloves") cannot be summed without inventing a number.
   if (row.quantityMax !== null) {
-    pushVerbatim(item, formatAmount(row), false);
+    pushAmount(item, formatAmount(row));
     return;
   }
 
@@ -741,7 +742,7 @@ function accumulate(item, row) {
   }
 
   // Approximate amounts ("a pinch") and anything else stay as written.
-  pushVerbatim(item, formatAmount(row), false);
+  pushAmount(item, formatAmount(row));
 }
 
 /**
@@ -777,7 +778,7 @@ function renderAmounts(item) {
     if (amount) amounts.push(amount);
   }
 
-  amounts.push(...item.verbatim);
+  amounts.push(...item.extraAmounts, ...item.notes);
 
   return amounts;
 }
