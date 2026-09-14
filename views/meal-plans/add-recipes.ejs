@@ -17,9 +17,24 @@
   <% } else { %>
     <form action="/meal-plans/<%= mealPlan.id %>/add-recipes" method="POST">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-      <div style="background: var(--card-background); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; margin-bottom: 1.5rem;">
+      <div style="margin-bottom: 1rem;">
+        <label for="meal-plan-recipe-search" style="display: block; font-weight: 600; margin-bottom: 0.5rem;">Search recipes</label>
+        <div style="display: flex; align-items: center; gap: 0.75rem;">
+          <input
+            type="search"
+            id="meal-plan-recipe-search"
+            class="input"
+            placeholder="Search by recipe name"
+            autocomplete="off"
+            aria-controls="meal-plan-recipe-list"
+          >
+          <button type="button" id="meal-plan-recipe-search-clear" class="btn btn-outline" hidden>Clear search</button>
+        </div>
+        <p id="meal-plan-recipe-search-status" role="status" aria-live="polite" style="color: var(--text-muted); font-size: 0.875rem; margin: 0.5rem 0 0;"></p>
+      </div>
+      <div id="meal-plan-recipe-list" style="background: var(--card-background); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; margin-bottom: 1.5rem;">
         <% recipes.forEach(function(recipe, index) { %>
-          <label style="display: flex; align-items: center; gap: 1rem; padding: 1rem 1.5rem; cursor: <%= recipe.inMealPlan ? 'default' : 'pointer' %>; <%= index !== recipes.length - 1 ? 'border-bottom: 1px solid var(--border-color);' : '' %> <%= recipe.inMealPlan ? 'opacity: 0.6;' : '' %>">
+          <label data-recipe-search-item data-recipe-title="<%= recipe.title %>" style="display: flex; align-items: center; gap: 1rem; padding: 1rem 1.5rem; cursor: <%= recipe.inMealPlan ? 'default' : 'pointer' %>; <%= index !== recipes.length - 1 ? 'border-bottom: 1px solid var(--border-color);' : '' %> <%= recipe.inMealPlan ? 'opacity: 0.6;' : '' %>">
             <input
               type="checkbox"
               name="recipeIds"
@@ -39,6 +54,10 @@
           </label>
         <% }); %>
       </div>
+      <div id="meal-plan-recipe-search-empty" class="empty-state" hidden>
+        <h3>No recipes found</h3>
+        <p>Try a different recipe name or clear your search.</p>
+      </div>
 
       <div style="display: flex; justify-content: flex-end; gap: 1rem;">
         <a href="/meal-plans/<%= mealPlan.id %>" class="btn btn-outline">Cancel</a>
@@ -48,3 +67,4 @@
   <% } %>
 
 </div>
+<script type="module" src="/js/meal-plan-recipe-search.js"></script>
