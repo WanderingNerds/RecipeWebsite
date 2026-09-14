@@ -30,6 +30,7 @@ document.addEventListener("DOMContentLoaded", function () {
   const importServings = document.getElementById("importServings");
   const importSourceUrl = document.getElementById("importSourceUrl");
   const importDescription = document.getElementById("importDescription");
+  const importMealPlanId = document.getElementById("importMealPlanId");
   const titleError = document.getElementById("titleError");
   const cookTimeError = document.getElementById("importCookTimeError");
   const warningsSection = document.getElementById("warningsSection");
@@ -321,6 +322,7 @@ document.addEventListener("DOMContentLoaded", function () {
           cookTime: importCookTime.value.trim(),
           servings: importServings.value.trim(),
           sourceUrl: importSourceUrl.value.trim(),
+          mealPlanId: importMealPlanId ? importMealPlanId.value : "",
           action: action,
         }),
       });
@@ -340,7 +342,7 @@ document.addEventListener("DOMContentLoaded", function () {
       }
 
       // Success - redirect to recipes list
-      window.location.href = "/recipes?success=" + encodeURIComponent(data.message);
+      window.location.href = "/recipes";
     } catch (error) {
       console.error("Save error:", error);
       alert("Failed to save recipe. Please try again.");

@@ -136,6 +136,22 @@
           <textarea id="importDescription" name="description" rows="3" placeholder="Optional description or notes about this recipe..." style="width: 100%; padding: 0.75rem 1rem; border: 1px solid var(--border-color); border-radius: var(--radius); font-size: 1rem; font-family: inherit; resize: vertical;"></textarea>
         </div>
 
+        <!-- Optional meal plan assignment -->
+        <div class="form-group" style="margin-bottom: 1.5rem;">
+          <label for="importMealPlanId" style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Add to a meal plan (optional)</label>
+          <% if (mealPlans.length) { %>
+            <select id="importMealPlanId" name="mealPlanId" style="width: 100%; padding: 0.75rem 1rem; border: 1px solid var(--border-color); border-radius: var(--radius); font-size: 1rem;">
+              <option value="">Don't add to a meal plan</option>
+              <% mealPlans.forEach(mealPlan => { %>
+                <option value="<%= mealPlan.id %>"><%= mealPlan.title %> (<%= mealPlan.start_date %> – <%= mealPlan.end_date %>)</option>
+              <% }); %>
+            </select>
+            <p style="font-size: 0.875rem; color: var(--text-muted); margin-top: 0.5rem;">The imported recipe will be saved first, then added to the selected plan.</p>
+          <% } else { %>
+            <p style="font-size: 0.875rem; color: var(--text-muted);">You don't have any meal plans yet. <a href="/meal-plans/new">Create a meal plan</a> if you'd like to organize this recipe later.</p>
+          <% } %>
+        </div>
+
         <!-- Submit buttons -->
         <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
           <button type="button" id="startOverButton" class="btn btn-outline">
