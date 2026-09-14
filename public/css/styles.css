@@ -2978,3 +2978,329 @@ a.pagination-link:hover {
     grid-template-columns: 1fr;
   }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Grocery List (REW-26)
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.grocery-list-header {
+  margin-bottom: 2rem;
+}
+
+/* Screen never needs this -- the navbar already shows the Potluck brand on
+   every page. It exists purely for the printed page, which hides the
+   navbar; see @media print below. */
+.grocery-list-brand {
+  display: none;
+}
+
+.grocery-list-back {
+  color: var(--primary-color);
+  display: inline-block;
+  margin-bottom: 1rem;
+  text-decoration: none;
+}
+
+.grocery-list-title-row {
+  align-items: start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.grocery-list-title {
+  margin-bottom: 0.25rem;
+}
+
+.grocery-list-plan {
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+.grocery-list-dates,
+.grocery-list-summary {
+  color: var(--text-muted);
+  margin-bottom: 0.25rem;
+}
+
+.grocery-list-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+/* Small/Large controls the printed font size only (see
+   .grocery-list-page--font-large under @media print); this whole control is
+   itself dropped from the printout along with the rest of .grocery-list-actions. */
+.grocery-font-toggle {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-pill);
+  display: inline-flex;
+  padding: 0.2rem;
+}
+
+.grocery-font-option {
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  font-size: 0.875rem;
+  padding: 0.3rem 0.75rem;
+}
+
+.grocery-font-option:has(input:checked) {
+  background-color: var(--primary-color);
+  color: #fff;
+}
+
+.grocery-font-option input {
+  /* Kept in the accessibility tree (not `hidden`/`display: none`) for
+     keyboard and screen-reader users; the pill itself carries the visible
+     state via :has(input:checked) above. */
+  height: 1px;
+  position: absolute;
+  width: 1px;
+  overflow: hidden;
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
+.grocery-list-notice {
+  background-color: var(--color-surface-muted);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  margin-top: 1rem;
+  padding: 0.75rem 1rem;
+}
+
+.grocery-category {
+  background-color: var(--color-surface);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 1.5rem;
+  padding: 1.25rem 1.5rem;
+}
+
+.grocery-category-heading {
+  border-bottom: 1px solid var(--border-color);
+  font-size: 1.25rem;
+  margin: 0 0 0.75rem;
+  padding-bottom: 0.5rem;
+}
+
+.grocery-item-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.grocery-item {
+  border-top: 1px solid var(--border-color);
+  padding: 0.5rem 0;
+}
+
+.grocery-item:first-child {
+  border-top: 0;
+}
+
+.grocery-item-label {
+  align-items: baseline;
+  cursor: pointer;
+  display: flex;
+  gap: 0.75rem;
+}
+
+.grocery-item-checkbox {
+  accent-color: var(--primary-color);
+  flex: 0 0 auto;
+  height: 1.1rem;
+  width: 1.1rem;
+}
+
+.grocery-item-text {
+  overflow-wrap: anywhere;
+}
+
+.grocery-item-amount {
+  font-weight: 700;
+}
+
+.grocery-item-hint,
+.grocery-item-recipes {
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+
+.grocery-item-recipes {
+  display: block;
+}
+
+/* Checked off = "I already have this": struck through but still visible on
+   screen (unlike print, where it's dropped entirely -- see @media print
+   below), so unchecking it is one click away. */
+.grocery-item--checked .grocery-item-text {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+
+/* ── Printing ──────────────────────────────────────────────────────────────
+   The grocery list is meant to be carried around the store: printing drops
+   the site chrome and every control, lays categories out in two condensed
+   columns, and keeps a heading with its first item -- but deliberately does
+   NOT forbid a long category from splitting across a page/column. Forcing an
+   entire category to stay together is what used to blow this out to 4 pages:
+   one long "Produce" list couldn't fit in the remaining space, so it (and
+   everything visually below it) got pushed to a mostly-blank next page. */
+@media print {
+  .navbar,
+  .footer,
+  .alert,
+  .grocery-list-actions,
+  .grocery-list-back,
+  .btn,
+  .toast {
+    display: none !important;
+  }
+
+  body,
+  main,
+  .grocery-list-page,
+  .grocery-category {
+    background: #fff !important;
+    box-shadow: none !important;
+    color: #000 !important;
+  }
+
+  .grocery-list-page {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+
+  .grocery-list-header {
+    margin-bottom: 0.5rem;
+  }
+
+  .grocery-list-brand {
+    color: #000 !important;
+    display: block;
+    font-family: var(--font-display);
+    font-size: 1rem;
+    font-weight: 700;
+    margin-bottom: 0.25rem;
+  }
+
+  .grocery-list-title {
+    font-size: 1.15rem;
+    margin-bottom: 0.1rem;
+  }
+
+  .grocery-list-plan,
+  .grocery-list-dates,
+  .grocery-list-summary {
+    font-size: 0.75rem;
+    margin-bottom: 0.1rem;
+  }
+
+  .grocery-list-notice {
+    margin-top: 0.35rem;
+    padding: 0.35rem 0.5rem;
+  }
+
+  /* Two columns roughly halve the page count for a typical list; a category
+     that doesn't fit the remaining column space simply continues in the
+     next column/page instead of dragging the whole page down with it. */
+  .grocery-categories {
+    column-count: 2;
+    column-gap: 1.5rem;
+  }
+
+  .grocery-category {
+    border: 0;
+    break-inside: avoid-column;
+    margin-bottom: 0.5rem;
+    padding: 0 0 0.15rem;
+  }
+
+  .grocery-category-heading {
+    border-bottom: 1px solid #000;
+    break-after: avoid;
+    font-size: 0.9rem;
+    margin: 0 0 0.15rem;
+    padding-bottom: 0.1rem;
+    page-break-after: avoid;
+  }
+
+  .grocery-item {
+    border-top: 0;
+    break-inside: avoid;
+    font-size: 0.75rem;
+    padding: 0.1rem 0;
+    page-break-inside: avoid;
+  }
+
+  .grocery-item-label {
+    gap: 0.4rem;
+  }
+
+  .grocery-item-checkbox {
+    -webkit-appearance: none;
+    appearance: none;
+    border: 1px solid #000;
+    height: 0.7rem;
+    width: 0.7rem;
+  }
+
+  .grocery-item-hint,
+  .grocery-item-recipes {
+    font-size: 0.65rem;
+  }
+
+  .grocery-item-hint,
+  .grocery-item-recipes,
+  .grocery-list-dates,
+  .grocery-list-summary {
+    color: #333 !important;
+  }
+
+  /* Checked off ("I already have this") is struck through but still visible
+     on screen -- see .grocery-item--checked above -- and left off the
+     printout entirely here, so what prints is only what's still needed. */
+  .grocery-item--checked {
+    display: none !important;
+  }
+
+  /* "Large" print size (Small/Large toggle in the page header): the same
+     layout, sized up roughly a third for easier reading, at the cost of more
+     pages -- the trade-off the toggle exists to let the shopper choose. */
+  .grocery-list-page--font-large .grocery-list-brand {
+    font-size: 1.3rem;
+  }
+
+  .grocery-list-page--font-large .grocery-list-title {
+    font-size: 1.5rem;
+  }
+
+  .grocery-list-page--font-large .grocery-list-plan,
+  .grocery-list-page--font-large .grocery-list-dates,
+  .grocery-list-page--font-large .grocery-list-summary {
+    font-size: 0.95rem;
+  }
+
+  .grocery-list-page--font-large .grocery-category-heading {
+    font-size: 1.15rem;
+  }
+
+  .grocery-list-page--font-large .grocery-item {
+    font-size: 0.95rem;
+  }
+
+  .grocery-list-page--font-large .grocery-item-checkbox {
+    height: 0.9rem;
+    width: 0.9rem;
+  }
+
+  .grocery-list-page--font-large .grocery-item-hint,
+  .grocery-list-page--font-large .grocery-item-recipes {
+    font-size: 0.8rem;
+  }
+}
