@@ -27,9 +27,9 @@
           Add to Meal Plan
         </button>
         <% if (recipe.status === 'draft') { %>
-          <span class="badge-draft">Draft</span>
+          <span class="badge-draft">Private</span>
         <% } else { %>
-          <span class="badge-published">Published</span>
+          <span class="badge-published">Public</span>
         <% } %>
       </div>
     </div>
@@ -101,6 +101,9 @@
         <% } %>
       </div>
     <% } %>
+    <div style="margin-bottom: 1rem;">
+      <a href="/recipes/<%= recipe.id %>/clone" class="btn btn-outline">Clone Recipe</a>
+    </div>
   </div>
 
   <div style="background: var(--card-background); padding: 2rem; border-radius: var(--radius); box-shadow: var(--shadow);">

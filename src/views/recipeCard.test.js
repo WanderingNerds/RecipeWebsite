@@ -65,7 +65,7 @@ test('Private controls retain filters, favorites and protected deletion', async 
   assert.doesNotMatch(html, /meal-plan-add-btn-guest/);
   const draft = await render(false, { status: 'draft' }, { id: 'owner' });
   assert.match(draft, /class="like-btn" disabled/);
-  assert.match(draft, />Draft<\/span>/);
+  assert.match(draft, />Private<\/span>/);
 });
 
 test('Search keeps its existing card presentation and sparse data contract', async () => {

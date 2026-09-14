@@ -1,8 +1,8 @@
 <div class="container" style="max-width: 1000px; margin: 0 auto; padding: 2rem 1rem;">
 
   <div style="margin-bottom: 2rem;">
-    <span class="badge-new" style="display: inline-block; margin-bottom: 1rem;">New recipe</span>
-    <h1 style="margin-bottom: 0.5rem;">Add a recipe to your collection</h1>
+    <span class="badge-new" style="display: inline-block; margin-bottom: 1rem;"><%= isClone ? 'Clone recipe' : 'New recipe' %></span>
+    <h1 style="margin-bottom: 0.5rem;"><%= isClone ? 'Make this recipe your own' : 'Add a recipe to your collection' %></h1>
     <p style="color: var(--text-muted); max-width: 600px;">Fill in the details below. Only a title and instructions are required — everything else is optional.</p>
   </div>
 
@@ -32,38 +32,38 @@
 
           <div class="form-group">
             <label>Title <span style="color: var(--error-color);">*</span></label>
-            <input type="text" name="title" placeholder="e.g. Grandma's Sunday Sauce" required>
+            <input type="text" name="title" placeholder="e.g. Grandma's Sunday Sauce" required value="<%= recipe?.title || '' %>">
           </div>
 
           <div class="form-group">
             <label>Author</label>
-            <input type="text" name="author" placeholder="Your name" value="<%= accountDisplayName || '' %>">
+            <input type="text" name="author" placeholder="Your name" value="<%= recipe?.author || accountDisplayName || '' %>">
           </div>
 
           <!-- Meta fields grid -->
           <div class="form-grid-meta">
             <div class="form-group">
               <label>Prep Time <span style="color: var(--error-color);">*</span></label>
-              <input type="text" id="prepTime" name="prepTime" placeholder="15 min" aria-required="true" aria-describedby="prepTimeError">
+              <input type="text" id="prepTime" name="prepTime" placeholder="15 min" aria-required="true" aria-describedby="prepTimeError" value="<%= recipe?.prep_time || '' %>">
               <span class="field-error-message" id="prepTimeError">Required</span>
             </div>
             <div class="form-group">
               <!-- REW-52: displayed as "Total Time" per the ticket, but the underlying
                    name/DB column intentionally stay cookTime/cook_time (no migration). -->
               <label>Total Time <span style="color: var(--error-color);">*</span></label>
-              <input type="text" id="cookTime" name="cookTime" placeholder="40 min" aria-required="true" aria-describedby="cookTimeError">
+              <input type="text" id="cookTime" name="cookTime" placeholder="40 min" aria-required="true" aria-describedby="cookTimeError" value="<%= recipe?.cook_time || '' %>">
               <span class="field-error-message" id="cookTimeError">Required</span>
             </div>
             <div class="form-group">
               <label>Servings</label>
-              <input type="text" name="servings" placeholder="4">
+              <input type="text" name="servings" placeholder="4" value="<%= recipe?.servings || '' %>">
             </div>
             <div class="form-group">
               <label>Difficulty</label>
               <select name="difficulty" style="width: 100%; padding: 0.75rem 1rem; border: 1px solid var(--border-color); border-radius: var(--radius); font-size: 1rem;">
-                <option value="Easy">Easy</option>
-                <option value="Medium">Medium</option>
-                <option value="Hard">Hard</option>
+                <option value="Easy" <%= !recipe?.difficulty || recipe.difficulty === 'Easy' ? 'selected' : '' %>>Easy</option>
+                <option value="Medium" <%= recipe?.difficulty === 'Medium' ? 'selected' : '' %>>Medium</option>
+                <option value="Hard" <%= recipe?.difficulty === 'Hard' ? 'selected' : '' %>>Hard</option>
               </select>
             </div>
           </div>
@@ -74,7 +74,7 @@
           <h3 style="font-size: 1.25rem; margin-bottom: 1rem; color: var(--primary-color);">Ingredients</h3>
           <div class="form-group">
             <p style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 0.5rem;">One per line, including measurements</p>
-            <textarea name="ingredients" rows="12" placeholder="2 cups flour&#10;1 tsp salt&#10;3 tbsp olive oil&#10;..." style="width: 100%; padding: 0.75rem 1rem; border: 1px solid var(--border-color); border-radius: var(--radius); font-size: 1rem; font-family: inherit; resize: vertical;"></textarea>
+            <textarea name="ingredients" rows="12" placeholder="2 cups flour&#10;1 tsp salt&#10;3 tbsp olive oil&#10;..." style="width: 100%; padding: 0.75rem 1rem; border: 1px solid var(--border-color); border-radius: var(--radius); font-size: 1rem; font-family: inherit; resize: vertical;"><%= recipe?.ingredients || '' %></textarea>
           </div>
         </div>
 
@@ -115,7 +115,7 @@
         <h3 style="font-size: 1.25rem; margin-bottom: 1rem; color: var(--primary-color);">Instructions <span style="color: var(--error-color);">*</span></h3>
         <div class="form-group">
           <p style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 0.5rem;">Walk through the steps in order</p>
-          <textarea name="instructions" rows="8" required placeholder="1. Preheat the oven to 375°F.&#10;2. In a large bowl, whisk together..." style="width: 100%; padding: 0.75rem 1rem; border: 1px solid var(--border-color); border-radius: var(--radius); font-size: 1rem; font-family: inherit; resize: vertical;"></textarea>
+          <textarea name="instructions" rows="8" required placeholder="1. Preheat the oven to 375°F.&#10;2. In a large bowl, whisk together..." style="width: 100%; padding: 0.75rem 1rem; border: 1px solid var(--border-color); border-radius: var(--radius); font-size: 1rem; font-family: inherit; resize: vertical;"><%= recipe?.instructions || '' %></textarea>
         </div>
       </div>
 
@@ -123,7 +123,7 @@
       <div class="callout-info" style="margin-bottom: 1.5rem;">
         <h3 style="font-size: 1.125rem; margin-bottom: 0.5rem;">Tips & notes</h3>
         <p style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 0.75rem;">Substitutions, storage tips, or anything else worth remembering</p>
-        <textarea name="notes" rows="3" style="background: white; width: 100%; padding: 0.75rem 1rem; border: 1px solid var(--border-color); border-radius: var(--radius); font-size: 1rem; font-family: inherit; resize: vertical;" placeholder="This freezes well for up to 3 months. Swap butter for olive oil for a dairy-free version."></textarea>
+        <textarea name="notes" rows="3" style="background: white; width: 100%; padding: 0.75rem 1rem; border: 1px solid var(--border-color); border-radius: var(--radius); font-size: 1rem; font-family: inherit; resize: vertical;" placeholder="This freezes well for up to 3 months. Swap butter for olive oil for a dairy-free version."><%= recipe?.notes || '' %></textarea>
       </div>
 
       <!-- Optional meal plan assignment -->
@@ -142,10 +142,15 @@
         <% } %>
       </div>
 
-      <!-- Submit buttons -->
-      <div style="display: flex; justify-content: flex-end; gap: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
-        <button type="submit" name="action" value="draft" class="btn btn-outline">Save as draft</button>
-        <button type="submit" name="action" value="publish" class="btn btn-primary">Publish recipe</button>
+      <fieldset class="visibility-control">
+        <legend>Visibility</legend>
+        <div class="visibility-options">
+          <label class="visibility-option"><input type="radio" name="visibility" value="private" <%= visibility !== 'public' ? 'checked' : '' %>><span><strong>Private</strong><small>Only you can view this recipe.</small></span></label>
+          <label class="visibility-option"><input type="radio" name="visibility" value="public" <%= visibility === 'public' ? 'checked' : '' %>><span><strong>Public</strong><small>Anyone can find and view this recipe.</small></span></label>
+        </div>
+      </fieldset>
+      <div class="recipe-form-actions">
+        <button type="submit" class="btn btn-primary">Save recipe</button>
       </div>
 
     </div>

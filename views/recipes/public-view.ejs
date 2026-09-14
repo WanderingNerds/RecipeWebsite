@@ -13,6 +13,7 @@
         <% } %>
       </div>
       <div style="display: flex; align-items: center; gap: 1rem;">
+        <span class="badge-published">Public</span>
         <% if (user) { %>
           <button class="like-btn" data-recipe-id="<%= recipe.id %>" data-liked="<%= isLiked %>" aria-label="<%= isLiked ? 'Unlike this recipe' : 'Like this recipe' %>">
             <span class="like-btn-icon">&#9829;</span>
@@ -38,6 +39,9 @@
         <% } %>
         <% if (isOwner) { %>
           <a href="/recipes/<%= recipe.id %>/edit" class="btn btn-outline">Edit Recipe</a>
+        <% } %>
+        <% if (user) { %>
+          <a href="/recipes/<%= recipe.id %>/clone" class="btn btn-outline">Clone Recipe</a>
         <% } %>
       </div>
     </div>
@@ -108,7 +112,7 @@
 
     <!-- Footer -->
     <div style="margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--border-color); font-size: 0.875rem; color: var(--text-muted);">
-      <p style="margin: 0;">Published on <%= new Date(recipe.created_at).toLocaleDateString() %></p>
+      <p style="margin: 0;">Made Public on <%= new Date(recipe.created_at).toLocaleDateString() %></p>
       <% if (recipe.updated_at && recipe.updated_at !== recipe.created_at) { %>
         <p style="margin: 0.25rem 0 0 0;">Last updated on <%= new Date(recipe.updated_at).toLocaleDateString() %></p>
       <% } %>
@@ -119,7 +123,7 @@
   <% if (!user) { %>
     <div class="signup-cta">
       <h3>Want to save your own recipes?</h3>
-      <p>Create a free account to build and publish your own collection.</p>
+      <p>Create a free account to build your own collection and make recipes Public.</p>
       <div class="signup-cta-actions">
         <a href="/auth/register" class="btn btn-primary">Sign Up</a>
         <a href="/auth/login" class="btn btn-outline">Login</a>

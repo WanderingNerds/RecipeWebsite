@@ -74,7 +74,7 @@ The main recipes table with the following columns:
 | `notes` | TEXT | Additional notes |
 | `photo_url` | TEXT | Base64-encoded main photo |
 | `thumbnail_url` | TEXT | Base64-encoded thumbnail |
-| `status` | TEXT | draft or published |
+| `status` | TEXT | User-facing Private/Public visibility, stored as `draft`/`published` |
 | `created_at` | TIMESTAMPTZ | Creation timestamp |
 | `updated_at` | TIMESTAMPTZ | Last update timestamp (auto-updated) |
 
@@ -326,6 +326,7 @@ Performance indexes are created on:
 - `recipes.author` has no database-level default. When it arrives blank/missing on create (manual entry or import), the application defaults it to the logged-in user's account display name in the route handler, not via a SQL default or trigger — see [Recipe Author Default (REW-46)](../docs/api/recipe-author-default.md). Editing an existing recipe does not retroactively apply this default.
 - `recipes.prep_time` and `recipes.cook_time` remain nullable `TEXT` with no `NOT NULL` constraint. The manual "New Recipe"/"Edit Recipe" forms and their `POST` handlers require both values to be non-blank (REW-52), while the Import Recipe flow requires `cook_time` and keeps `prep_time` optional (REW-77). Enforcement is application-layer only, with no migration or historical-row backfill. Note: on the create/edit forms only, `cook_time` is labeled "Total Time" in the UI — the column itself was **not** renamed and there is no separate `total_time` column; see [Required Prep Time / Total Time (REW-52)](../docs/api/recipe-required-times.md) for the full rationale. The import and detail views display this same column as "Cook Time."
 - The `status` field defaults to 'draft' and accepts 'draft' or 'published'
+- Recipe forms describe `draft` as **Private** and `published` as **Public**. Missing or invalid visibility input fails closed to `draft`. Cloning copies only editable recipe text and category/tag selections into a new owner-scoped row; it never copies images, IDs, timestamps, likes, cookbook memberships, or meal-plan memberships, and always starts Private.
 - The `difficulty` field accepts 'Easy', 'Medium', or 'Hard'
 - The `updated_at` field on recipes is automatically updated via a trigger
 - Tags with the same slug can exist for different users (unique per user_id)

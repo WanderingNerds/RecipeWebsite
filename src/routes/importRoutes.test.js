@@ -44,8 +44,8 @@ test("save handler rejects omitted, empty, and whitespace Cook Time before Supab
   }
 });
 
-test("save handler trims Cook Time for both draft and publish inserts", async () => {
-  for (const [action, expectedStatus] of [["draft", "draft"], ["publish", "published"]]) {
+test("save handler trims Cook Time and maps Private/Public visibility", async () => {
+  for (const [visibility, expectedStatus] of [["private", "draft"], ["public", "published"]]) {
     const inserted = [];
     const query = {
       select() { return this; },
@@ -61,7 +61,7 @@ test("save handler trims Cook Time for both draft and publish inserts", async ()
     const handler = createSaveImportHandler({ createClient: () => ({ from: () => query }) });
     const req = {
       body: {
-        title: " Soup ", instructions: " Simmer ", cookTime: " 40 min ", action,
+        title: " Soup ", instructions: " Simmer ", cookTime: " 40 min ", visibility,
       },
       user: { id: "user-1", email: "cook@example.com" },
       accessToken: "token",
@@ -75,5 +75,19 @@ test("save handler trims Cook Time for both draft and publish inserts", async ()
     assert.equal(inserted.length, 1);
     assert.equal(inserted[0].cook_time, "40 min");
     assert.equal(inserted[0].status, expectedStatus);
+  }
+});
+
+test("save handler fails closed to Private for tampered visibility", async () => {
+  for (const visibility of [undefined, "publish", ["public"]]) {
+    const inserted = [];
+    const query = {
+      select() { return this; }, eq() { return this; }, ilike() { return this; },
+      insert(rows) { inserted.push(...rows); return this; },
+      async single() { return inserted.length ? { data: { id: "recipe-1" }, error: null } : { data: null, error: { code: "PGRST116" } }; },
+    };
+    const handler = createSaveImportHandler({ createClient: () => ({ from: () => query }) });
+    await handler({ body: { title: "Soup", instructions: "Simmer", cookTime: "40 min", visibility }, user: { id: "user-1" }, flash() {} }, responseRecorder());
+    assert.equal(inserted[0].status, "draft");
   }
 });

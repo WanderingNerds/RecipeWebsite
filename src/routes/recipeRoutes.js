@@ -9,6 +9,7 @@ import { resolveScaling, scaleIngredients, QUICK_SCALE_FACTORS } from "../utils/
 import { getAccountDisplayName } from "../utils/userUtils.js";
 import { csrfProtection } from "../middleware/csrfMiddleware.js";
 import { assignRecipeToMealPlan } from "../utils/mealPlanAssignment.js";
+import { normalizeRecipeVisibility } from "../utils/recipeVisibility.js";
 
 const router = Router();
 
@@ -283,7 +284,10 @@ router.get("/new", requireAuth, async (req, res) => {
       selectedCategories: [],
       selectedTags: [],
       mealPlans: mealPlansError ? [] : (mealPlans || []),
-      accountDisplayName: getAccountDisplayName(req.user)
+      accountDisplayName: getAccountDisplayName(req.user),
+      recipe: null,
+      visibility: "private",
+      isClone: false,
     });
   } catch (error) {
     console.error("Error loading new recipe form:", error);
@@ -306,7 +310,7 @@ export async function handleRecipeCreate(req, res, { createClient = createSupaba
       ingredients,
       instructions,
       notes,
-      action, // 'draft' or 'publish'
+      visibility,
       categories,
       tags,
       mealPlanId,
@@ -358,7 +362,7 @@ export async function handleRecipeCreate(req, res, { createClient = createSupaba
       notes: notes?.trim() || null,
       photo_url: photoUrl,
       thumbnail_url: thumbnailUrl,
-      status: action === 'publish' ? 'published' : 'draft',
+      status: normalizeRecipeVisibility(visibility),
     };
 
     // Insert recipe into database
@@ -387,10 +391,9 @@ export async function handleRecipeCreate(req, res, { createClient = createSupaba
       userId: req.user.id,
     });
 
-    // Success message based on action
-    const successMessage = action === 'publish'
-      ? "Recipe published successfully!"
-      : "Recipe saved as draft!";
+    const successMessage = recipeData.status === "published"
+      ? "Recipe saved as Public!"
+      : "Recipe saved as Private!";
 
     const fullSuccessMessage = assignment.status === "assigned"
       ? `${successMessage} Added to ${assignment.mealPlanTitle}.`
@@ -410,6 +413,71 @@ export async function handleRecipeCreate(req, res, { createClient = createSupaba
 }
 
 router.post("/", requireAuth, uploadLimiter, upload.single("photo"), csrfProtection, (req, res) => handleRecipeCreate(req, res));
+
+export function suggestCloneTitle(sourceTitle, existingTitles) {
+  const used = new Set(existingTitles.map((title) => title.toLocaleLowerCase()));
+  let candidate = `${sourceTitle} (Copy)`;
+  let copyNumber = 2;
+  while (used.has(candidate.toLocaleLowerCase())) {
+    candidate = `${sourceTitle} (Copy ${copyNumber})`;
+    copyNumber += 1;
+  }
+  return candidate;
+}
+
+// GET /recipes/:id/clone - Prefill a new owner-scoped recipe from an RLS-visible source.
+export async function handleRecipeCloneForm(req, res, { createClient = createSupabaseClient } = {}) {
+  try {
+    const supabaseClient = createClient(req.accessToken);
+    const sourceRecipe = await fetchRecipeWithRelations(supabaseClient, req.params.id);
+
+    if (!sourceRecipe) {
+      req.flash("error", "Recipe not found or unavailable to clone");
+      return res.redirect("/recipes");
+    }
+
+    const [categoriesResult, tagsResult, mealPlansResult, titlesResult] = await Promise.all([
+      supabaseClient.from("categories").select("*").order("display_order", { ascending: true }),
+      supabaseClient.from("tags").select("*").eq("user_id", req.user.id).order("name", { ascending: true }),
+      supabaseClient.from("meal_plans").select("id, title, start_date, end_date").eq("user_id", req.user.id).order("start_date", { ascending: true }),
+      supabaseClient.from("recipes").select("title").eq("user_id", req.user.id),
+    ]);
+
+    const recipe = {
+      title: suggestCloneTitle(
+        sourceRecipe.title,
+        (titlesResult.data || []).map(({ title }) => title),
+      ),
+      author: sourceRecipe.author,
+      prep_time: sourceRecipe.prep_time,
+      cook_time: sourceRecipe.cook_time,
+      servings: sourceRecipe.servings,
+      difficulty: sourceRecipe.difficulty,
+      ingredients: sourceRecipe.ingredients,
+      instructions: sourceRecipe.instructions,
+      notes: sourceRecipe.notes,
+    };
+
+    res.render("recipes/new", {
+      title: `Clone ${sourceRecipe.title}`,
+      categories: categoriesResult.data || [],
+      userTags: tagsResult.data || [],
+      selectedCategories: sourceRecipe.categories.map(({ id }) => id),
+      selectedTags: sourceRecipe.tags.map(({ name }) => name),
+      mealPlans: mealPlansResult.error ? [] : (mealPlansResult.data || []),
+      accountDisplayName: getAccountDisplayName(req.user),
+      recipe,
+      visibility: "private",
+      isClone: true,
+    });
+  } catch (error) {
+    console.error("Error loading recipe clone form:", error);
+    req.flash("error", "An unexpected error occurred");
+    res.redirect("/recipes");
+  }
+}
+
+router.get("/:id/clone", requireAuth, (req, res) => handleRecipeCloneForm(req, res));
 
 // GET /recipes - List all recipes for the current user
 router.get("/", requireAuth, async (req, res) => {
@@ -562,8 +630,9 @@ router.get("/:id/edit", requireAuth, async (req, res) => {
   }
 });
 
-// POST /recipes/:id/update - Update a recipe
-router.post("/:id/update", requireAuth, uploadLimiter, upload.single("photo"), csrfProtection, async (req, res) => {
+// POST /recipes/:id/update - Update a recipe. Exported for ownership and
+// visibility behavior tests; production uses the request-scoped client.
+export async function handleRecipeUpdate(req, res, { createClient = createSupabaseClient } = {}) {
   try {
     const { id } = req.params;
     const {
@@ -576,7 +645,7 @@ router.post("/:id/update", requireAuth, uploadLimiter, upload.single("photo"), c
       ingredients,
       instructions,
       notes,
-      action,
+      visibility,
       removePhoto,
       categories,
       tags,
@@ -588,7 +657,7 @@ router.post("/:id/update", requireAuth, uploadLimiter, upload.single("photo"), c
       return res.redirect(`/recipes/${id}/edit`);
     }
 
-    const supabaseClient = createSupabaseClient(req.accessToken);
+    const supabaseClient = createClient(req.accessToken);
 
     // Prepare update data
     const updateData = {
@@ -601,7 +670,7 @@ router.post("/:id/update", requireAuth, uploadLimiter, upload.single("photo"), c
       ingredients: ingredients?.trim() || null,
       instructions: instructions.trim(),
       notes: notes?.trim() || null,
-      status: action === 'publish' ? 'published' : 'draft',
+      status: normalizeRecipeVisibility(visibility),
     };
 
     // Handle photo update
@@ -652,7 +721,9 @@ router.post("/:id/update", requireAuth, uploadLimiter, upload.single("photo"), c
     req.flash("error", "An unexpected error occurred");
     res.redirect("/recipes");
   }
-});
+}
+
+router.post("/:id/update", requireAuth, uploadLimiter, upload.single("photo"), csrfProtection, (req, res) => handleRecipeUpdate(req, res));
 
 // POST /recipes/:id/delete - Delete a recipe
 router.post("/:id/delete", requireAuth, async (req, res) => {

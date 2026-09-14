@@ -137,15 +137,16 @@
         <textarea name="notes" rows="3" style="background: white; width: 100%; padding: 0.75rem 1rem; border: 1px solid var(--border-color); border-radius: var(--radius); font-size: 1rem; font-family: inherit; resize: vertical;" placeholder="This freezes well for up to 3 months. Swap butter for olive oil for a dairy-free version."><%= recipe.notes || '' %></textarea>
       </div>
 
-      <!-- Submit buttons -->
-      <div style="display: flex; justify-content: space-between; gap: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
-        <a href="/recipes/<%= recipe.id %>" class="btn btn-outline">Cancel</a>
-        <div style="display: flex; gap: 1rem;">
-          <button type="submit" name="action" value="draft" class="btn btn-outline">Save as draft</button>
-          <button type="submit" name="action" value="publish" class="btn btn-primary">
-            <%= recipe.status === 'published' ? 'Update & Keep Published' : 'Publish recipe' %>
-          </button>
+      <fieldset class="visibility-control">
+        <legend>Visibility</legend>
+        <div class="visibility-options">
+          <label class="visibility-option"><input type="radio" name="visibility" value="private" <%= recipe.status !== 'published' ? 'checked' : '' %>><span><strong>Private</strong><small>Only you can view this recipe.</small></span></label>
+          <label class="visibility-option"><input type="radio" name="visibility" value="public" <%= recipe.status === 'published' ? 'checked' : '' %>><span><strong>Public</strong><small>Anyone can find and view this recipe.</small></span></label>
         </div>
+      </fieldset>
+      <div class="recipe-form-actions recipe-form-actions-spread">
+        <a href="/recipes/<%= recipe.id %>" class="btn btn-outline">Cancel</a>
+        <button type="submit" class="btn btn-primary">Save recipe</button>
       </div>
 
     </div>

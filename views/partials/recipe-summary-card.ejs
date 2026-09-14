@@ -22,15 +22,15 @@
                   <span class="like-btn-icon">&#9829;</span>
                 </button>
               <% } else { %>
-                <button class="like-btn" disabled aria-label="Publish this recipe to add it to favorites" title="Publish this recipe to add it to favorites">
+                <button class="like-btn" disabled aria-label="Make this recipe Public to add it to favorites" title="Make this recipe Public to add it to favorites">
                   <span class="like-btn-icon">&#9829;</span>
                 </button>
               <% } %>
               <% } %>
               <% if (recipe.status === 'draft') { %>
-                <span class="badge-draft badge-draft-sm">Draft</span>
+                <span class="badge-draft badge-draft-sm">Private</span>
               <% } else { %>
-                <span class="badge-published badge-published-sm">Published</span>
+                <span class="badge-published badge-published-sm">Public</span>
               <% } %>
             </div>
           </div>
