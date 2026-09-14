@@ -10,8 +10,16 @@ This is the current implementation rebuilt from the clean merged REW-70 baseline
 | `POST` | `/admin/login` | CSRF-protected and limited to 10 attempts per 15 minutes. A fresh non-persisting Supabase client signs in, then verifies `app_metadata.role === "admin"`. Failure and non-admin denial use the same generic message and clear local/new auth state. Success sets secure cookies and redirects with 303. |
 | `POST` | `/admin/logout` | Binds the caller's access/refresh tokens to a fresh client before sign-out, always clears local cookies, and redirects with 303. There is no GET logout route. |
 | `GET` | `/admin/feedback` | Requires `requireAdmin`. Lists newest-first. `?status=` accepts `all`, `unresolved` (default: `new` plus `in_progress`), or `done`; invalid filters default to unresolved. |
-| `GET` | `/admin/feedback/:id` | Requires an admin and UUID. Shows escaped submission details, active profiles, and any inactive current assignee. Missing rows return 404. |
-| `POST` | `/admin/feedback/:id` | Requires admin, CSRF, UUID, allowlisted status, and blank/UUID assignee. Newly selected profiles must be active. Updates only status/assignment and redirects with 303. |
+| `GET` | `/admin/feedback/:id` | Requires an admin and UUID. Shows escaped submission details and exactly Unassigned, Andrew, and Victoria as assignment choices when each explicitly recognized profile is uniquely active. Missing rows return 404. |
+| `POST` | `/admin/feedback/:id` | Requires admin, CSRF, UUID, allowlisted status, and blank/UUID assignee. A selected profile must be active and match an explicit server-side name for Andrew or Victoria. Updates only status/assignment and redirects with 303. |
+
+## Assignment notifications (REW-78)
+
+Andrew maps server-side to `carroll.andrew@gmail.com`; Victoria maps server-side to `vhobbs1895@gmail.com`. Active profiles stored as either `Andrew` or `Andrew Carroll` render as Andrew; profiles stored as either `Victoria` or `Victoria Johnson` render as Victoria. These are explicit exact aliases—substring or fuzzy matching is not used—and multiple matching active rows are rejected as ambiguous. The browser submits only a profile UUID and cannot override either address. A transition from unassigned or the other person sends one plain-text email to the newly assigned person after the database update succeeds. Unassignment, same-assignee saves, validation failures, profile lookup failures, and database failures send no email.
+
+The email identifies the ticket by subject and UUID and links to `${APP_URL}/admin/feedback/:id`. Links are built only from server environment configuration, never request host headers. Delivery uses Resend and requires `RESEND_API_KEY` and `ASSIGNMENT_EMAIL_FROM`; requests time out after five seconds. Provider, network, timeout, or configuration failure does not roll back the saved assignment. It produces a non-sensitive administrator warning and safe metadata-only server log.
+
+Deployment smoke test: configure the three variables, verify the Resend sender, assign a test ticket to Andrew and Victoria in turn, and confirm each recipient receives only their reassignment with the correct direct link. Then confirm same-assignee saves and Unassigned send nothing. Temporarily use an invalid provider key to confirm the assignment remains saved while the delivery warning appears.
 
 ## Authorization and session isolation
 
