@@ -94,7 +94,6 @@
           <!-- Action buttons -->
           <div class="recipe-card-actions recipe-summary-actions" style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: auto; padding-top: 1rem; border-top: 1px solid var(--border-color);">
             <button type="button" class="btn btn-outline meal-plan-add-btn<%= user ? '' : ' meal-plan-add-btn-guest' %>" data-recipe-id="<%= recipe.id %>" aria-label="<%= user ? 'Add to Meal Plan' : 'Log in to add to Meal Plan' %>" style="flex: 1; font-size: 0.875rem; padding: 0.5rem 1rem;">+ Meal Plan</button>
-            <a href="/recipes/<%= recipe.id %>" class="btn btn-outline" style="flex: 1; text-align: center; font-size: 0.875rem; padding: 0.5rem 1rem;">View</a>
             <a href="/recipes/<%= recipe.id %>/edit" class="btn btn-outline" style="flex: 1; text-align: center; font-size: 0.875rem; padding: 0.5rem 1rem;">Edit</a>
             <form action="/recipes/<%= recipe.id %>/delete" method="POST" style="margin: 0; flex: 1;" onsubmit="return confirm('Are you sure you want to delete this recipe? This action cannot be undone.');">
               <input type="hidden" name="_csrf" value="<%= csrfToken %>">
