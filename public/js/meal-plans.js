@@ -28,22 +28,23 @@ function initializeGroceryListPrint() {
   });
 }
 
-// Checking an item off the grocery list means "I already have this" -- so it
-// is removed from view (and therefore from the printout, which never renders
-// a hidden element) rather than just marked done. One-way and unpersisted,
-// same as every other piece of state on this page (see REW-26 plan): a
-// refresh brings everything back. Delegated to the list container instead of
-// one listener per checkbox since the page can render dozens of items.
+// Checking an item off the grocery list means "I already have this": it gets
+// struck through on screen (still visible, still reversible by unchecking)
+// but is left out of the printout entirely -- see the .grocery-item--checked
+// print rule in styles.css. Unpersisted, same as every other piece of state
+// on this page (see REW-26 plan): a refresh brings everything back.
+// Delegated to the list container instead of one listener per checkbox since
+// the page can render dozens of items.
 function initializeGroceryListChecklist() {
   const list = document.querySelector(".grocery-categories");
   if (!list) return;
 
   list.addEventListener("change", (event) => {
     const checkbox = event.target.closest(".grocery-item-checkbox");
-    if (!checkbox || !checkbox.checked) return;
+    if (!checkbox) return;
 
     const item = checkbox.closest(".grocery-item");
-    if (item) item.hidden = true;
+    if (item) item.classList.toggle("grocery-item--checked", checkbox.checked);
   });
 }
 

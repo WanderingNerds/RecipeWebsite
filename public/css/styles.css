@@ -3087,6 +3087,14 @@ a.pagination-link:hover {
   display: block;
 }
 
+/* Checked off = "I already have this": struck through but still visible on
+   screen (unlike print, where it's dropped entirely -- see @media print
+   below), so unchecking it is one click away. */
+.grocery-item--checked .grocery-item-text {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+
 /* ── Printing ──────────────────────────────────────────────────────────────
    The grocery list is meant to be carried around the store: printing drops
    the site chrome and every control, lays categories out in two condensed
@@ -3197,10 +3205,10 @@ a.pagination-link:hover {
     color: #333 !important;
   }
 
-  /* Checked off on screen -> left off the printout entirely (see
-     initializeGroceryListChecklist in meal-plans.js). Belt-and-suspenders:
-     the `hidden` attribute it sets already does this on its own. */
-  .grocery-item:has(.grocery-item-checkbox:checked) {
+  /* Checked off ("I already have this") is struck through but still visible
+     on screen -- see .grocery-item--checked above -- and left off the
+     printout entirely here, so what prints is only what's still needed. */
+  .grocery-item--checked {
     display: none !important;
   }
 }

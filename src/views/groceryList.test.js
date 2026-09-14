@@ -145,14 +145,22 @@ test("categories render inside one wrapper for the print column layout", async (
   assert.ok(html.indexOf(">Produce</h2>", start) > start && html.indexOf(">Produce</h2>", start) < end);
 });
 
-test("checking an item off hides it via the native hidden attribute, with no inline handler", async () => {
+test("checking an item off strikes it through on screen, with no inline handler", async () => {
   const html = await renderList(sampleList());
   assert.doesNotMatch(html, /onchange|onclick/);
 
   const client = await readFile(new URL("../../public/js/meal-plans.js", import.meta.url), "utf8");
   assert.match(client, /initializeGroceryListChecklist/);
   assert.match(client, /closest\(["']\.grocery-item-checkbox["']\)/);
-  assert.match(client, /item\.hidden = true/);
+  assert.match(client, /classList\.toggle\(["']grocery-item--checked["'], checkbox\.checked\)/);
+
+  const css = await readFile(new URL("../../public/css/styles.css", import.meta.url), "utf8");
+  assert.match(css, /\.grocery-item--checked \.grocery-item-text \{[^}]*text-decoration: line-through/);
+  assert.match(
+    css,
+    /@media print \{[\s\S]*\.grocery-item--checked \{\s*display: none !important;/,
+    "checked items must be struck through on screen but left off the printout"
+  );
 });
 
 test("the plan detail page links to the grocery list only when it has recipes", async () => {
