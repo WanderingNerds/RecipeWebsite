@@ -1,3 +1,26 @@
 <section class="admin-feedback"><a href="/admin/feedback">&larr; Back to queue</a><p class="eyebrow"><%= submission.category %></p><h1><%= submission.subject %></h1><span class="status-badge status-badge--<%= submission.status %>"><%= statusLabel(submission.status) %></span>
 <dl class="submission-meta"><div><dt>Name</dt><dd><%= submission.contact_name %></dd></div><div><dt>Email</dt><dd><%= submission.contact_email %></dd></div><div><dt>Submitted</dt><dd><time datetime="<%= submission.created_at %>"><%= new Date(submission.created_at).toLocaleString() %></time></dd></div><div><dt>Assignee</dt><dd><%= submission.assignee?.display_name || 'Unassigned' %></dd></div></dl><article class="submission-message"><h2>Message</h2><p><%= submission.message %></p></article>
-<form action="/admin/feedback/<%= submission.id %>" method="POST" class="admin-workflow-form"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><div class="form-group"><label for="status">Status</label><select id="status" name="status"><% for (const value of statuses) { %><option value="<%= value %>" <%= submission.status === value ? 'selected' : '' %>><%= statusLabel(value) %></option><% } %></select></div><div class="form-group"><label for="assigneeId">Assignee</label><select id="assigneeId" name="assigneeId"><option value="">Unassigned</option><% for (const admin of admins) { %><option value="<%= admin.id %>" <%= submission.assignee_id === admin.id ? 'selected' : '' %>><%= admin.display_name %></option><% } %></select></div><button class="btn btn-primary" type="submit">Save changes</button></form></section>
+<form action="/admin/feedback/<%= submission.id %>" method="POST" class="admin-workflow-form"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><div class="form-group"><label for="status">Status</label><select id="status" name="status"><% for (const value of statuses) { %><option value="<%= value %>" <%= submission.status === value ? 'selected' : '' %>><%= statusLabel(value) %></option><% } %></select></div><div class="form-group"><label for="assigneeId">Assignee</label><select id="assigneeId" name="assigneeId"><option value="">Unassigned</option><% for (const admin of admins) { %><option value="<%= admin.id %>" <%= submission.assignee_id === admin.id ? 'selected' : '' %>><%= admin.display_name %></option><% } %></select></div><button class="btn btn-primary" type="submit">Save changes</button></form>
+
+<section class="progress-comments" aria-labelledby="progress-comments-heading">
+  <h2 id="progress-comments-heading">Progress history</h2>
+  <% if (commentsUnavailable) { %>
+    <p class="progress-comments__empty">Progress comments are temporarily unavailable until the database update is applied.</p>
+  <% } else if (comments.length === 0) { %>
+    <p class="progress-comments__empty">No progress comments yet.</p>
+  <% } else { %>
+    <ol class="progress-comments__list">
+      <% for (const comment of comments) { %>
+        <li class="progress-comment">
+          <div class="progress-comment__meta"><strong><%= comment.author_display_name %></strong><time datetime="<%= comment.created_at %>"><%= formatCentralTimestamp(comment.created_at) %></time></div>
+          <p><%= comment.comment_text %></p>
+        </li>
+      <% } %>
+    </ol>
+  <% } %>
+  <% if (!commentsUnavailable) { %><form action="/admin/feedback/<%= submission.id %>/comments" method="POST" class="progress-comment-form">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+    <div class="form-group"><label for="commentText">Add progress comment</label><textarea id="commentText" name="commentText" rows="5" required aria-describedby="commentText-help"><%= commentDraft %></textarea><small id="commentText-help">Up to 5,000 Unicode characters. Comments cannot be edited or deleted.</small></div>
+    <button class="btn btn-primary" type="submit">Add comment</button>
+  </form><% } %>
+</section></section>

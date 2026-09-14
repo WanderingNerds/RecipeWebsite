@@ -3,6 +3,7 @@ import { createSupabaseClient } from "../config/supabase.js";
 import { requireAdmin } from "../middleware/authMiddleware.js";
 import { sendAssignmentEmail } from "../services/assignmentEmail.js";
 import { FEEDBACK_FILTERS, FEEDBACK_STATUSES, filterAssignableAdmins, filterStatuses, isUuid, normalizeFilter, normalizeUpdate, resolveAssignmentRecipient, statusLabel } from "../utils/adminUtils.js";
+import { formatCentralTimestamp, isMissingFeedbackCommentsTableError, normalizeFeedbackComment } from "../utils/adminFeedbackComments.js";
 
 const fields = "id, contact_name, contact_email, category, subject, message, status, assignee_id, created_at, updated_at, assignee:admin_profiles!assignee_id(display_name)";
 export function createAdminFeedbackRouter({ createClient = createSupabaseClient, auth = requireAdmin, sendEmail = sendAssignmentEmail } = {}) {
@@ -20,14 +21,59 @@ export function createAdminFeedbackRouter({ createClient = createSupabaseClient,
     if (!isUuid(req.params.id)) return res.status(404).render("error", { title: "Not Found", message: "Submission not found" });
     try {
       const client = createClient(req.accessToken);
-      const [ticketResult, adminsResult] = await Promise.all([
+      const [ticketResult, adminsResult, commentsResult] = await Promise.all([
         client.from("help_feedback_submissions").select(fields).eq("id", req.params.id).maybeSingle(),
         client.from("admin_profiles").select("id, display_name, active").eq("active", true),
+        client.from("feedback_progress_comments").select("id, author_display_name, comment_text, created_at").eq("feedback_submission_id", req.params.id).order("created_at", { ascending: true }).order("id", { ascending: true }),
       ]);
-      if (ticketResult.error || adminsResult.error) throw ticketResult.error || adminsResult.error;
+      if (ticketResult.error || adminsResult.error || (commentsResult.error && !isMissingFeedbackCommentsTableError(commentsResult.error))) throw ticketResult.error || adminsResult.error || commentsResult.error;
       if (!ticketResult.data) return res.status(404).render("error", { title: "Not Found", message: "Submission not found" });
-      return res.render("admin/feedback-detail", { title: ticketResult.data.subject, submission: ticketResult.data, admins: filterAssignableAdmins(adminsResult.data || []), statuses: FEEDBACK_STATUSES, statusLabel });
+      const drafts = req.flash("feedbackCommentDraft") || [];
+      return res.render("admin/feedback-detail", { title: ticketResult.data.subject, submission: ticketResult.data, admins: filterAssignableAdmins(adminsResult.data || []), comments: commentsResult.data || [], commentsUnavailable: isMissingFeedbackCommentsTableError(commentsResult.error), commentDraft: drafts[0] || "", statuses: FEEDBACK_STATUSES, statusLabel, formatCentralTimestamp });
     } catch (error) { console.error("Admin feedback detail failed", { code: error?.code }); req.flash("error", "The submission could not be loaded"); return res.redirect("/admin/feedback"); }
+  });
+  router.post("/:id/comments", async (req, res) => {
+    const input = normalizeFeedbackComment(req.body?.commentText);
+    const redirectPath = `/admin/feedback/${encodeURIComponent(req.params.id)}`;
+    if (!isUuid(req.params.id) || !input.valid) {
+      if (typeof req.body?.commentText === "string") req.flash("feedbackCommentDraft", req.body.commentText);
+      req.flash("error", !isUuid(req.params.id) ? "Submission not found" : input.error);
+      return res.redirect(303, redirectPath);
+    }
+    try {
+      const client = createClient(req.accessToken);
+      const [ticketResult, profileResult] = await Promise.all([
+        client.from("help_feedback_submissions").select("id").eq("id", req.params.id).maybeSingle(),
+        client.from("admin_profiles").select("id, display_name, active").eq("id", req.user.id).eq("active", true).maybeSingle(),
+      ]);
+      if (ticketResult.error || profileResult.error) throw ticketResult.error || profileResult.error;
+      if (!ticketResult.data) return res.status(404).render("error", { title: "Not Found", message: "Submission not found" });
+      if (!profileResult.data) {
+        req.flash("feedbackCommentDraft", req.body.commentText);
+        req.flash("error", "An active administrator profile is required to add a comment");
+        return res.redirect(303, redirectPath);
+      }
+      const result = await client.from("feedback_progress_comments").insert([{
+        feedback_submission_id: ticketResult.data.id,
+        author_id: req.user.id,
+        author_display_name: profileResult.data.display_name,
+        comment_text: input.value,
+      }]).select("id").maybeSingle();
+      if (isMissingFeedbackCommentsTableError(result.error)) {
+        req.flash("feedbackCommentDraft", req.body.commentText);
+        req.flash("error", "Progress comments are unavailable until database migration 017 is applied");
+        return res.redirect(303, redirectPath);
+      }
+      if (result.error) throw result.error;
+      if (!result.data) throw new Error("Comment insert returned no row");
+      req.flash("success", "Progress comment added");
+      return res.redirect(303, redirectPath);
+    } catch (error) {
+      console.error("Admin feedback comment failed", { code: error?.code });
+      req.flash("feedbackCommentDraft", req.body.commentText);
+      req.flash("error", "The progress comment could not be added");
+      return res.redirect(303, redirectPath);
+    }
   });
   router.post("/:id", async (req, res) => {
     const input = normalizeUpdate(req.body);

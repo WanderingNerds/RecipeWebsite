@@ -107,8 +107,9 @@ See [Help & Feedback](help-feedback.md) for validation, RLS, and pending live ve
 | POST | `/admin/login` | Authenticate through an isolated Supabase client and verify the trusted admin claim |
 | POST | `/admin/logout` | Bind/revoke the caller's token pair and clear local cookies |
 | GET | `/admin/feedback` | List submissions newest-first with All, Unresolved, or Done filtering |
-| GET | `/admin/feedback/:id` | Show escaped submission details and assignable profiles |
+| GET | `/admin/feedback/:id` | Show escaped submission details, progress history, and assignable profiles |
 | POST | `/admin/feedback/:id` | Validate and update status/assignment, then redirect |
+| POST | `/admin/feedback/:id/comments` | Append an authenticated, timestamped progress comment, then redirect |
 
 All management routes require `requireAdmin` and use the request-scoped access token so RLS remains active. See [Admin Help & Feedback](admin-feedback.md).
 

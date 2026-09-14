@@ -10,8 +10,9 @@ This is the current implementation rebuilt from the clean merged REW-70 baseline
 | `POST` | `/admin/login` | CSRF-protected and limited to 10 attempts per 15 minutes. A fresh non-persisting Supabase client signs in, then verifies `app_metadata.role === "admin"`. Failure and non-admin denial use the same generic message and clear local/new auth state. Success sets secure cookies and redirects with 303. |
 | `POST` | `/admin/logout` | Binds the caller's access/refresh tokens to a fresh client before sign-out, always clears local cookies, and redirects with 303. There is no GET logout route. |
 | `GET` | `/admin/feedback` | Requires `requireAdmin`. Lists newest-first. `?status=` accepts `all`, `unresolved` (default: `new` plus `in_progress`), or `done`; invalid filters default to unresolved. |
-| `GET` | `/admin/feedback/:id` | Requires an admin and UUID. Shows escaped submission details and exactly Unassigned, Andrew, and Victoria as assignment choices when each explicitly recognized profile is uniquely active. Missing rows return 404. |
+| `GET` | `/admin/feedback/:id` | Requires an admin and UUID. Shows escaped submission details, chronological progress history, and exactly Unassigned, Andrew, and Victoria as assignment choices when each explicitly recognized profile is uniquely active. Missing rows return 404. |
 | `POST` | `/admin/feedback/:id` | Requires admin, CSRF, UUID, allowlisted status, and blank/UUID assignee. A selected profile must be active and match an explicit server-side name for Andrew or Victoria. Updates only status/assignment and redirects with 303. |
+| `POST` | `/admin/feedback/:id/comments` | Requires admin, CSRF, UUID, an active admin profile, and a nonblank comment of at most 5,000 characters. Appends one comment using server-derived authorship and redirects with 303. |
 
 ## Assignment notifications (REW-78)
 
@@ -41,8 +42,16 @@ Every admin login, refresh, and logout uses a fresh client configured with `pers
 
 Unsafe non-multipart requests are protected application-wide by double-submit CSRF validation. Server-rendered forms submit `_csrf`; same-origin fetch requests receive `x-csrf-token` through the shared wrapper. Multipart routes defer validation until after Multer parses `_csrf`. The CSRF cookie is HTTP-only, `SameSite=Lax`, and secure in production.
 
+## Progress comments (REW-80)
+
+Each feedback detail page loads `feedback_progress_comments` oldest-first using `created_at` and `id` as a stable tie-breaker. A comment stores trimmed plain text, the authenticated administrator UUID, a snapshot of that administrator's active profile display name, and a database-generated `TIMESTAMPTZ`. Browser-supplied author or timestamp fields are ignored. Timestamps render in `America/Chicago`, including automatic CST/CDT selection, while the `<time datetime>` attribute retains the stored machine-readable instant.
+
+Comments are append-only: authenticated administrators receive SELECT and INSERT grants but no UPDATE or DELETE grant or policy. RLS requires a trusted admin claim, binds `author_id` to `auth.uid()`, and requires the submitted display-name snapshot to match the caller's active `admin_profiles` row. The 5,000-character boundary counts Unicode code points consistently with PostgreSQL `char_length`, so non-BMP characters such as emoji count as one. Invalid comment text is preserved across the validation redirect; persisted text and author names use escaped EJS output.
+
+During a deployment window where PostgREST reports `PGRST205` because migration 017 is not yet present in its schema cache, the ticket detail remains available with progress history marked temporarily unavailable and the comment form hidden. Direct comment submissions preserve the draft and explain that migration 017 is required. Other ticket, profile, and comment-query errors remain fatal so this compatibility path cannot mask unrelated failures.
+
 ## Deployment and live acceptance
 
-Apply migrations 014, 015, and 016 in order. Set the trusted `app_metadata.role = "admin"` on Andrew and Victoria's existing Auth users before migration 016; the migration only provisions their assignment profiles and does not grant access. Provision additional safe regular/inactive fixtures separately for acceptance testing, then refresh the admin token after changing Auth metadata.
+Apply migrations 014, 015, 016, and 017 in order. Set the trusted `app_metadata.role = "admin"` on Andrew and Victoria's existing Auth users before migration 016; migration 016 provisions their assignment profiles without granting access, and migration 017 creates the progress-comment table and policies. Provision additional safe regular/inactive fixtures separately for acceptance testing, then refresh the admin token after changing Auth metadata.
 
-Local/static QA passes 185/185 with zero skips in a listener-capable environment. CSRF, auth isolation, logout, fetch, multipart, migration smoke, and contract checks pass. Live Supabase/browser acceptance is blocked because the configured project lacks the required tables/migrations and safe fixtures; live QA is not claimed.
+For REW-80, focused comment tests pass 27/27 and the full Node suite passes 250/250 with zero skips; `npm run build` and `git diff --check` also pass. The printed invalid-CSRF errors are expected coverage of rejection paths. Migration 017 was not applied remotely, so live Supabase RLS/grant verification and authenticated Andrew/Victoria/non-admin browser acceptance remain pending and are not claimed.

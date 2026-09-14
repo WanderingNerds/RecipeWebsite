@@ -32,6 +32,8 @@ To set up the database in your Supabase project, follow these steps:
    | 13 | `013_public_recipe_card_metadata.sql` | Add public SELECT policies for published recipe categories/tags and their associations (REW-59) |
    | 14 | `014_create_help_feedback_submissions_table.sql` | Authenticated feedback intake with owner-bound INSERT-only RLS (REW-70) |
    | 15 | `015_add_admin_feedback_management.sql` | Admin profiles, workflow/assignment, narrow grants, and admin-only RLS (REW-71) |
+   | 16 | `016_backfill_rew78_admin_profiles.sql` | Idempotently provision Andrew and Victoria's already-authorized admin profiles (REW-78) |
+   | 17 | `017_add_feedback_progress_comments.sql` | Append-only, admin-only feedback progress history with durable author snapshots (REW-80) |
 
 4. **Verify the Setup**
    - Go to "Table Editor" in the left sidebar
@@ -225,6 +227,8 @@ A profile row does not grant administrator access. The matching Auth user must i
 
 Migration 016 idempotently provisions the fixed REW-78 assignees from existing `auth.users` rows. It matches only the case-normalized exact emails `carroll.andrew@gmail.com` and `vhobbs1895@gmail.com`, requires each user to already carry `raw_app_meta_data.role = 'admin'`, and writes the canonical short names Andrew and Victoria with `active = TRUE`. On an ID conflict it repairs only `display_name` and `active`; it does not grant a role, broaden RLS, or create profiles for any other account.
 
+Migration 017 adds `feedback_progress_comments`, an append-only history keyed to `help_feedback_submissions`. Each row records an authenticated `admin_profiles` author, a durable display-name snapshot, trimmed plain text of 1–5,000 characters, and a database-generated `TIMESTAMPTZ`. The `(feedback_submission_id, created_at, id)` index supports stable oldest-first detail-page reads. Authenticated callers receive only SELECT and INSERT; RLS further requires the trusted admin claim and, for inserts, binds the author and active profile name to `auth.uid()`. No UPDATE or DELETE grant or policy exists.
+
 ---
 
 ## Security
@@ -313,6 +317,7 @@ Performance indexes are created on:
 - `help_feedback_submissions.created_at` (descending) - Chronological intake ordering
 - `help_feedback_submissions.(status, created_at)` - Status-filtered queue ordering for REW-71
 - `help_feedback_submissions.assignee_id` - Assignment lookup support for REW-71
+- `feedback_progress_comments.(feedback_submission_id, created_at, id)` - Stable oldest-first progress history per feedback ticket (REW-80)
 
 ---
 
@@ -334,6 +339,7 @@ Performance indexes are created on:
 - **REW-70 deployment:** apply migration 014 after migration 013. Live migration, RLS, account-delete `NO ACTION`, and successful storage/refresh checks remain pending.
 - **REW-71 deployment:** apply migration 015 after 014, set a user's trusted Auth `app_metadata.role` to `admin`, insert the matching `admin_profiles` row, and refresh/re-authenticate. The application does not use a service-role key or expose self-promotion.
 - **REW-78 deployment:** apply migration 016 after 015 to idempotently backfill Andrew and Victoria's assignment profiles from their existing, independently authorized Auth users. The migration does not grant administrator access.
+- **REW-80 deployment:** apply migration 017 after 016. No environment or package changes are required. Live PostgreSQL RLS/grant checks and authenticated Andrew/Victoria browser acceptance remain pending.
 - **REW-71 acceptance:** the configured live project currently lacks the required tables/migrations and safe admin/regular fixtures. Verify intake invariants, role denial, direct RLS/grants, inactive-assignee behavior, queue/detail/status/assignment, CSRF, auth refresh/logout, and responsive browser behavior before release.
 
 ---
