@@ -164,10 +164,6 @@ router.post("/check-title", requireAuth, async (req, res) => {
  * POST /recipes/import/save
  * Save the imported recipe after user confirmation
  */
-export function createSaveImportHandler({ createClient = createSupabaseClient } = {}) {
-  return async (req, res) => {
-    try {
-      const {
 export async function handleImportSave(req, res, { createClient = createSupabaseClient } = {}) {
   try {
     const {
@@ -181,7 +177,6 @@ export async function handleImportSave(req, res, { createClient = createSupabase
       servings,
       sourceUrl,
       action, // 'draft' or 'publish'
-      } = req.body;
       mealPlanId,
     } = req.body;
 
@@ -287,20 +282,16 @@ export async function handleImportSave(req, res, { createClient = createSupabase
       message,
       mealPlanAssignment: assignment,
     });
-    } catch (error) {
-      console.error("Import save error:", error);
-      res.status(500).json({ error: "An unexpected error occurred" });
-    }
-  };
-}
-
-router.post("/save", requireAuth, createSaveImportHandler());
   } catch (error) {
     console.error("Import save error:", error);
     res.status(500).json({ error: "An unexpected error occurred" });
   }
 }
 
-router.post("/save", requireAuth, (req, res) => handleImportSave(req, res));
+export function createSaveImportHandler({ createClient = createSupabaseClient } = {}) {
+  return (req, res) => handleImportSave(req, res, { createClient });
+}
+
+router.post("/save", requireAuth, createSaveImportHandler());
 
 export default router;

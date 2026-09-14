@@ -88,6 +88,7 @@ const manualBody = (mealPlanId) => ({
 const importBody = (mealPlanId) => ({
   title: "Soup",
   instructions: "Simmer.",
+  cookTime: "30 min",
   action: "publish",
   mealPlanId,
 });

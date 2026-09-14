@@ -13,6 +13,7 @@ test("import Cook Time has required and accessible inline-error markup", async (
     csrfToken: "csrf-test",
     accountDisplayName: "Test Cook",
     supportedFormats: [],
+    mealPlans: [],
   });
 
   assert.match(html, /Cook Time <span[^>]*>\*<\/span>/);

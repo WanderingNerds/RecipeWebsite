@@ -65,6 +65,7 @@ test("save handler trims Cook Time for both draft and publish inserts", async ()
       },
       user: { id: "user-1", email: "cook@example.com" },
       accessToken: "token",
+      flash: () => {},
     };
     const res = responseRecorder();
 
