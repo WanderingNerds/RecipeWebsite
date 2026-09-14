@@ -223,6 +223,8 @@ Assignable administrator roster keyed one-to-one to Supabase Auth users.
 
 A profile row does not grant administrator access. The matching Auth user must independently carry the trusted `app_metadata.role = 'admin'` claim.
 
+Migration 016 idempotently provisions the fixed REW-78 assignees from existing `auth.users` rows. It matches only the case-normalized exact emails `carroll.andrew@gmail.com` and `vhobbs1895@gmail.com`, requires each user to already carry `raw_app_meta_data.role = 'admin'`, and writes the canonical short names Andrew and Victoria with `active = TRUE`. On an ID conflict it repairs only `display_name` and `active`; it does not grant a role, broaden RLS, or create profiles for any other account.
+
 ---
 
 ## Security
@@ -331,6 +333,7 @@ Performance indexes are created on:
 - `meal_plan_recipes.planned_servings` is schema-only in this ticket (REW-63) — no route or view reads or writes it yet. It exists purely so REW-26 (grocery list generation) can be built on top of `meal_plans`/`meal_plan_recipes` without a further migration.
 - **REW-70 deployment:** apply migration 014 after migration 013. Live migration, RLS, account-delete `NO ACTION`, and successful storage/refresh checks remain pending.
 - **REW-71 deployment:** apply migration 015 after 014, set a user's trusted Auth `app_metadata.role` to `admin`, insert the matching `admin_profiles` row, and refresh/re-authenticate. The application does not use a service-role key or expose self-promotion.
+- **REW-78 deployment:** apply migration 016 after 015 to idempotently backfill Andrew and Victoria's assignment profiles from their existing, independently authorized Auth users. The migration does not grant administrator access.
 - **REW-71 acceptance:** the configured live project currently lacks the required tables/migrations and safe admin/regular fixtures. Verify intake invariants, role denial, direct RLS/grants, inactive-assignee behavior, queue/detail/status/assignment, CSRF, auth refresh/logout, and responsive browser behavior before release.
 
 ---

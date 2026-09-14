@@ -42,9 +42,11 @@ A recipe website built with Node.js, Express, and Supabase Auth.
    SUPABASE_ANON_KEY=your-supabase-anon-key
    SESSION_SECRET=your-session-secret
    APP_URL=https://your-production-domain.com  # Required for production
+   RESEND_API_KEY=re_your-resend-api-key       # Required for assignment notifications
+   ASSIGNMENT_EMAIL_FROM=Potluck <verified-sender@example.com>
    ```
 
-   Note: `APP_URL` is required for email confirmation links to work correctly in production. In development, it defaults to `http://localhost:3000`.
+   Note: `APP_URL` is required for email confirmation links and admin assignment links to work correctly in production. In development, it defaults to `http://localhost:3000`. `ASSIGNMENT_EMAIL_FROM` must use a sender accepted by the configured Resend account.
 
 5. Start the development server:
    ```bash
@@ -68,9 +70,9 @@ A recipe website built with Node.js, Express, and Supabase Auth.
 5. **`APP_URL` must be set in Vercel (required — REW-57):** Set the `APP_URL` environment variable for the **Production** environment in Vercel Project Settings to the canonical production origin (scheme + host, no trailing slash). Without it, password-reset and email-confirmation links generated in production fall back to `http://localhost:3000`, which can never be reached by anyone but the developer and isn't on the Supabase Redirect URL allow-list.
 6. Authentication is handled automatically by Supabase Auth
 
-### Administrator feedback setup (REW-71)
+### Administrator feedback setup (REW-71, REW-78)
 
-Apply migrations 014 and 015 in order. Provision administrators out of band by setting the Supabase Auth user's trusted `app_metadata.role` to `admin`, then inserting the same Auth user ID and a display name into `admin_profiles`. Refresh or re-authenticate so the issued token carries the claim. Never expose a service-role key in the application. See [Admin Help & Feedback](docs/api/admin-feedback.md) and [database setup](database/README.md).
+Apply migrations 014, 015, and 016 in order. Administrator access is still provisioned out of band through the Supabase Auth user's trusted `app_metadata.role`; migration 016 only backfills Andrew and Victoria's assignment profiles from their exact emails after that role exists. The fixed assignment roster recognizes the explicit stored names `Andrew` or `Andrew Carroll`, and `Victoria` or `Victoria Johnson`; it always renders the shorter product labels. Refresh or re-authenticate so the issued token carries the claim. Assignment notification email uses the Resend HTTPS API and requires `RESEND_API_KEY`, `ASSIGNMENT_EMAIL_FROM`, and the canonical `APP_URL`. Never expose a service-role or mail-provider key in the application. See [Admin Help & Feedback](docs/api/admin-feedback.md) and [database setup](database/README.md).
 
 ## Project Structure
 
@@ -141,7 +143,7 @@ Authenticated users can submit support requests from the fifth Dashboard Quick A
 
 ### Admin Help & Feedback Management (REW-71)
 
-Administrators sign in separately at `/admin/login` and manage submissions at `/admin/feedback`. The newest-first queue supports All, Unresolved, and Done filters. Ticket detail shows escaped submission data and lets an administrator update status (`new`, `in_progress`, `done`) or assign an active `admin_profiles` member. An inactive current assignee remains visible and can be retained during status-only updates.
+Administrators sign in separately at `/admin/login` and manage submissions at `/admin/feedback`. The newest-first queue supports All, Unresolved, and Done filters. Ticket detail shows escaped submission data and lets an administrator update status (`new`, `in_progress`, `done`) or assign exactly Andrew, Victoria, or Unassigned. A new or changed named assignment sends the new assignee a direct ticket link after persistence; unassignment and unchanged assignment do not send mail. If delivery fails, the saved assignment remains authoritative and the administrator sees a separate warning.
 
 Express validates the Supabase user's trusted `app_metadata.role = "admin"`; migration 015 independently enforces admin-only reads and workflow updates through RLS, column-level UPDATE privileges, and OLD/NEW-aware assignment validation. Auth operations use fresh non-persisting Supabase clients, while data access remains tied to the verified request token. Global CSRF protection covers non-multipart unsafe requests; multipart routes validate after Multer parsing. Logout is POST-only.
 
