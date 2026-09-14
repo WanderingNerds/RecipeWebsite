@@ -14,6 +14,7 @@ import { importRecipe, SUPPORTED_MIME_TYPES, sanitizeUrl } from "../utils/recipe
 import { getAccountDisplayName } from "../utils/userUtils.js";
 import { csrfProtection } from "../middleware/csrfMiddleware.js";
 import { assignRecipeToMealPlan } from "../utils/mealPlanAssignment.js";
+import { normalizeRecipeVisibility } from "../utils/recipeVisibility.js";
 
 const router = Router();
 
@@ -176,7 +177,7 @@ export async function handleImportSave(req, res, { createClient = createSupabase
       cookTime,
       servings,
       sourceUrl,
-      action, // 'draft' or 'publish'
+      visibility,
       mealPlanId,
     } = req.body;
 
@@ -243,7 +244,7 @@ export async function handleImportSave(req, res, { createClient = createSupabase
       servings: servings?.trim() || null,
       notes: description?.trim() || null, // Use description as notes
       source_url: sanitizedSourceUrl,
-      status: action === "publish" ? "published" : "draft",
+      status: normalizeRecipeVisibility(visibility),
       difficulty: "Easy", // Default difficulty for imports
     };
 
@@ -265,7 +266,9 @@ export async function handleImportSave(req, res, { createClient = createSupabase
       userId: req.user.id,
     });
 
-    const baseMessage = action === "publish" ? "Recipe imported and published!" : "Recipe imported as draft!";
+    const baseMessage = recipeData.status === "published"
+      ? "Recipe imported as Public!"
+      : "Recipe imported as Private!";
     const message = assignment.status === "assigned"
       ? `${baseMessage} Added to ${assignment.mealPlanTitle}.`
       : baseMessage;

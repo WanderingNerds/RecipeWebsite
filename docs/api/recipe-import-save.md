@@ -7,11 +7,11 @@
 
 ## Purpose
 
-Saves a recipe after the authenticated user reviews parsed import content. The same endpoint handles draft and publish actions.
+Saves a recipe after the authenticated user reviews parsed import content. The visibility choice is presented as Private or Public.
 
 ## Request
 
-Send a JSON body containing the reviewed recipe fields. `title`, `instructions`, and `cookTime` must be non-blank strings. `action` selects draft or published status. Other existing import fields, including `prepTime`, remain optional.
+Send a JSON body containing the reviewed recipe fields. `title`, `instructions`, and `cookTime` must be non-blank strings. `visibility` accepts `private` or `public`, mapping to stored `draft` or `published`; all other values default to Private. Other existing import fields, including `prepTime`, remain optional.
 
 ```json
 {
@@ -24,11 +24,11 @@ Send a JSON body containing the reviewed recipe fields. `title`, `instructions`,
   "cookTime": " 35 min ",
   "servings": "4",
   "sourceUrl": "https://example.com/tomato-soup",
-  "action": "publish"
+  "visibility": "public"
 }
 ```
 
-Valid Cook Time is trimmed before it is stored in `recipes.cook_time`. Both `draft` and `publish` actions require Cook Time.
+Valid Cook Time is trimmed before it is stored in `recipes.cook_time`. Both visibility choices require Cook Time.
 
 ## Cook Time validation
 
@@ -44,13 +44,13 @@ Client-side import review validation provides immediate accessible feedback, but
 
 ## Success response
 
-The route returns the existing success payload with the created recipe ID and an action-specific message.
+The route returns the existing success payload with the created recipe ID and a visibility-specific message.
 
 ```json
 {
   "success": true,
   "recipeId": "recipe-id",
-  "message": "Recipe imported and published!"
+  "message": "Recipe imported as Public!"
 }
 ```
 

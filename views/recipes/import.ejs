@@ -152,15 +152,20 @@
           <% } %>
         </div>
 
-        <!-- Submit buttons -->
+        <fieldset class="visibility-control">
+          <legend>Visibility</legend>
+          <div class="visibility-options">
+            <label class="visibility-option"><input type="radio" name="visibility" value="private" checked><span><strong>Private</strong><small>Only you can view this recipe.</small></span></label>
+            <label class="visibility-option"><input type="radio" name="visibility" value="public"><span><strong>Public</strong><small>Anyone can find and view this recipe.</small></span></label>
+          </div>
+        </fieldset>
+
+        <!-- Submit action -->
         <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
           <button type="button" id="startOverButton" class="btn btn-outline">
             &larr; Start Over
           </button>
-          <div style="display: flex; flex-wrap: wrap; gap: 1rem;">
-            <button type="submit" name="action" value="draft" class="btn btn-outline" id="saveDraftButton">Save as Draft</button>
-            <button type="submit" name="action" value="publish" class="btn btn-primary" id="publishButton">Publish Recipe</button>
-          </div>
+          <button type="submit" class="btn btn-primary" id="saveRecipeButton">Save recipe</button>
         </div>
 
       </div>

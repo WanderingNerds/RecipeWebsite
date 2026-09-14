@@ -68,7 +68,7 @@ test("both native-invalid submit paths show/focus Cook Time and valid input clea
     "importForm", "startOverButton", "importTitle", "importAuthor", "importIngredients",
     "importInstructions", "importPrepTime", "importCookTime", "importServings", "importSourceUrl",
     "importDescription", "titleError", "importCookTimeError", "warningsSection", "warningsList",
-    "confidenceFill", "saveDraftButton", "publishButton",
+    "confidenceFill", "saveRecipeButton",
   ];
   ids.forEach((id) => { if (!elements.has(id)) element(id); });
   const domReady = [];
@@ -76,6 +76,11 @@ test("both native-invalid submit paths show/focus Cook Time and valid input clea
     addEventListener(type, listener) { if (type === "DOMContentLoaded") domReady.push(listener); },
     getElementById(id) { return elements.get(id); },
     querySelector() { return { value: "csrf-test" }; },
+    querySelectorAll(selector) {
+      return selector === 'input[name="visibility"]'
+        ? [{ value: "private", checked: true }, { value: "public", checked: false }]
+        : [];
+    },
   };
   vm.runInNewContext(source, { document, console, setTimeout, clearTimeout, FormData, fetch: () => { throw new Error("unexpected fetch"); } });
   domReady.forEach((listener) => listener());
@@ -83,7 +88,7 @@ test("both native-invalid submit paths show/focus Cook Time and valid input clea
   const form = elements.get("importForm");
   const cookTime = elements.get("importCookTime");
   const group = elements.get("cookTimeGroup");
-  for (const submitter of [elements.get("saveDraftButton"), elements.get("publishButton")]) {
+  for (const submitter of [elements.get("saveRecipeButton")]) {
     cookTime.value = "";
     let prevented = false;
     form.listeners.get("invalid")({ target: cookTime, submitter, preventDefault() { prevented = true; } });

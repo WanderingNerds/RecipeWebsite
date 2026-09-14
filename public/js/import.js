@@ -31,6 +31,7 @@ document.addEventListener("DOMContentLoaded", function () {
   const importSourceUrl = document.getElementById("importSourceUrl");
   const importDescription = document.getElementById("importDescription");
   const importMealPlanId = document.getElementById("importMealPlanId");
+  const visibilityInputs = document.querySelectorAll('input[name="visibility"]');
   const titleError = document.getElementById("titleError");
   const cookTimeError = document.getElementById("importCookTimeError");
   const warningsSection = document.getElementById("warningsSection");
@@ -64,6 +65,12 @@ document.addEventListener("DOMContentLoaded", function () {
 
     group.classList.toggle("has-error", hasError);
     importCookTime.setAttribute("aria-invalid", hasError ? "true" : "false");
+  }
+
+  function resetVisibility() {
+    visibilityInputs.forEach(function (input) {
+      input.checked = input.value === "private";
+    });
   }
 
   /**
@@ -169,6 +176,7 @@ document.addEventListener("DOMContentLoaded", function () {
    * Display parsed recipe preview
    */
   function displayPreview(recipe) {
+    resetVisibility();
     // Fill form fields
     importTitle.value = recipe.title || "";
     importIngredients.value = recipe.ingredients || "";
@@ -268,6 +276,7 @@ document.addEventListener("DOMContentLoaded", function () {
    * Reset to upload view
    */
   function startOver() {
+    resetVisibility();
     previewSection.style.display = "none";
     uploadSection.style.display = "block";
     hideProgress();
@@ -278,7 +287,7 @@ document.addEventListener("DOMContentLoaded", function () {
   /**
    * Save imported recipe
    */
-  async function saveRecipe(action) {
+  async function saveRecipe() {
     // Validate title first
     const titleValid = await validateTitle(importTitle.value);
     if (!titleValid) {
@@ -300,10 +309,8 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     // Disable submit buttons
-    const saveDraftButton = document.getElementById("saveDraftButton");
-    const publishButton = document.getElementById("publishButton");
-    saveDraftButton.disabled = true;
-    publishButton.disabled = true;
+    const saveRecipeButton = document.getElementById("saveRecipeButton");
+    saveRecipeButton.disabled = true;
 
     try {
       const response = await fetch("/recipes/import/save", {
@@ -323,7 +330,9 @@ document.addEventListener("DOMContentLoaded", function () {
           servings: importServings.value.trim(),
           sourceUrl: importSourceUrl.value.trim(),
           mealPlanId: importMealPlanId ? importMealPlanId.value : "",
-          action: action,
+          visibility: Array.from(visibilityInputs).find(function (input) {
+            return input.checked;
+          })?.value || "private",
         }),
       });
 
@@ -347,8 +356,7 @@ document.addEventListener("DOMContentLoaded", function () {
       console.error("Save error:", error);
       alert("Failed to save recipe. Please try again.");
     } finally {
-      saveDraftButton.disabled = false;
-      publishButton.disabled = false;
+      saveRecipeButton.disabled = false;
     }
   }
 
@@ -431,8 +439,7 @@ document.addEventListener("DOMContentLoaded", function () {
   if (importForm) {
     importForm.addEventListener("submit", function (e) {
       e.preventDefault();
-      const action = e.submitter ? e.submitter.value : "draft";
-      saveRecipe(action);
+      saveRecipe();
     });
   }
 });
