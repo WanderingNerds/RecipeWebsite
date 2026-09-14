@@ -15,6 +15,9 @@
       </div>
       <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
         <a href="/meal-plans/<%= mealPlan.id %>/add-recipes" class="btn btn-primary">Add Recipes</a>
+        <% if (recipes.length > 0) { %>
+          <a href="/meal-plans/<%= mealPlan.id %>/grocery-list" class="btn btn-outline">Grocery List</a>
+        <% } %>
         <a href="/meal-plans/<%= mealPlan.id %>/edit" class="btn btn-outline">Edit</a>
         <form action="/meal-plans/<%= mealPlan.id %>/delete" method="POST" style="margin: 0;" onsubmit="return confirm('Delete this meal plan? Its recipes will not be deleted.');">
           <input type="hidden" name="_csrf" value="<%= csrfToken %>">

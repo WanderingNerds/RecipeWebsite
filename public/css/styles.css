@@ -2978,3 +2978,174 @@ a.pagination-link:hover {
     grid-template-columns: 1fr;
   }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Grocery List (REW-26)
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.grocery-list-header {
+  margin-bottom: 2rem;
+}
+
+.grocery-list-back {
+  color: var(--primary-color);
+  display: inline-block;
+  margin-bottom: 1rem;
+  text-decoration: none;
+}
+
+.grocery-list-title-row {
+  align-items: start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.grocery-list-title {
+  margin-bottom: 0.25rem;
+}
+
+.grocery-list-plan {
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+.grocery-list-dates,
+.grocery-list-summary {
+  color: var(--text-muted);
+  margin-bottom: 0.25rem;
+}
+
+.grocery-list-notice {
+  background-color: var(--color-surface-muted);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  margin-top: 1rem;
+  padding: 0.75rem 1rem;
+}
+
+.grocery-category {
+  background-color: var(--color-surface);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 1.5rem;
+  padding: 1.25rem 1.5rem;
+}
+
+.grocery-category-heading {
+  border-bottom: 1px solid var(--border-color);
+  font-size: 1.25rem;
+  margin: 0 0 0.75rem;
+  padding-bottom: 0.5rem;
+}
+
+.grocery-item-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.grocery-item {
+  border-top: 1px solid var(--border-color);
+  padding: 0.5rem 0;
+}
+
+.grocery-item:first-child {
+  border-top: 0;
+}
+
+.grocery-item-label {
+  align-items: baseline;
+  cursor: pointer;
+  display: flex;
+  gap: 0.75rem;
+}
+
+.grocery-item-checkbox {
+  accent-color: var(--primary-color);
+  flex: 0 0 auto;
+  height: 1.1rem;
+  width: 1.1rem;
+}
+
+.grocery-item-text {
+  overflow-wrap: anywhere;
+}
+
+.grocery-item-amount {
+  font-weight: 700;
+}
+
+.grocery-item-hint,
+.grocery-item-recipes {
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+
+.grocery-item-recipes {
+  display: block;
+}
+
+/* ── Printing ──────────────────────────────────────────────────────────────
+   The grocery list is meant to be carried around the store, so printing drops
+   the site chrome and every control, and keeps a category with its items. */
+@media print {
+  .navbar,
+  .footer,
+  .alert,
+  .grocery-list-actions,
+  .grocery-list-back,
+  .btn,
+  .toast {
+    display: none !important;
+  }
+
+  body,
+  main,
+  .grocery-list-page,
+  .grocery-category {
+    background: #fff !important;
+    box-shadow: none !important;
+    color: #000 !important;
+  }
+
+  .grocery-list-page {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+
+  .grocery-category {
+    border: 0;
+    break-inside: avoid;
+    padding: 0 0 0.5rem;
+    page-break-inside: avoid;
+  }
+
+  .grocery-category-heading {
+    border-bottom: 1px solid #000;
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  .grocery-item {
+    border-top: 0;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .grocery-item-checkbox {
+    -webkit-appearance: none;
+    appearance: none;
+    border: 1px solid #000;
+    height: 0.9rem;
+    width: 0.9rem;
+  }
+
+  .grocery-item-hint,
+  .grocery-item-recipes,
+  .grocery-list-dates,
+  .grocery-list-summary {
+    color: #333 !important;
+  }
+}

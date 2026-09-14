@@ -3,6 +3,7 @@ import rateLimit from "express-rate-limit";
 import { requireAuth } from "../middleware/authMiddleware.js";
 import { createSupabaseClient } from "../config/supabase.js";
 import { validateMealPlanTitle, validateDateRange } from "../utils/mealPlanUtils.js";
+import { buildGroceryList } from "../utils/groceryList.js";
 // Recipe-id-selection normalization is generic UUID-array normalization,
 // not cookbook-specific -- reused directly rather than duplicated, per the
 // REW-63 plan (Task 3).
@@ -72,6 +73,38 @@ async function getMealPlanRecipes(supabaseClient, mealPlanId) {
   return (data || [])
     .map((row) => row.recipes)
     .filter(Boolean);
+}
+
+/**
+ * Fetch the ingredient text of every recipe in a meal plan, for grocery list
+ * generation (REW-26).
+ *
+ * Deliberately separate from getMealPlanRecipes() above: that one feeds the
+ * card grid and should not start shipping full ingredient text on every plan
+ * detail page render.
+ *
+ * A membership row whose `recipes` join comes back null is one the caller can
+ * no longer read -- the recipe was deleted, or it belonged to another user and
+ * has since been switched from Public to Private (REW-85). RLS does that
+ * filtering for us; all we do is skip the row and count it, so the page can
+ * say "1 recipe could not be included" without leaking its title or owner.
+ */
+async function getMealPlanRecipeIngredients(supabaseClient, mealPlanId) {
+  const { data, error } = await supabaseClient
+    .from("meal_plan_recipes")
+    .select("recipe_id, created_at, recipes(id, title, ingredients)")
+    .eq("meal_plan_id", mealPlanId)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    console.error("Error fetching meal plan recipe ingredients:", error);
+    return null;
+  }
+
+  const rows = data || [];
+  const recipes = rows.map((row) => row.recipes).filter(Boolean);
+
+  return { recipes, skippedCount: rows.length - recipes.length };
 }
 
 /**
@@ -479,6 +512,49 @@ router.post("/:id/recipes/:recipeId/remove", requireAuth, mealPlanLimiter, async
     res.redirect(`/meal-plans/${id}`);
   } catch (error) {
     console.error("Error removing recipe from meal plan:", error);
+    req.flash("error", "An unexpected error occurred");
+    res.redirect("/meal-plans");
+  }
+});
+
+// GET /meal-plans/:id/grocery-list - Printable grocery list for a meal plan
+// (REW-26). Read-only: nothing is persisted, so the list always reflects the
+// plan and its recipes exactly as they are right now.
+router.get("/:id/grocery-list", requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!UUID_PATTERN.test(id)) {
+      req.flash("error", "Meal plan not found");
+      return res.redirect("/meal-plans");
+    }
+
+    const supabaseClient = createSupabaseClient(req.accessToken);
+    const mealPlan = await getOwnedMealPlan(supabaseClient, id, req.user.id);
+
+    if (!mealPlan) {
+      req.flash("error", "Meal plan not found");
+      return res.redirect("/meal-plans");
+    }
+
+    const result = await getMealPlanRecipeIngredients(supabaseClient, id);
+
+    if (!result) {
+      req.flash("error", "Failed to build the grocery list. Please try again.");
+      return res.redirect(`/meal-plans/${id}`);
+    }
+
+    const groceryList = buildGroceryList(result.recipes, {
+      skippedCount: result.skippedCount,
+    });
+
+    res.render("meal-plans/grocery-list", {
+      title: `Grocery List - ${mealPlan.title}`,
+      mealPlan,
+      groceryList,
+    });
+  } catch (error) {
+    console.error("Error building meal plan grocery list:", error);
     req.flash("error", "An unexpected error occurred");
     res.redirect("/meal-plans");
   }

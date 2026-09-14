@@ -1,0 +1,68 @@
+<div class="container grocery-list-page" style="max-width: 900px; padding: 2rem 1rem;">
+
+  <div class="grocery-list-header">
+    <a href="/meal-plans/<%= mealPlan.id %>" class="grocery-list-back">
+      &larr; Back to <%= mealPlan.title %>
+    </a>
+
+    <div class="grocery-list-title-row">
+      <div>
+        <h1 class="grocery-list-title">Grocery List</h1>
+        <p class="grocery-list-plan"><%= mealPlan.title %></p>
+        <p class="grocery-list-dates">
+          <%= new Date(mealPlan.start_date + 'T00:00:00').toLocaleDateString() %> &ndash; <%= new Date(mealPlan.end_date + 'T00:00:00').toLocaleDateString() %>
+        </p>
+        <p class="grocery-list-summary">
+          <%= groceryList.totalItems %> item<%= groceryList.totalItems !== 1 ? 's' : '' %>
+          from <%= groceryList.recipeCount %> recipe<%= groceryList.recipeCount !== 1 ? 's' : '' %>
+        </p>
+      </div>
+      <div class="grocery-list-actions">
+        <button type="button" class="btn btn-primary" data-grocery-print>Print</button>
+      </div>
+    </div>
+
+    <% if (groceryList.skippedCount > 0) { %>
+      <p class="grocery-list-notice" role="status">
+        <%= groceryList.skippedCount %> recipe<%= groceryList.skippedCount !== 1 ? 's' : '' %>
+        in this meal plan could not be included.
+      </p>
+    <% } %>
+  </div>
+
+  <% if (groceryList.categories.length === 0) { %>
+    <div class="empty-state">
+      <h3>Nothing to shop for yet</h3>
+      <p>Add recipes with ingredients to this meal plan and your grocery list will build itself.</p>
+      <a href="/meal-plans/<%= mealPlan.id %>" class="btn btn-primary">Back to meal plan</a>
+    </div>
+  <% } else { %>
+    <% groceryList.categories.forEach(function(category) { %>
+      <section class="grocery-category">
+        <h2 class="grocery-category-heading"><%= category.label %></h2>
+        <ul class="grocery-item-list">
+          <% category.items.forEach(function(item) { %>
+            <li class="grocery-item">
+              <label class="grocery-item-label">
+                <input type="checkbox" class="grocery-item-checkbox">
+                <span class="grocery-item-text">
+                  <% if (item.amounts.length > 0) { %>
+                    <span class="grocery-item-amount"><%= item.amounts.join(' + ') %></span>
+                  <% } %>
+                  <span class="grocery-item-name"><%= item.name %></span>
+                  <% if (item.needsCheck && item.amounts.length === 0) { %>
+                    <span class="grocery-item-hint">(check recipe)</span>
+                  <% } %>
+                  <span class="grocery-item-recipes">
+                    <%= item.recipes.map(function(recipe) { return recipe.title; }).join(', ') %>
+                  </span>
+                </span>
+              </label>
+            </li>
+          <% }); %>
+        </ul>
+      </section>
+    <% }); %>
+  <% } %>
+
+</div>

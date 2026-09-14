@@ -11,7 +11,21 @@
 
 document.addEventListener("DOMContentLoaded", () => {
   initializeMealPlanModal();
+  initializeGroceryListPrint();
 });
+
+// Grocery list print button (REW-26). Lives here rather than in an inline
+// handler because helmet's CSP allows script-src 'self' only, and this file is
+// already loaded on every page by views/layouts/main.ejs -- so it simply
+// no-ops on the pages that have no print button.
+function initializeGroceryListPrint() {
+  const printButton = document.querySelector("[data-grocery-print]");
+  if (!printButton) return;
+
+  printButton.addEventListener("click", () => {
+    window.print();
+  });
+}
 
 let mealPlanActiveToast = null;
 let mealPlanToastTimeout = null;

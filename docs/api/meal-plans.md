@@ -2,7 +2,8 @@
 
 **Feature:** REW-63 — Create and Manage Meal Plans
 **Component:** `src/routes/mealPlanRoutes.js`, `src/routes/mealPlanApiRoutes.js`, `src/utils/mealPlanUtils.js`, `views/meal-plans/*.ejs`, `views/partials/meal-plan-modal.ejs`, `public/js/meal-plans.js`, `database/migrations/011_create_meal_plans_table.sql`, `database/migrations/012_create_meal_plan_recipes_table.sql`
-**Last Updated:** 2026-09-08
+**Also covers:** REW-26 — Grocery list generation (`src/utils/groceryList.js`, `views/meal-plans/grocery-list.ejs`)
+**Last Updated:** 2026-09-14
 
 ---
 
@@ -48,6 +49,18 @@ Creates a meal plan owned by the current user.
 ### `GET /meal-plans/:id`
 
 Meal plan detail: title, date range, and all recipes currently in it (most recently added first). Ownership is checked via `getOwnedMealPlan()` (`.eq("user_id", ...)` filter, belt-and-suspenders with the RLS policy itself) — a plan that doesn't exist, or belongs to another user, renders identically as "Meal plan not found" and redirects to `/meal-plans`, never leaking whether the ID exists.
+
+### `GET /meal-plans/:id/grocery-list` (REW-26)
+
+Read-only printable grocery list for an owned meal plan, rendered from `views/meal-plans/grocery-list.ejs`. **Nothing is persisted** — the list is derived on every request, so it always reflects the plan and its recipes as they are right now. There is no corresponding POST/PUT/DELETE, and the entry point on the plan detail page is a plain `GET` link (no form, no `_csrf` field), shown only when the plan has recipes.
+
+- **Ownership:** identical to `GET /meal-plans/:id` — `requireAuth`, `UUID_PATTERN` validation on `:id`, then `getOwnedMealPlan()`. A nonexistent plan, another user's plan, and a malformed ID all produce the same "Meal plan not found" flash and redirect to `/meal-plans`.
+- **Data:** a local helper (`getMealPlanRecipeIngredients()`) selects `recipe_id, created_at, recipes(id, title, ingredients)` for the plan with the caller's RLS-scoped client. It is deliberately separate from `getMealPlanRecipes()`, which feeds the card grid and must not start shipping full ingredient text on every plan detail render.
+- **Unreadable memberships:** a row whose `recipes` join comes back `null` — the recipe was deleted, or it belonged to another user and has since been switched Public → Private (REW-85) — is skipped in application code (never worked around with a privileged client) and counted. The page shows only a count ("1 recipe in this meal plan could not be included"); the missing recipe's title and owner are never revealed.
+- **Aggregation:** `src/utils/groceryList.js` (pure, unit-tested) parses each recipe's free-text `recipes.ingredients` with `parseIngredients()`, drops section headings ("For the sauce:") and blank lines, merges the same ingredient across recipes, and assigns each item to a fixed server-side aisle taxonomy (Produce, Meat & Seafood, Dairy & Eggs, Bakery, Frozen, Canned & Jarred, Dry Goods & Pasta, Baking, Spices & Seasonings, Condiments & Sauces, Beverages, Other), rendered in that walk-the-store order with empty categories omitted. This taxonomy is **not** the `categories` table, which classifies recipes (Breakfast/Dinner) — a different concept.
+- **Amounts are only combined when the measurements are genuinely compatible:** volumes summed in millilitres, weights in grams, and counts summed per identical unit. Ranges ("2-3 cloves"), approximate units ("a pinch"), and lines with no parseable quantity are never folded into a number — they are listed side by side on the same line, so the shopper sees two honest amounts rather than one invented one. An item whose source line had no usable amount at all is flagged so the view can say "(check recipe)".
+- **Serving scaling is out of scope:** quantities are used exactly as written (factor 1). `meal_plan_recipes.planned_servings` remains **unwritten and unread** by every route in this feature. That column has no UPDATE RLS policy on `meal_plan_recipes`, so making it user-editable needs its own ticket and its own migration.
+- **No schema change:** REW-26 added no migration. It reads `meal_plans`, `meal_plan_recipes`, and `recipes.ingredients` through the existing RLS policies only.
 
 ### `GET /meal-plans/:id/edit`
 
@@ -177,6 +190,7 @@ Neither item blocks this release; both are recommended for a small, low-risk fol
 ## Testing notes
 
 - `src/utils/mealPlanUtils.test.js` unit-tests `validateMealPlanTitle()` and `validateDateRange()` (blank/whitespace title rejection, max-length boundary, missing dates, unparseable/invalid calendar dates such as `2024-02-30`, end-before-start rejection). Part of `npm test` (**135/135 passing** as of this change). Recipe-ID selection normalization for the bulk picker is covered by the existing `cookbookUtils.test.js` suite, since `mealPlanRoutes.js` reuses `normalizeRecipeIdSelection()` directly rather than duplicating it.
+- `src/utils/groceryList.test.js` (REW-26) unit-tests the aisle taxonomy and aggregation: categorisation per aisle and the "Other" fallback, longest-keyword-wins matching, cross-recipe merging, volume/weight/count combining, refusal to combine incompatible or range amounts, "to taste" and unparseable passthrough, section-heading exclusion, empty/null/whitespace ingredient text, fixed category order, alphabetical item order, determinism, and recipe provenance. `src/views/groceryList.test.js` renders the new view with `ejs.renderFile` (same pattern as `recipeCard.test.js`) and asserts store-ordered headings, escaping of `<script>` payloads in ingredient/recipe/plan names, the empty state, the skipped-recipe notice, the print button's `data-grocery-print` hook with no inline handler, and the plain-GET Grocery List link on the plan detail page.
 - No request-level/integration tests exist for `mealPlanRoutes.js`/`mealPlanApiRoutes.js`, consistent with every other Supabase-backed route file in this codebase (no live-Supabase test harness exists anywhere).
 - **QA was intentionally skipped for this pipeline run** (explicit orchestrator instruction, not a QA rejection or omission). The acceptance-criteria checklist in `docs/plans/REW-63-create-and-manage-meal-plans.md` (19 items, including the "another user's session cannot view a meal plan via direct URL/ID" RLS check and the "cannot add another user's draft recipe" RLS check) has not been manually/QA-verified against a running app.
 
@@ -196,4 +210,5 @@ Neither item blocks this release; both are recommended for a small, low-risk fol
 
 | Date | Change |
 |------|--------|
+| 2026-09-14 | Added `GET /meal-plans/:id/grocery-list` (REW-26) — read-only printable grocery list. No schema change; `planned_servings` still unused. |
 | 2026-09-08 | Page created documenting REW-63 (new feature — no prior version to reconcile). |
