@@ -15,36 +15,7 @@
 
     <div class="organization-card-grid">
       <% recipes.forEach(function(recipe) { %>
-        <article class="recipe-card">
-          <a href="/r/<%= recipe.id %>" class="recipe-card-media" aria-hidden="<%= recipe.thumbnail_url ? 'false' : 'true' %>" tabindex="-1">
-            <% if (recipe.thumbnail_url) { %>
-              <img src="<%= recipe.thumbnail_url %>" alt="<%= recipe.title %>" loading="lazy" class="washed">
-            <% } else { %>
-              <span class="recipe-card-placeholder"><%= recipe.title.charAt(0).toUpperCase() %></span>
-            <% } %>
-          </a>
-
-          <div class="recipe-card-body">
-            <h3 class="recipe-card-title">
-              <a href="/r/<%= recipe.id %>"><%= recipe.title %></a>
-            </h3>
-
-            <div class="recipe-card-meta">
-              <% if (recipe.prep_time || recipe.cook_time) { %>
-                <span><%= recipe.prep_time || recipe.cook_time %></span>
-              <% } %>
-              <% if (recipe.servings) { %>
-                <span><%= recipe.servings %> servings</span>
-              <% } %>
-            </div>
-
-            <% if (recipe.author) { %>
-              <div class="recipe-card-author">
-                <span>@<%= recipe.author %></span>
-              </div>
-            <% } %>
-          </div>
-        </article>
+        <%- include('../partials/recipe-card', { recipe }) %>
       <% }); %>
     </div>
   <% } %>
