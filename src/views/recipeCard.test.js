@@ -45,6 +45,14 @@ test('Missing optional fields omit their metadata cleanly', async () => {
   assert.doesNotMatch(html, /<img|By |Prep:|Cook:| servings|tag-badge|category-badge|undefined|null/);
 });
 
+test('Owned clone cards show escaped immutable attribution separately from author', async () => {
+  const own = await render(false, { original_author: 'Original <Cook>' }, { id: 'owner' });
+  assert.match(own, /By Chef &lt;script&gt;/);
+  assert.match(own, /Adapted from Original &lt;Cook&gt;/);
+  const publicCard = await render(true, { original_author: 'Original Cook' }, { id: 'other' });
+  assert.doesNotMatch(publicCard, /Adapted from/);
+});
+
 test('Public controls stay public for guests, owners and other authenticated users', async () => {
   for (const user of [null, { id: 'owner' }, { id: 'other' }]) {
     const html = await render(true, { user_id: 'owner' }, user);

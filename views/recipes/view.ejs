@@ -11,6 +11,9 @@
         <% if (recipe.author) { %>
           <p style="color: var(--text-muted);">By <%= recipe.author %></p>
         <% } %>
+        <% if (recipe.original_author) { %>
+          <p style="color: var(--text-muted); font-size: 0.875rem;">Adapted from <%= recipe.original_author %></p>
+        <% } %>
       </div>
       <div style="display: flex; align-items: center; gap: 1rem;">
         <% if (recipe.status === 'published') { %>
@@ -101,9 +104,6 @@
         <% } %>
       </div>
     <% } %>
-    <div style="margin-bottom: 1rem;">
-      <a href="/recipes/<%= recipe.id %>/clone" class="btn btn-outline">Clone Recipe</a>
-    </div>
   </div>
 
   <div style="background: var(--card-background); padding: 2rem; border-radius: var(--radius); box-shadow: var(--shadow);">

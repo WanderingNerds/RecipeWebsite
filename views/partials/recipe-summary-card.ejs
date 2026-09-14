@@ -38,6 +38,9 @@
           <% if (recipe.author) { %>
             <p style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 0.5rem;">By <%= recipe.author %></p>
           <% } %>
+          <% if (!isPublic && recipe.original_author) { %>
+            <p style="font-size: 0.8125rem; color: var(--text-muted); margin-bottom: 0.5rem;">Adapted from <%= recipe.original_author %></p>
+          <% } %>
 
           <!-- Category badges -->
           <% if (recipe.categories && recipe.categories.length > 0) { %>

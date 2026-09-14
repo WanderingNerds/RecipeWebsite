@@ -22,6 +22,17 @@ const uploadLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+const addRecipeLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: "Too many recipes added. Please try again later.",
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 // Configure multer to store files in memory
 const storage = multer.memoryStorage();
 const upload = multer({
@@ -414,40 +425,41 @@ export async function handleRecipeCreate(req, res, { createClient = createSupaba
 
 router.post("/", requireAuth, uploadLimiter, upload.single("photo"), csrfProtection, (req, res) => handleRecipeCreate(req, res));
 
-export function suggestCloneTitle(sourceTitle, existingTitles) {
-  const used = new Set(existingTitles.map((title) => title.toLocaleLowerCase()));
-  let candidate = `${sourceTitle} (Copy)`;
-  let copyNumber = 2;
-  while (used.has(candidate.toLocaleLowerCase())) {
-    candidate = `${sourceTitle} (Copy ${copyNumber})`;
-    copyNumber += 1;
+// POST /recipes/:id/clone - Add an independent, private copy of a public recipe.
+export async function handleRecipeClone(req, res, { createClient = createSupabaseClient } = {}) {
+  const sourceId = req.params.id;
+  if (!UUID_PATTERN.test(sourceId)) {
+    req.flash("error", "Recipe not found or unavailable to add");
+    return res.redirect("/recipes");
   }
-  return candidate;
-}
 
-// GET /recipes/:id/clone - Prefill a new owner-scoped recipe from an RLS-visible source.
-export async function handleRecipeCloneForm(req, res, { createClient = createSupabaseClient } = {}) {
   try {
     const supabaseClient = createClient(req.accessToken);
-    const sourceRecipe = await fetchRecipeWithRelations(supabaseClient, req.params.id);
+    const { data: sourceRecipe, error: sourceError } = await supabaseClient
+      .from("recipes")
+      .select("id, user_id, title, author, prep_time, cook_time, servings, difficulty, ingredients, instructions, notes, source_url, status, original_author")
+      .eq("id", sourceId)
+      .eq("status", "published")
+      .single();
 
-    if (!sourceRecipe) {
-      req.flash("error", "Recipe not found or unavailable to clone");
+    if (sourceError || !sourceRecipe || sourceRecipe.user_id === req.user.id) {
+      req.flash("error", "Recipe not found or unavailable to add");
       return res.redirect("/recipes");
     }
 
-    const [categoriesResult, tagsResult, mealPlansResult, titlesResult] = await Promise.all([
-      supabaseClient.from("categories").select("*").order("display_order", { ascending: true }),
-      supabaseClient.from("tags").select("*").eq("user_id", req.user.id).order("name", { ascending: true }),
-      supabaseClient.from("meal_plans").select("id, title, start_date, end_date").eq("user_id", req.user.id).order("start_date", { ascending: true }),
-      supabaseClient.from("recipes").select("title").eq("user_id", req.user.id),
-    ]);
+    const { data: sourceCategories, error: categoriesError } = await supabaseClient
+      .from("recipe_categories")
+      .select("category_id")
+      .eq("recipe_id", sourceId);
 
-    const recipe = {
-      title: suggestCloneTitle(
-        sourceRecipe.title,
-        (titlesResult.data || []).map(({ title }) => title),
-      ),
+    if (categoriesError) throw categoriesError;
+
+    const originalAuthor = sourceRecipe.original_author?.trim()
+      || sourceRecipe.author?.trim()
+      || "Unknown";
+    const recipeData = {
+      user_id: req.user.id,
+      title: sourceRecipe.title,
       author: sourceRecipe.author,
       prep_time: sourceRecipe.prep_time,
       cook_time: sourceRecipe.cook_time,
@@ -456,28 +468,51 @@ export async function handleRecipeCloneForm(req, res, { createClient = createSup
       ingredients: sourceRecipe.ingredients,
       instructions: sourceRecipe.instructions,
       notes: sourceRecipe.notes,
+      source_url: sourceRecipe.source_url,
+      photo_url: null,
+      thumbnail_url: null,
+      status: "draft",
+      cloned_from_recipe_id: sourceRecipe.id,
+      original_author: originalAuthor,
     };
 
-    res.render("recipes/new", {
-      title: `Clone ${sourceRecipe.title}`,
-      categories: categoriesResult.data || [],
-      userTags: tagsResult.data || [],
-      selectedCategories: sourceRecipe.categories.map(({ id }) => id),
-      selectedTags: sourceRecipe.tags.map(({ name }) => name),
-      mealPlans: mealPlansResult.error ? [] : (mealPlansResult.data || []),
-      accountDisplayName: getAccountDisplayName(req.user),
-      recipe,
-      visibility: "private",
-      isClone: true,
-    });
+    const { data: addedRecipe, error: insertError } = await supabaseClient
+      .from("recipes")
+      .insert([recipeData])
+      .select("id")
+      .single();
+
+    if (insertError || !addedRecipe) throw insertError || new Error("Recipe insert returned no row");
+
+    const categoryRows = (sourceCategories || []).map(({ category_id }) => ({
+      recipe_id: addedRecipe.id,
+      category_id,
+    }));
+    if (categoryRows.length) {
+      const { error: categoryInsertError } = await supabaseClient
+        .from("recipe_categories")
+        .insert(categoryRows);
+      if (categoryInsertError) {
+        const { error: cleanupError } = await supabaseClient
+          .from("recipes")
+          .delete()
+          .eq("id", addedRecipe.id)
+          .eq("user_id", req.user.id);
+        if (cleanupError) console.error("Failed to clean up incomplete added recipe:", cleanupError);
+        throw categoryInsertError;
+      }
+    }
+
+    req.flash("success", "Recipe added as Private!");
+    return res.redirect(`/recipes/${addedRecipe.id}`);
   } catch (error) {
-    console.error("Error loading recipe clone form:", error);
-    req.flash("error", "An unexpected error occurred");
+    console.error("Error adding recipe:", error);
+    req.flash("error", "The recipe could not be added. Please try again.");
     res.redirect("/recipes");
   }
 }
 
-router.get("/:id/clone", requireAuth, (req, res) => handleRecipeCloneForm(req, res));
+router.post("/:id/clone", requireAuth, addRecipeLimiter, csrfProtection, (req, res) => handleRecipeClone(req, res));
 
 // GET /recipes - List all recipes for the current user
 router.get("/", requireAuth, async (req, res) => {

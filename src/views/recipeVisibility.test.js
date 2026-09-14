@@ -10,16 +10,14 @@ function radioCount(html) {
   return (html.match(/type="radio" name="visibility"/g) || []).length;
 }
 
-test("new and clone forms expose one Private-by-default visibility choice and one save action", async () => {
+test("new form exposes one Private-by-default visibility choice and one save action", async () => {
   const template = `${root}views/recipes/new.ejs`;
   const base = { csrfToken: "token", categories: [], userTags: [], selectedCategories: [], selectedTags: [], mealPlans: [], accountDisplayName: "Cook", visibility: "private" };
-  for (const data of [{ ...base, recipe: null, isClone: false }, { ...base, recipe: { title: "Soup (Copy)", instructions: "Cook" }, isClone: true }]) {
-    const html = await ejs.renderFile(template, data);
-    assert.equal(radioCount(html), 2);
-    assert.match(html, /name="visibility" value="private" checked/);
-    assert.match(html, /name="visibility" value="public"/);
-    assert.equal((html.match(/type="submit"/g) || []).length, 1);
-  }
+  const html = await ejs.renderFile(template, { ...base, recipe: null, isClone: false });
+  assert.equal(radioCount(html), 2);
+  assert.match(html, /name="visibility" value="private" checked/);
+  assert.match(html, /name="visibility" value="public"/);
+  assert.equal((html.match(/type="submit"/g) || []).length, 1);
 });
 
 test("edit visibility reflects persisted status", async () => {
@@ -40,13 +38,16 @@ test("import review uses the same control and client resets it Private", async (
   assert.match(client, /visibility:[\s\S]*?\.value \|\| "private"/);
 });
 
-test("detail surfaces use Private/Public terminology and gate public cloning on auth", async () => {
+test("detail surfaces expose a CSRF-protected Add Recipe POST only to authenticated non-owners", async () => {
   const ownerSource = await readFile(`${root}views/recipes/view.ejs`, "utf8");
   const publicSource = await readFile(`${root}views/recipes/public-view.ejs`, "utf8");
   assert.match(ownerSource, />Private<\/span>/);
   assert.match(ownerSource, />Public<\/span>/);
-  assert.match(ownerSource, /\/recipes\/<%= recipe\.id %>\/clone/);
-  assert.match(publicSource, /<% if \(user\) \{ %>[\s\S]*?\/clone/);
+  assert.doesNotMatch(ownerSource, /\/clone|Clone Recipe|Add Recipe/);
+  assert.match(publicSource, /<% if \(user && !isOwner\) \{ %>[\s\S]*?action="\/recipes\/<%= recipe\.id %>\/clone" method="POST"[\s\S]*?name="_csrf"[\s\S]*?>Add Recipe</);
+  assert.doesNotMatch(publicSource, /Clone Recipe|href="[^"]*\/clone"/);
+  assert.match(ownerSource, /Adapted from <%= recipe\.original_author %>/);
+  assert.match(publicSource, /Originally by <%= recipe\.original_author %>/);
   assert.match(publicSource, /Made Public on/);
   assert.match(publicSource, /make recipes Public/);
   assert.doesNotMatch(publicSource, /Published on|build and publish/);
