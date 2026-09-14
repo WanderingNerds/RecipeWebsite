@@ -17,6 +17,12 @@ import { assignRecipeToMealPlan } from "../utils/mealPlanAssignment.js";
 
 const router = Router();
 
+export function validateImportCookTime(cookTime) {
+  return typeof cookTime === "string" && cookTime.trim()
+    ? null
+    : "Cook Time is required";
+}
+
 // Rate limiter for imports: 5 imports per 15 minutes
 const importLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -158,6 +164,10 @@ router.post("/check-title", requireAuth, async (req, res) => {
  * POST /recipes/import/save
  * Save the imported recipe after user confirmation
  */
+export function createSaveImportHandler({ createClient = createSupabaseClient } = {}) {
+  return async (req, res) => {
+    try {
+      const {
 export async function handleImportSave(req, res, { createClient = createSupabaseClient } = {}) {
   try {
     const {
@@ -171,6 +181,7 @@ export async function handleImportSave(req, res, { createClient = createSupabase
       servings,
       sourceUrl,
       action, // 'draft' or 'publish'
+      } = req.body;
       mealPlanId,
     } = req.body;
 
@@ -181,6 +192,11 @@ export async function handleImportSave(req, res, { createClient = createSupabase
 
     if (!instructions || !instructions.trim()) {
       return res.status(400).json({ error: "Instructions are required" });
+    }
+
+    const cookTimeError = validateImportCookTime(cookTime);
+    if (cookTimeError) {
+      return res.status(400).json({ error: cookTimeError });
     }
 
     const supabaseClient = createClient(req.accessToken);
@@ -228,7 +244,7 @@ export async function handleImportSave(req, res, { createClient = createSupabase
       ingredients: ingredients?.trim() || null,
       instructions: instructions.trim(),
       prep_time: prepTime?.trim() || null,
-      cook_time: cookTime?.trim() || null,
+      cook_time: cookTime.trim(),
       servings: servings?.trim() || null,
       notes: description?.trim() || null, // Use description as notes
       source_url: sanitizedSourceUrl,
@@ -271,6 +287,14 @@ export async function handleImportSave(req, res, { createClient = createSupabase
       message,
       mealPlanAssignment: assignment,
     });
+    } catch (error) {
+      console.error("Import save error:", error);
+      res.status(500).json({ error: "An unexpected error occurred" });
+    }
+  };
+}
+
+router.post("/save", requireAuth, createSaveImportHandler());
   } catch (error) {
     console.error("Import save error:", error);
     res.status(500).json({ error: "An unexpected error occurred" });
