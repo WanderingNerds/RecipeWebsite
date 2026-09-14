@@ -1,6 +1,11 @@
 <div class="container grocery-list-page" style="max-width: 900px; padding: 2rem 1rem;">
 
   <div class="grocery-list-header">
+    <!-- Print-only letterhead: the navbar (which normally carries the
+         Potluck brand) is hidden while printing, so without this the
+         printed page has no indication of where the list came from. -->
+    <p class="grocery-list-brand">Potluck</p>
+
     <a href="/meal-plans/<%= mealPlan.id %>" class="grocery-list-back">
       &larr; Back to <%= mealPlan.title %>
     </a>
@@ -18,6 +23,16 @@
         </p>
       </div>
       <div class="grocery-list-actions">
+        <div class="grocery-font-toggle" role="group" aria-label="Print text size">
+          <label class="grocery-font-option">
+            <input type="radio" name="groceryFontSize" value="small" checked>
+            <span>Small</span>
+          </label>
+          <label class="grocery-font-option">
+            <input type="radio" name="groceryFontSize" value="large">
+            <span>Large</span>
+          </label>
+        </div>
         <button type="button" class="btn btn-primary" data-grocery-print>Print</button>
       </div>
     </div>

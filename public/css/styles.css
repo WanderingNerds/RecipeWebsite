@@ -2987,6 +2987,13 @@ a.pagination-link:hover {
   margin-bottom: 2rem;
 }
 
+/* Screen never needs this -- the navbar already shows the Potluck brand on
+   every page. It exists purely for the printed page, which hides the
+   navbar; see @media print below. */
+.grocery-list-brand {
+  display: none;
+}
+
 .grocery-list-back {
   color: var(--primary-color);
   display: inline-block;
@@ -3015,6 +3022,47 @@ a.pagination-link:hover {
 .grocery-list-summary {
   color: var(--text-muted);
   margin-bottom: 0.25rem;
+}
+
+.grocery-list-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+/* Small/Large controls the printed font size only (see
+   .grocery-list-page--font-large under @media print); this whole control is
+   itself dropped from the printout along with the rest of .grocery-list-actions. */
+.grocery-font-toggle {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-pill);
+  display: inline-flex;
+  padding: 0.2rem;
+}
+
+.grocery-font-option {
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  font-size: 0.875rem;
+  padding: 0.3rem 0.75rem;
+}
+
+.grocery-font-option:has(input:checked) {
+  background-color: var(--primary-color);
+  color: #fff;
+}
+
+.grocery-font-option input {
+  /* Kept in the accessibility tree (not `hidden`/`display: none`) for
+     keyboard and screen-reader users; the pill itself carries the visible
+     state via :has(input:checked) above. */
+  height: 1px;
+  position: absolute;
+  width: 1px;
+  overflow: hidden;
+  white-space: nowrap;
+  clip-path: inset(50%);
 }
 
 .grocery-list-notice {
@@ -3132,6 +3180,15 @@ a.pagination-link:hover {
     margin-bottom: 0.5rem;
   }
 
+  .grocery-list-brand {
+    color: #000 !important;
+    display: block;
+    font-family: var(--font-display);
+    font-size: 1rem;
+    font-weight: 700;
+    margin-bottom: 0.25rem;
+  }
+
   .grocery-list-title {
     font-size: 1.15rem;
     margin-bottom: 0.1rem;
@@ -3210,5 +3267,40 @@ a.pagination-link:hover {
      printout entirely here, so what prints is only what's still needed. */
   .grocery-item--checked {
     display: none !important;
+  }
+
+  /* "Large" print size (Small/Large toggle in the page header): the same
+     layout, sized up roughly a third for easier reading, at the cost of more
+     pages -- the trade-off the toggle exists to let the shopper choose. */
+  .grocery-list-page--font-large .grocery-list-brand {
+    font-size: 1.3rem;
+  }
+
+  .grocery-list-page--font-large .grocery-list-title {
+    font-size: 1.5rem;
+  }
+
+  .grocery-list-page--font-large .grocery-list-plan,
+  .grocery-list-page--font-large .grocery-list-dates,
+  .grocery-list-page--font-large .grocery-list-summary {
+    font-size: 0.95rem;
+  }
+
+  .grocery-list-page--font-large .grocery-category-heading {
+    font-size: 1.15rem;
+  }
+
+  .grocery-list-page--font-large .grocery-item {
+    font-size: 0.95rem;
+  }
+
+  .grocery-list-page--font-large .grocery-item-checkbox {
+    height: 0.9rem;
+    width: 0.9rem;
+  }
+
+  .grocery-list-page--font-large .grocery-item-hint,
+  .grocery-list-page--font-large .grocery-item-recipes {
+    font-size: 0.8rem;
   }
 }

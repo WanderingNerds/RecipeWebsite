@@ -163,6 +163,38 @@ test("checking an item off strikes it through on screen, with no inline handler"
   );
 });
 
+test("the printed page carries the Potluck brand, hidden on screen", async () => {
+  const html = await renderList(sampleList());
+  assert.match(html, /<p class="grocery-list-brand">Potluck<\/p>/);
+
+  const css = await readFile(new URL("../../public/css/styles.css", import.meta.url), "utf8");
+  assert.match(css, /\.grocery-list-brand \{\s*display: none;/, "hidden on screen -- the navbar already shows the brand there");
+  assert.match(
+    css,
+    /@media print \{[\s\S]*\.grocery-list-brand \{[^}]*display: block/,
+    "shown only once printed, where the navbar is hidden"
+  );
+});
+
+test("the Small/Large print size toggle defaults to Small and only affects print", async () => {
+  const html = await renderList(sampleList());
+
+  assert.match(html, /<input type="radio" name="groceryFontSize" value="small" checked>/);
+  assert.match(html, /<input type="radio" name="groceryFontSize" value="large">/);
+  assert.doesNotMatch(html, /onchange|onclick/);
+
+  const client = await readFile(new URL("../../public/js/meal-plans.js", import.meta.url), "utf8");
+  assert.match(client, /initializeGroceryListFontSize/);
+  assert.match(client, /groceryFontSize/);
+  assert.match(client, /grocery-list-page--font-large/);
+
+  const css = await readFile(new URL("../../public/css/styles.css", import.meta.url), "utf8");
+  // The large-size rules must live inside @media print -- picking "Large"
+  // must never change anything about the on-screen page.
+  const printBlock = css.slice(css.indexOf("@media print"));
+  assert.match(printBlock, /\.grocery-list-page--font-large \.grocery-item \{\s*font-size: 0\.95rem;/);
+});
+
 test("the plan detail page links to the grocery list only when it has recipes", async () => {
   const withRecipes = await renderPlanView([
     { id: "r1", title: "Pancakes", status: "published" },

@@ -13,6 +13,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initializeMealPlanModal();
   initializeGroceryListPrint();
   initializeGroceryListChecklist();
+  initializeGroceryListFontSize();
 });
 
 // Grocery list print button (REW-26). Lives here rather than in an inline
@@ -46,6 +47,25 @@ function initializeGroceryListChecklist() {
     const item = checkbox.closest(".grocery-item");
     if (item) item.classList.toggle("grocery-item--checked", checkbox.checked);
   });
+}
+
+// Small/Large print text size toggle (REW-26). "Small" is the default,
+// space-conscious print size; "Large" trades more pages for easier reading --
+// see the .grocery-list-page--font-large rules in styles.css, which only
+// apply inside @media print, so this class has no effect on screen.
+// Unpersisted, same as the checklist above: a refresh resets it to Small.
+function initializeGroceryListFontSize() {
+  const page = document.querySelector(".grocery-list-page");
+  const options = document.querySelectorAll('input[name="groceryFontSize"]');
+  if (!page || !options.length) return;
+
+  for (const option of options) {
+    option.addEventListener("change", () => {
+      if (option.checked) {
+        page.classList.toggle("grocery-list-page--font-large", option.value === "large");
+      }
+    });
+  }
 }
 
 let mealPlanActiveToast = null;
