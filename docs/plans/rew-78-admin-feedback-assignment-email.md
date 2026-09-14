@@ -12,15 +12,15 @@ Tighten the existing REW-71 admin feedback workflow so the assignment control on
 
 ## As-shipped status
 
-Implemented on `REW-78-admin-feedback-assignment-email` using the Resend HTTPS API through built-in `fetch`; no SDK dependency or database migration was added. The fixed Andrew/Victoria roster accepts the explicit stored profile aliases `Andrew`/`Andrew Carroll` and `Victoria`/`Victoria Johnson`, while always rendering the short UI labels Andrew and Victoria. Active-profile validation, transition detection, persistence-before-delivery behavior, five-second timeout, canonical `APP_URL` link, and distinct delivery-failure warning match the plan. Runtime configuration is `RESEND_API_KEY`, `ASSIGNMENT_EMAIL_FROM`, and `APP_URL`.
+Implemented on `REW-78-admin-feedback-assignment-email` using the Resend HTTPS API through built-in `fetch`; no SDK dependency was added. Migration 016 is the implemented idempotent provisioning follow-up: it creates or repairs Andrew and Victoria's active `admin_profiles` rows from exact case-insensitive Auth email matches, but only after those Auth users already have the trusted `admin` role. It does not grant administrator access. The fixed roster accepts the explicit stored profile aliases `Andrew`/`Andrew Carroll` and `Victoria`/`Victoria Johnson`, while always rendering the short UI labels Andrew and Victoria. Active-profile validation, transition detection, persistence-before-delivery behavior, five-second timeout, canonical `APP_URL` link, and distinct delivery-failure warning match the plan. Runtime configuration is `RESEND_API_KEY`, `ASSIGNMENT_EMAIL_FROM`, and `APP_URL`.
 
-Final review is approved. The full Node suite passes 202/202 and `git diff --check` passes. Live Resend and browser acceptance remains pending because verified provider credentials and safe database/browser fixtures were unavailable.
+Final review is approved. The full Node suite passes 205/205 and `git diff --check` passes. Live migration, Resend, and browser acceptance remains pending because verified provider credentials and safe database/browser fixtures were unavailable.
 
 ## Open questions / assumptions
 
 - The user-supplied requirements are treated as authoritative because Jira could not be fetched in this session. The supplied destinations are Andrew (`carroll.andrew@gmail.com`) and Victoria (`vhobbs1895@gmail.com`).
 - Existing `admin_profiles` rows remain the source of assignee UUIDs. The shipped implementation recognizes only the explicit exact aliases `Andrew` or `Andrew Carroll`, and `Victoria` or `Victoria Johnson`, exposes no other active profiles, and maps them to the specified notification addresses in server-only configuration. The UI always renders Andrew and Victoria. No profile-name normalization is required for these four supported stored values, and substring or fuzzy matching is intentionally rejected.
-- A new database migration is not required: REW-71 already stores a nullable profile UUID and enforces active-profile assignment. The application adds the smaller product allowlist on top of those database rules.
+- REW-71 already stores a nullable profile UUID and enforces active-profile assignment, so no schema change is required. Migration 016 is nevertheless required as an idempotent data-provisioning follow-up: it selects only the two exact Auth emails whose trusted role is already `admin`, upserts canonical short display names, and sets those profiles active. It does not synchronize arbitrary users or confer authorization.
 - There is no general transactional-email client in the repository. The implementation should add a small injectable mail service backed by an explicitly configured provider (recommended: Resend over its HTTPS API), with `RESEND_API_KEY` and `ASSIGNMENT_EMAIL_FROM` supplied through environment configuration. Recipient addresses remain server-side and must never come from the form.
 - Assignment persistence is authoritative. If the database update succeeds but the external email call fails, keep the new assignment, show a non-sensitive warning that the notification could not be sent, and log only safe diagnostic metadata. Do not attempt a misleading rollback across the database/provider boundary.
 - A repeated save with the same assignee is not a reassignment and sends no email. Assigning from Andrew to Victoria notifies Victoria only; assigning from Victoria to Andrew notifies Andrew only.
@@ -49,6 +49,7 @@ Final review is approved. The full Node suite passes 202/202 and `git diff --che
 - `src/routes/adminFeedbackRoutes.test.js` — add route behavior and notification sequencing/suppression/error coverage.
 - `views/admin/feedback-detail.ejs` — retain the existing accessible control while rendering only Unassigned, Andrew, and Victoria in the required order.
 - `src/views/adminFeedback.test.js` — pin the form's option, escaping, selected-state, label, and CSRF contracts.
+- `database/migrations/016_backfill_rew78_admin_profiles.sql` — idempotently provision or repair the two fixed assignment profiles from already-authorized Auth users without granting admin access.
 - `package.json` and `package-lock.json` — add the selected transactional-email SDK only if the provider implementation does not use Node's built-in `fetch`.
 - `README.md` — document required mail-provider environment variables and production setup.
 - `docs/api/admin-feedback.md` — document the constrained assignment model, notification trigger/suppression rules, direct-link behavior, and delivery-failure semantics.
@@ -56,7 +57,7 @@ Final review is approved. The full Node suite passes 202/202 and `git diff --che
 
 ## Database changes
 
-No migration is planned. `help_feedback_submissions.assignee_id` already references `admin_profiles(id)`, allows null for Unassigned, and database enforcement already rejects newly assigned inactive profiles. The exact Andrew/Victoria product allowlist and destination mapping belong in server-side application configuration because the current database has no notification-address field and the ticket supplies a fixed roster. If stakeholders require administrators to edit this roster later, that is separate schema/admin-UI work and should receive its own ticket.
+Migration 016 is implemented after migration 015 as an idempotent provisioning backfill, not a schema or authorization migration. It finds the two exact case-insensitive Auth emails only when `raw_app_meta_data.role = 'admin'`, then upserts their `admin_profiles` rows with canonical short names and `active = TRUE`. `help_feedback_submissions.assignee_id` continues to reference `admin_profiles(id)`, allows null for Unassigned, and database enforcement continues to reject newly assigned inactive profiles. The migration has not been applied to remote Supabase in this workflow. The exact Andrew/Victoria product allowlist and destination mapping remain in server-side application configuration because the database has no notification-address field. If stakeholders require administrators to edit this roster later, that is separate schema/admin-UI work and should receive its own ticket.
 
 ## Security considerations
 

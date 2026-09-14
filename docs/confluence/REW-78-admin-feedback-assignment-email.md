@@ -26,12 +26,12 @@ Administrators have a predictable assignment list and receive clear feedback for
 
 ## Database and API changes
 
-No database migration or package dependency was added. Existing nullable `help_feedback_submissions.assignee_id`, active-profile checks, admin authentication, RLS, CSRF, and Post/Redirect/Get behavior remain in place. The existing admin feedback routes now constrain selectable profiles and trigger post-persistence notifications; no public API was added.
+Migration 016 is the implemented idempotent provisioning follow-up. It provisions or repairs the two assignment profiles from exact case-insensitive Auth emails only when their trusted Auth role is already admin, setting canonical short names and active state without granting access or broadening RLS. Existing nullable `help_feedback_submissions.assignee_id`, active-profile checks, admin authentication, RLS, CSRF, and Post/Redirect/Get behavior remain in place. The existing admin feedback routes constrain selectable profiles and trigger post-persistence notifications; no public API or package dependency was added.
 
 ## Testing notes
 
-Final review is approved. The full Node suite passes 202/202 and `git diff --check` passes. Live provider and browser QA remains pending because verified Resend credentials and safe Supabase fixtures were unavailable.
+Final review is approved. The full Node suite passes 205/205 and `git diff --check` passes after adding the provisioning migration contract coverage. Live provider, migration, and browser QA remains pending because verified Resend credentials and safe Supabase fixtures were unavailable; migration 016 was not applied remotely in this workflow.
 
 ## Deployment and acceptance
 
-Set the three environment variables, verify the Resend sender, and ensure exactly one active recognized `admin_profiles` row exists for each person. Assign a safe test ticket to Andrew and Victoria in turn and verify recipient, ticket identity, and direct link. Verify unassignment and unchanged/status-only saves send nothing. Simulate provider rejection and confirm persistence plus the separate warning.
+Apply migration 016 after 015, set the three environment variables, verify the Resend sender, and confirm exactly one active recognized `admin_profiles` row exists for each person. Assign a safe test ticket to Andrew and Victoria in turn and verify recipient, ticket identity, and direct link. Verify unassignment and unchanged/status-only saves send nothing. Simulate provider rejection and confirm persistence plus the separate warning.

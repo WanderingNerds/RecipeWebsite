@@ -72,7 +72,7 @@ A recipe website built with Node.js, Express, and Supabase Auth.
 
 ### Administrator feedback setup (REW-71, REW-78)
 
-Apply migrations 014 and 015 in order. Provision administrators out of band by setting the Supabase Auth user's trusted `app_metadata.role` to `admin`, then inserting the same Auth user ID into `admin_profiles`. The fixed assignment roster recognizes the explicit stored names `Andrew` or `Andrew Carroll`, and `Victoria` or `Victoria Johnson`; it always renders the shorter product labels. Refresh or re-authenticate so the issued token carries the claim. Assignment notification email uses the Resend HTTPS API and requires `RESEND_API_KEY`, `ASSIGNMENT_EMAIL_FROM`, and the canonical `APP_URL`. Never expose a service-role or mail-provider key in the application. See [Admin Help & Feedback](docs/api/admin-feedback.md) and [database setup](database/README.md).
+Apply migrations 014, 015, and 016 in order. Administrator access is still provisioned out of band through the Supabase Auth user's trusted `app_metadata.role`; migration 016 only backfills Andrew and Victoria's assignment profiles from their exact emails after that role exists. The fixed assignment roster recognizes the explicit stored names `Andrew` or `Andrew Carroll`, and `Victoria` or `Victoria Johnson`; it always renders the shorter product labels. Refresh or re-authenticate so the issued token carries the claim. Assignment notification email uses the Resend HTTPS API and requires `RESEND_API_KEY`, `ASSIGNMENT_EMAIL_FROM`, and the canonical `APP_URL`. Never expose a service-role or mail-provider key in the application. See [Admin Help & Feedback](docs/api/admin-feedback.md) and [database setup](database/README.md).
 
 ## Project Structure
 
