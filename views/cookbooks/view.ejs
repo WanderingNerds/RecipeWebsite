@@ -70,7 +70,6 @@
 
           <div class="recipe-card-actions" style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: auto; padding-top: 1rem; border-top: 1px solid var(--border-color);">
             <button type="button" class="btn btn-outline meal-plan-add-btn" data-recipe-id="<%= recipe.id %>" aria-label="Add to Meal Plan" style="flex: 1; font-size: 0.875rem; padding: 0.5rem 1rem;">+ Meal Plan</button>
-            <a href="/recipes/<%= recipe.id %>" class="btn btn-outline" style="flex: 1; text-align: center; font-size: 0.875rem; padding: 0.5rem 1rem;">View</a>
             <form action="/cookbooks/<%= cookbook.id %>/recipes/<%= recipe.id %>/remove" method="POST" style="margin: 0; flex: 1;" onsubmit="return confirm('Remove this recipe from the cookbook? The recipe itself will not be deleted.');">
               <input type="hidden" name="_csrf" value="<%= csrfToken %>">
               <input type="hidden" name="returnTo" value="cookbook">

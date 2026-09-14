@@ -50,6 +50,7 @@ test('Public controls stay public for guests, owners and other authenticated use
     const html = await render(true, { user_id: 'owner' }, user);
     assert.match(html, /href="\/r\/recipe-1"/);
     assert.match(html, /meal-plan-add-btn/);
+    assert.doesNotMatch(html, />View<\/a>/);
     assert.equal(html.includes('meal-plan-add-btn-guest'), !user);
     assert.doesNotMatch(html, /\/recipes\?|\/edit|\/delete|like-btn|<form/);
   }
@@ -58,7 +59,8 @@ test('Public controls stay public for guests, owners and other authenticated use
 test('Private controls retain filters, favorites and protected deletion', async () => {
   const html = await render(false, {}, { id: 'owner' });
   for (const text of ['/recipes/recipe-1/edit', '/recipes/recipe-1/delete', '/recipes?category=dinner', '/recipes?tags=safe', 'data-liked="true"', 'name="_csrf" value="csrf-test"', "return confirm("]) assert.ok(html.includes(text), text);
-  assert.match(html, /href="\/recipes\/recipe-1"/);
+  assert.match(html, /<h3[^>]*>[\s\S]*href="\/recipes\/recipe-1"[\s\S]*Long &lt;title&gt;[\s\S]*<\/h3>/);
+  assert.doesNotMatch(html, />View<\/a>/);
   assert.equal(mealPlanTriggers(html).length, 1);
   assert.doesNotMatch(html, /meal-plan-add-btn-guest/);
   const draft = await render(false, { status: 'draft' }, { id: 'owner' });
@@ -71,6 +73,7 @@ test('Search keeps its existing card presentation and sparse data contract', asy
   assert.match(html, /class="recipe-card"/);
   assert.equal(mealPlanTriggers(html).length, 1);
   assert.match(html, /meal-plan-add-btn-guest/);
+  assert.doesNotMatch(html, />View<\/a>/);
   assert.doesNotMatch(html, /recipe-summary-card|Prep:|Cook:|Created|tag-badge/);
 });
 
@@ -85,6 +88,7 @@ test('Browse and My Recipes pages both use shared cards with one meal-plan trigg
     assert.match(html, /class="tag-badge"/);
     assert.equal(mealPlanTriggers(html).length, 1);
     assert.doesNotMatch(html, /meal-plan-add-btn-guest/);
+    assert.doesNotMatch(html, />View<\/a>/);
   }
 });
 
@@ -99,6 +103,23 @@ test('Liked Recipes uses the shared public card without losing page content', as
   assert.match(html, /4 servings/);
   assert.equal(mealPlanTriggers(html).length, 1);
   assert.doesNotMatch(html, /meal-plan-add-btn-guest/);
+  assert.doesNotMatch(html, />View<\/a>/);
+});
+
+test('Cookbook and meal-plan index cards keep title navigation and editing without View', async () => {
+  const cookbookIndex = await ejs.renderFile(`${views}cookbooks/index.ejs`, {
+    cookbooks: [{ id: 'cookbook-1', title: 'Weeknight Favorites', recipeCount: 1, created_at: '2026-01-01T12:00:00Z' }],
+  });
+  assert.match(cookbookIndex, /<h3[^>]*>[\s\S]*href="\/cookbooks\/cookbook-1"[\s\S]*Weeknight Favorites[\s\S]*<\/h3>/);
+  assert.match(cookbookIndex, /href="\/cookbooks\/cookbook-1\/edit"[^>]*>Rename<\/a>/);
+  assert.doesNotMatch(cookbookIndex, />View<\/a>/);
+
+  const mealPlanIndex = await ejs.renderFile(`${views}meal-plans/index.ejs`, {
+    mealPlans: [{ id: 'meal-plan-1', title: 'This Week', recipeCount: 1, start_date: '2026-01-01', end_date: '2026-01-07' }],
+  });
+  assert.match(mealPlanIndex, /<h3[^>]*>[\s\S]*href="\/meal-plans\/meal-plan-1"[\s\S]*This Week[\s\S]*<\/h3>/);
+  assert.match(mealPlanIndex, /href="\/meal-plans\/meal-plan-1\/edit"[^>]*>Edit<\/a>/);
+  assert.doesNotMatch(mealPlanIndex, />View<\/a>/);
 });
 
 test('Cookbook recipe cards expose the meal-plan trigger and preserve protected controls', async () => {
@@ -110,11 +131,27 @@ test('Cookbook recipe cards expose the meal-plan trigger and preserve protected 
   });
   assert.equal(mealPlanTriggers(html).length, 1);
   assert.doesNotMatch(html, /meal-plan-add-btn-guest/);
-  assert.match(html, /href="\/recipes\/recipe-1"[^>]*>View<\/a>/);
+  assert.match(html, /<h3[^>]*>[\s\S]*href="\/recipes\/recipe-1"[\s\S]*Long &lt;title&gt;[\s\S]*<\/h3>/);
+  assert.doesNotMatch(html, />View<\/a>/);
   assert.match(html, /action="\/cookbooks\/cookbook-1\/recipes\/recipe-1\/remove"/);
   assert.match(html, /name="_csrf" value="csrf-test"/);
   assert.match(html, /name="returnTo" value="cookbook"/);
   assert.match(html, /return confirm\('Remove this recipe from the cookbook\?/);
   assert.match(html, />Remove<\/button>/);
   assert.match(html, /class="recipe-card-actions"[^>]*flex-wrap: wrap/);
+});
+
+test('Meal-plan recipe cards link their titles and preserve protected removal without View', async () => {
+  const html = await ejs.renderFile(`${views}meal-plans/view.ejs`, {
+    mealPlan: { id: 'meal-plan-1', title: 'This Week', start_date: '2026-01-01', end_date: '2026-01-07' },
+    recipes: [recipe],
+    user: { id: 'owner' },
+    csrfToken: 'csrf-test',
+  });
+  assert.match(html, /<h3[^>]*>[\s\S]*href="\/recipes\/recipe-1"[\s\S]*Long &lt;title&gt;[\s\S]*<\/h3>/);
+  assert.doesNotMatch(html, />View<\/a>/);
+  assert.match(html, /action="\/meal-plans\/meal-plan-1\/recipes\/recipe-1\/remove"/);
+  assert.match(html, /name="_csrf" value="csrf-test"/);
+  assert.match(html, /return confirm\('Remove this recipe from the meal plan\?/);
+  assert.match(html, />Remove<\/button>/);
 });
