@@ -1,13 +1,13 @@
 <div class="page-narrow">
   <div class="page-header">
-    <h1>Liked Recipes</h1>
-    <p class="page-subtitle">Recipes you've saved for later</p>
+    <h1>My Favorites</h1>
+    <p class="page-subtitle">Recipes you've favorited for later</p>
   </div>
 
   <% if (recipes.length === 0) { %>
     <div class="empty-state">
-      <h3>No liked recipes yet</h3>
-      <p>Browse recipes and click the heart button to save your favorites here.</p>
+      <h3>No favorites yet</h3>
+      <p>Browse recipes and click the heart button to add them to your favorites.</p>
       <a href="/browse" class="btn btn-primary">Browse Recipes</a>
     </div>
   <% } else { %>
@@ -15,7 +15,12 @@
 
     <div class="organization-card-grid">
       <% recipes.forEach(function(recipe) { %>
-        <%- include('../partials/recipe-card', { recipe }) %>
+        <%#
+          REW-87: the shared standardized card, third surface. Ownership is
+          mixed on this page, so the partial decides Edit/Delete per card from
+          recipe.user_id -- which is never rendered into the markup.
+        %>
+        <%- include('../partials/recipe-summary-card', { recipe, surface: 'favorites' }) %>
       <% }); %>
     </div>
   <% } %>

@@ -16,6 +16,16 @@ const render = (isPublic, overrides = {}, user = null) => ejs.renderFile(`${view
 });
 const mealPlanTriggers = (html) => html.match(/class="[^"]*meal-plan-add-btn[^"]*"[^>]*data-recipe-id="recipe-1"/g) || [];
 
+// REW-87: My Favorites is the one surface with MIXED ownership, so its cards
+// are driven by `surface` + per-card `recipe.user_id` rather than `isPublic`.
+// The owner id is deliberately a distinctive string so a test can assert the
+// raw value never reaches the HTML.
+const OWNER_ID = 'author-account-9f3';
+const favoriteRecipe = { ...recipe, user_id: OWNER_ID };
+const renderFavorite = (overrides = {}, user = null) => ejs.renderFile(`${views}partials/recipe-summary-card.ejs`, {
+  recipe: { ...favoriteRecipe, ...overrides }, surface: 'favorites', user, csrfToken: 'csrf-test',
+});
+
 test('Both card surfaces render all core metadata in the same order with escaped text', async () => {
   for (const isPublic of [true, false]) {
     const html = await render(isPublic);
@@ -143,18 +153,93 @@ test('Browse and My Recipes pages both use shared cards with one meal-plan trigg
   }
 });
 
-test('Liked Recipes uses the shared public card without losing page content', async () => {
-  const html = await ejs.renderFile(`${views}recipes/liked.ejs`, { recipes: [recipe], user: { id: 'owner' } });
-  assert.match(html, /<h1>Liked Recipes<\/h1>/);
+test('REW-87 a favorited recipe you do not own shows every shared control and no owner control', async () => {
+  // Signed-in viewer who is NOT the author -- the common case on this page.
+  const html = await renderFavorite({}, { id: 'someone-else' });
+
+  // Title links to the richer authenticated view, not the public /r/:id one.
+  assert.match(html, /<h3[^>]*>[\s\S]*href="\/recipes\/recipe-1"[\s\S]*Long &lt;title&gt;[\s\S]*<\/h3>/);
+  // Heart is live: every recipe reachable from Favorites is published.
+  assert.match(html, /class="like-btn" data-recipe-id="recipe-1" data-liked="true"/);
+  assert.doesNotMatch(html, /class="like-btn" disabled/);
+  assert.match(html, /By Chef &lt;script&gt;/);
+  assert.match(html, /class="tag-badge"/);
+  for (const label of ['Prep Time: 10 minutes', 'Cook Time: 30 minutes', 'Servings: 4', 'Difficulty: Easy']) {
+    assert.ok(html.includes(label), label);
+  }
+  assert.equal(mealPlanTriggers(html).length, 1);
+  assert.equal((html.match(/class="[^"]*cookbook-add-btn[^"]*"[^>]*data-recipe-id="recipe-1"/g) || []).length, 1);
+  assert.doesNotMatch(html, /meal-plan-add-btn-guest|cookbook-add-btn-guest/);
+  assert.match(html, /class="btn btn-outline recipe-share-btn" disabled aria-disabled="true"/);
+
+  // Owner-only controls must not be drawn for a non-owner, and the surface
+  // carries neither the visibility toggle nor Browse's status pill.
+  assert.doesNotMatch(html, /\/edit|\/delete|\/visibility|Make Public|Make Private|<form|badge-published|badge-draft/);
+  assert.doesNotMatch(html, />View<\/a>/);
+  // Escaping still holds on this branch (title, author and tag are hostile).
+  assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+  assert.doesNotMatch(html, /<script>/);
+});
+
+test('REW-87 a favorited recipe you own adds Edit and Delete but still no visibility toggle', async () => {
+  const html = await renderFavorite({}, { id: OWNER_ID });
+
+  assert.ok(html.includes('/recipes/recipe-1/edit'), 'owner sees Edit');
+  assert.ok(html.includes('action="/recipes/recipe-1/delete" method="POST"'), 'owner sees the Delete form');
+  assert.ok(html.includes("return confirm("), 'Delete stays confirm-guarded');
+  assert.equal((html.match(/name="_csrf" value="csrf-test"/g) || []).length, 1);
+  // Everything the non-owner card has is still here.
+  assert.equal(mealPlanTriggers(html).length, 1);
+  assert.match(html, /cookbook-add-btn/);
+  assert.match(html, /recipe-share-btn/);
+  // Owners flip visibility from My Recipes; Favorites never offers it.
+  assert.doesNotMatch(html, /\/visibility|Make Public|Make Private|badge-published|badge-draft/);
+});
+
+test('REW-87 favorites cards never leak user_id, never link chips, and fail closed on ownership', async () => {
+  const owned = await renderFavorite({}, { id: OWNER_ID });
+  const notOwned = await renderFavorite({}, { id: 'someone-else' });
+  // A recipe row without user_id (sparse data, or a surface that does not
+  // fetch the column) must be treated as NOT owned rather than as owned.
+  const missingOwner = await renderFavorite({ user_id: null }, { id: OWNER_ID });
+  const guest = await renderFavorite({}, null);
+
+  for (const html of [owned, notOwned, missingOwner, guest]) {
+    assert.ok(!html.includes(OWNER_ID), 'recipe user_id must never be rendered');
+    // Chips are plain text here: /recipes?category= filters YOUR recipes, so
+    // following one from a stranger's recipe would land on an unrelated list.
+    assert.doesNotMatch(html, /href="\/recipes\?/);
+    assert.match(html, /class="category-badge"/);
+  }
+
+  for (const html of [notOwned, missingOwner, guest]) {
+    assert.doesNotMatch(html, /\/edit|\/delete|<form/);
+  }
+  assert.match(guest, /meal-plan-add-btn-guest/);
+  assert.match(guest, /cookbook-add-btn-guest/);
+});
+
+test('REW-87 My Favorites page renders standardized cards and keeps its page furniture', async () => {
+  const html = await ejs.renderFile(`${views}recipes/liked.ejs`, {
+    recipes: [favoriteRecipe], user: { id: OWNER_ID }, csrfToken: 'csrf-test',
+  });
+  assert.match(html, /<h1>My Favorites<\/h1>/);
   assert.match(html, /class="result-count">1 recipe<\/p>/);
-  assert.equal((html.match(/<article class="recipe-card">/g) || []).length, 1);
-  assert.match(html, /href="\/r\/recipe-1"/);
-  assert.match(html, /@Chef &lt;script&gt;/);
-  assert.match(html, /10 minutes/);
-  assert.match(html, /4 servings/);
+  assert.match(html, /class="organization-card-grid"/);
+  assert.equal((html.match(/feature-card recipe-summary-card/g) || []).length, 1);
+  assert.match(html, /href="\/recipes\/recipe-1"/);
+  assert.match(html, /Prep Time: 10 minutes/);
   assert.equal(mealPlanTriggers(html).length, 1);
   assert.doesNotMatch(html, /meal-plan-add-btn-guest/);
   assert.doesNotMatch(html, />View<\/a>/);
+  assert.ok(!html.includes(OWNER_ID));
+  // The old lightweight card and its bare metadata are intentionally gone.
+  assert.doesNotMatch(html, /<article class="recipe-card">|@Chef|4 servings/);
+
+  const empty = await ejs.renderFile(`${views}recipes/liked.ejs`, { recipes: [], user: { id: OWNER_ID }, csrfToken: 'csrf-test' });
+  assert.match(empty, /No favorites yet/);
+  assert.match(empty, /href="\/browse" class="btn btn-primary">Browse Recipes<\/a>/);
+  assert.doesNotMatch(empty, /recipe-summary-card|result-count/);
 });
 
 test('Cookbook and meal-plan index cards keep title navigation and editing without View', async () => {
