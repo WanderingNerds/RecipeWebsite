@@ -1,8 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import sharp from "sharp";
 import {
   parseJsonLd,
   validateImportFile,
+  parseImage,
+  normalizeImageForOcr,
+  OCR_MAX_INPUT_PIXELS,
+  OCR_MAX_DIMENSION,
   SUPPORTED_MIME_TYPES,
 } from "./recipeImporter.js";
 
@@ -272,4 +277,241 @@ test("SUPPORTED_MIME_TYPES does not include unsupported types", () => {
   assert.ok(!SUPPORTED_MIME_TYPES.includes("text/plain"));
   assert.ok(!SUPPORTED_MIME_TYPES.includes("application/zip"));
   assert.ok(!SUPPORTED_MIME_TYPES.includes("image/gif"));
+});
+
+// =============================================================================
+// OCR image normalization tests (REW-95)
+// =============================================================================
+
+// Generate a small image fixture in-memory rather than committing a binary.
+// Uses a noise-free solid fill; content does not matter, only dimensions.
+function makeImage(width, height) {
+  return sharp({
+    create: {
+      width,
+      height,
+      channels: 3,
+      background: { r: 200, g: 180, b: 160 },
+    },
+  })
+    .png()
+    .toBuffer();
+}
+
+// Minimal stand-in for a Tesseract result object.
+function ocrResult(text) {
+  return { data: { text } };
+}
+
+const OCR_SAMPLE_TEXT = [
+  "Butter Cookies",
+  "2 cups flour",
+  "1 cup butter",
+  "Mix the flour and butter together.",
+  "Bake until golden brown.",
+].join("\n");
+
+test("OCR tuning constants have their documented values", () => {
+  assert.equal(OCR_MAX_INPUT_PIXELS, 40000000);
+  assert.equal(OCR_MAX_DIMENSION, 2000);
+});
+
+test("normalizeImageForOcr downscales images larger than the max dimension", async () => {
+  const input = await makeImage(2400, 1200);
+  const output = await normalizeImageForOcr(input);
+  const metadata = await sharp(output).metadata();
+
+  assert.ok(metadata.width <= OCR_MAX_DIMENSION, `width ${metadata.width} exceeds cap`);
+  assert.ok(metadata.height <= OCR_MAX_DIMENSION, `height ${metadata.height} exceeds cap`);
+});
+
+test("normalizeImageForOcr does not enlarge small images", async () => {
+  const input = await makeImage(50, 50);
+  const output = await normalizeImageForOcr(input);
+  const metadata = await sharp(output).metadata();
+
+  assert.equal(metadata.width, 50);
+  assert.equal(metadata.height, 50);
+});
+
+test("normalizeImageForOcr outputs a single-channel grayscale image", async () => {
+  const input = await makeImage(120, 90);
+  const output = await normalizeImageForOcr(input);
+  const metadata = await sharp(output).metadata();
+
+  assert.equal(metadata.channels, 1);
+});
+
+test("normalizeImageForOcr encodes to PNG regardless of input format", async () => {
+  const jpegInput = await sharp({
+    create: { width: 80, height: 60, channels: 3, background: { r: 10, g: 20, b: 30 } },
+  })
+    .jpeg()
+    .toBuffer();
+
+  const output = await normalizeImageForOcr(jpegInput);
+  const metadata = await sharp(output).metadata();
+
+  assert.equal(metadata.format, "png");
+});
+
+test("normalizeImageForOcr rejects input above the decoded-pixel cap", async () => {
+  // 300x300 = 90,000 decoded pixels, against an injected cap of 1,000.
+  // Proves the rejection path without materializing a real gigapixel bomb.
+  const input = await makeImage(300, 300);
+
+  await assert.rejects(
+    () => normalizeImageForOcr(input, { maxInputPixels: 1000 }),
+    // Assert the actual reason: a bare `instanceof Error` would also be
+    // satisfied by any unrelated sharp failure.
+    (error) => /exceeds pixel limit/i.test(error.message)
+  );
+});
+
+test("normalizeImageForOcr accepts input below the decoded-pixel cap", async () => {
+  const input = await makeImage(300, 300);
+  const output = await normalizeImageForOcr(input, { maxInputPixels: 90000 });
+
+  assert.ok(Buffer.isBuffer(output));
+  assert.ok(output.length > 0);
+});
+
+test("normalizeImageForOcr rejects a corrupt buffer through the real sharp path", async () => {
+  // No injected stub: this drives production sharp with undecodable bytes to
+  // prove the helper surfaces a rejection (which parseImage maps to the
+  // generic client message) rather than resolving or hanging.
+  await assert.rejects(() => normalizeImageForOcr(Buffer.from("not an image")));
+});
+
+test("parseImage passes the normalized buffer to OCR, not the raw input", async () => {
+  const input = await makeImage(2400, 1200);
+  let received = null;
+
+  await parseImage(input, "image/png", {
+    recognize: (buffer) => {
+      received = buffer;
+      return Promise.resolve(ocrResult(OCR_SAMPLE_TEXT));
+    },
+  });
+
+  assert.ok(Buffer.isBuffer(received));
+  assert.notStrictEqual(received, input);
+
+  const metadata = await sharp(received).metadata();
+  assert.ok(metadata.width <= OCR_MAX_DIMENSION);
+  assert.ok(metadata.height <= OCR_MAX_DIMENSION);
+  assert.equal(metadata.channels, 1);
+});
+
+test("parseImage surfaces the generic message when normalization throws", async () => {
+  await assert.rejects(
+    () =>
+      parseImage(Buffer.from("not an image"), "image/png", {
+        normalize: () => {
+          throw new Error("Input image exceeds pixel limit");
+        },
+        recognize: () => Promise.resolve(ocrResult(OCR_SAMPLE_TEXT)),
+      }),
+    (error) => {
+      assert.equal(error.message, "Could not process image. Please try a different image.");
+      return true;
+    }
+  );
+});
+
+test("parseImage does not leak the sharp error text on normalization failure", async () => {
+  const sharpMessage = "Input image exceeds pixel limit 1000 (4000x3000)";
+
+  await assert.rejects(
+    () =>
+      parseImage(Buffer.from("not an image"), "image/png", {
+        normalize: () => Promise.reject(new Error(sharpMessage)),
+        recognize: () => Promise.resolve(ocrResult(OCR_SAMPLE_TEXT)),
+      }),
+    (error) => {
+      assert.ok(!error.message.includes(sharpMessage));
+      assert.ok(!error.message.includes("pixel limit"));
+      assert.ok(!error.message.includes("4000x3000"));
+      return true;
+    }
+  );
+});
+
+test("parseImage does not report a normalization failure as a timeout", async () => {
+  await assert.rejects(
+    () =>
+      parseImage(Buffer.from("not an image"), "image/png", {
+        normalize: () => Promise.reject(new Error("Input image exceeds pixel limit")),
+        recognize: () => Promise.resolve(ocrResult(OCR_SAMPLE_TEXT)),
+      }),
+    (error) => {
+      assert.notEqual(error.message, "Image processing timed out. Try a clearer image.");
+      assert.ok(!error.message.includes("timed out"));
+      return true;
+    }
+  );
+});
+
+test("parseImage never attempts OCR when normalization throws", async () => {
+  let recognizeCalls = 0;
+
+  await assert.rejects(
+    () =>
+      parseImage(Buffer.from("not an image"), "image/png", {
+        normalize: () => Promise.reject(new Error("Input image exceeds pixel limit")),
+        recognize: () => {
+          recognizeCalls += 1;
+          return Promise.resolve(ocrResult(OCR_SAMPLE_TEXT));
+        },
+      })
+  );
+
+  assert.equal(recognizeCalls, 0);
+});
+
+test("parseImage rejects a real over-cap image through the real sharp normalizer", async () => {
+  // Exercises the production normalizer end to end: a genuine sharp rejection
+  // (not an injected throw) must still produce the generic client message.
+  const input = await makeImage(300, 300);
+  let recognizeCalls = 0;
+
+  await assert.rejects(
+    () =>
+      parseImage(input, "image/png", {
+        normalize: (buffer) => normalizeImageForOcr(buffer, { maxInputPixels: 1000 }),
+        recognize: () => {
+          recognizeCalls += 1;
+          return Promise.resolve(ocrResult(OCR_SAMPLE_TEXT));
+        },
+      }),
+    (error) => {
+      assert.equal(error.message, "Could not process image. Please try a different image.");
+      return true;
+    }
+  );
+
+  assert.equal(recognizeCalls, 0);
+});
+
+test("parseImage still flags OCR output with the accuracy warning", async () => {
+  const input = await makeImage(600, 400);
+
+  const result = await parseImage(input, "image/png", {
+    recognize: () => Promise.resolve(ocrResult(OCR_SAMPLE_TEXT)),
+  });
+
+  assert.ok(
+    result.warnings.some((warning) => warning.includes("OCR")),
+    "expected an OCR accuracy warning"
+  );
+});
+
+test("PDF input routes away from the image branch, so no normalization applies", async () => {
+  // validateImportFile is what importRecipe uses to pick a parser; a PDF
+  // resolving to application/pdf means parsePdf runs and parseImage never does.
+  const pdfBuffer = Buffer.from("%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n%%EOF\n", "utf8");
+  const result = await validateImportFile(pdfBuffer);
+
+  assert.equal(result.valid, true);
+  assert.equal(result.mime, "application/pdf");
 });

@@ -9,10 +9,40 @@
 
 import { fileTypeFromBuffer } from "file-type";
 import { PDFExtract } from "pdf.js-extract";
+import sharp from "sharp";
 import Tesseract from "tesseract.js";
 
 // OCR timeout in milliseconds
 const OCR_TIMEOUT_MS = 30000;
+
+// Max decoded pixels accepted on the OCR path: 40,000,000 (REW-95).
+// The multer limit in importRoutes.js bounds *encoded* bytes only; a highly
+// compressible image (a large, mostly uniform PNG being the classic case) fits
+// well under 4MB and still decodes to a multi-gigabyte bitmap. This bounds the
+// *decoded* side, which is where the memory and CPU actually go. sharp's own
+// default is ~268MP, far too permissive here, so this must be passed
+// explicitly. Both caps are needed - neither substitutes for the other.
+//
+// Sizing note: the input decodes to RGB/RGBA *before* grayscale() runs, so a
+// 40MP image peaks at roughly 120MB (RGB) to 160MB (RGBA) of resident pixel
+// data plus libvips working memory - not the ~40MB a grayscale-only reading
+// would suggest. That peak still fits the function memory budget, which is why
+// 40MP is the chosen value.
+export const OCR_MAX_INPUT_PIXELS = 40000000;
+
+// Longest edge handed to Tesseract, in pixels (REW-95). Post-cap downscale box:
+// a 2000x2000 grayscale bitmap is a few MB of pixel data, which keeps OCR cost
+// predictable inside Vercel's function budget while staying legible for
+// recipe-sized type. Smaller images are never enlarged.
+export const OCR_MAX_DIMENSION = 2000;
+
+// Client-facing message for any image failure that is not the OCR timeout.
+// Deliberately generic: importRoutes.js returns error.message straight to the
+// caller, so sharp's own text (pixel counts, dimensions, library internals)
+// must never reach it. Must also not contain "timed out" - parseImage
+// special-cases that substring to report a different message.
+const IMAGE_PROCESSING_FAILED_MESSAGE =
+  "Could not process image. Please try a different image.";
 
 /**
  * Supported MIME types for import
@@ -258,23 +288,87 @@ export async function parsePdf(fileBuffer) {
 }
 
 /**
+ * Normalize an uploaded image before OCR (REW-95).
+ *
+ * Rejects decompression bombs via an explicit decoded-pixel cap, then
+ * downscales, grayscales, and re-encodes to PNG so Tesseract always receives a
+ * bounded, predictable bitmap. PNG is chosen explicitly because toBuffer()
+ * without a format would echo the input format back out.
+ *
+ * Throws sharp's own error on failure; callers on the request path must map it
+ * to a generic message rather than surfacing it.
+ *
+ * @param {Buffer} imageBuffer - Raw uploaded image contents
+ * @param {Object} [options] - Overrides (test seam)
+ * @param {number} [options.maxInputPixels=OCR_MAX_INPUT_PIXELS] - Decoded-pixel cap
+ * @param {number} [options.maxDimension=OCR_MAX_DIMENSION] - Longest-edge cap
+ * @returns {Promise<Buffer>} Normalized grayscale PNG buffer
+ */
+export async function normalizeImageForOcr(imageBuffer, options = {}) {
+  const {
+    maxInputPixels = OCR_MAX_INPUT_PIXELS,
+    maxDimension = OCR_MAX_DIMENSION,
+  } = options;
+
+  return await sharp(imageBuffer, { limitInputPixels: maxInputPixels })
+    .rotate() // Apply EXIF orientation so OCR sees upright text
+    .resize({
+      width: maxDimension,
+      height: maxDimension,
+      fit: "inside", // Maintain aspect ratio, fit within bounds
+      withoutEnlargement: true, // Don't enlarge smaller images
+    })
+    .grayscale()
+    // grayscale() alone still encodes 3 identical sRGB channels; forcing the
+    // b-w colourspace makes the output genuinely single-channel, which is what
+    // keeps the bitmap handed to Tesseract small.
+    .toColourspace("b-w")
+    .png()
+    .toBuffer();
+}
+
+/**
  * OCR image and parse extracted text as recipe
  * @param {Buffer} fileBuffer - Image file contents
  * @param {string} mimeType - Image MIME type
+ * @param {Object} [options] - Injection seam for tests
+ * @param {Function} [options.normalize=normalizeImageForOcr] - Image normalizer
+ * @param {Function} [options.recognize] - OCR function, defaults to Tesseract
  * @returns {Promise<Object>} Parsed recipe data
  */
-export async function parseImage(fileBuffer, mimeType) {
-  // Create a promise that rejects after timeout
+export async function parseImage(fileBuffer, mimeType, options = {}) {
+  const {
+    normalize = normalizeImageForOcr,
+    recognize = (buffer) =>
+      Tesseract.recognize(buffer, "eng", {
+        logger: () => {}, // Suppress progress logging
+      }),
+  } = options;
+
+  // Cap the decoded bitmap before any OCR work starts. This runs outside the
+  // OCR timeout on purpose, so OCR_TIMEOUT_MS keeps meaning "time spent in OCR".
+  let normalizedBuffer;
+  try {
+    normalizedBuffer = await normalize(fileBuffer);
+  } catch (error) {
+    // Log the real cause server-side; the client only ever sees the generic
+    // message so sharp internals are not leaked through the 400 response.
+    console.error("Error normalizing image for OCR:", error);
+    throw new Error(IMAGE_PROCESSING_FAILED_MESSAGE);
+  }
+
+  // Create a promise that rejects after timeout. The handle is captured so the
+  // timer can be cleared once the race settles - otherwise a fast OCR result
+  // still leaves a pending 30s timer holding the event loop open.
+  let timeoutId;
   const timeoutPromise = new Promise((_, reject) => {
-    setTimeout(() => {
+    timeoutId = setTimeout(() => {
       reject(new Error("Image processing timed out. Try a clearer image."));
     }, OCR_TIMEOUT_MS);
   });
 
-  // OCR the image
-  const ocrPromise = Tesseract.recognize(fileBuffer, "eng", {
-    logger: () => {}, // Suppress progress logging
-  });
+  // OCR the normalized image
+  const ocrPromise = recognize(normalizedBuffer);
 
   let result;
   try {
@@ -283,7 +377,11 @@ export async function parseImage(fileBuffer, mimeType) {
     if (error.message.includes("timed out")) {
       throw error;
     }
-    throw new Error("Could not process image. Please try a different image.");
+    throw new Error(IMAGE_PROCESSING_FAILED_MESSAGE);
+  } finally {
+    // Only releases the timer handle. The Tesseract worker itself is still not
+    // cancelled by Promise.race - that is REW-93's scope, deliberately unchanged.
+    clearTimeout(timeoutId);
   }
 
   const text = result.data.text;

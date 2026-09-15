@@ -174,6 +174,8 @@ Current limits (raised in REW-43 after QA reported the previous ceilings were to
 
 Every rejection from the parse endpoint now returns JSON — `429` for the rate limit, `413` for an oversize file, `400` for an unsupported or malformed upload — so the import screen shows the real reason instead of a generic parse failure. See [Recipe Import Limits & Error Contract](docs/api/recipe-import-limits.md).
 
+**Image normalization before OCR (REW-95)** — *implemented and code-reviewed on branch `REW-95-ocr-decoded-pixel-cap`; not QA-verified and not yet merged.* Imported images are now run through `sharp` before OCR: decoded input is capped at **40,000,000 pixels**, EXIF rotation is applied, the image is downscaled to fit 2000x2000 (never enlarged), converted to single-channel grayscale, and re-encoded as PNG. The 4MB upload limit only bounds *encoded* bytes, so without this a small, highly compressible PNG could still decompress to a multi-gigabyte bitmap and exhaust the function's memory. Rejected images return the same generic `400` as any other image failure, so nothing about the response changes for legitimate users. Known tradeoff: very dense, high-resolution recipe photos are downscaled to 2000px, which may cost some OCR accuracy on small type. See [OCR/PDF Text Parsing](docs/api/recipe-import-ocr-parsing.md#image-normalization-before-ocr-rew-95).
+
 ### Browse Recipe Cards (REW-59)
 
 Browse and My Recipes share their core card layout: thumbnail, title/status, author, all categories, tags, separate prep/cook times, servings, difficulty, and creation date. Browse keeps public recipe links and Meal Plan controls; My Recipes keeps favorite, filter, View/Edit/Delete controls. Browse badges are informational. Long titles and badges wrap within cards.
@@ -267,3 +269,4 @@ This local implementation requires migration `013_public_recipe_card_metadata.sq
 - Helmet.js for security headers
 - CORS configuration
 - Rate limiting: 300 requests / 15 minutes per IP globally (production only), 25 recipe imports / 15 minutes per IP, 10 photo uploads / 15 minutes per IP. All limits are keyed by client IP, not by user account. See the [rate limiting table](docs/api/README.md#rate-limiting).
+- Decompression-bomb protection on the recipe **import** path (REW-95, on branch — reviewed, not QA-verified, not merged): uploaded images are capped at 40,000,000 decoded pixels and downscaled to 2000x2000 before OCR. Upload size limits bound encoded bytes only, so this is a separate control, not a duplicate one — keep both. Errors are mapped to a single generic message so no library internals reach the HTTP response body. The recipe **photo** upload path (`src/utils/imageUtils.js`) still has no equivalent cap; tracked as REW-96.
