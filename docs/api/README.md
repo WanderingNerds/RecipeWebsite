@@ -67,8 +67,18 @@ Favorite/like controls (`.like-btn`) call these endpoints from the recipe detail
 | POST | `/cookbooks/:id/add-recipes` | Bulk-add selected recipes to a cookbook |
 | POST | `/cookbooks/:id/recipes/:recipeId` | Add a single recipe to a cookbook (used by the recipe view's "Save to Cookbook(s)" widget) |
 | POST | `/cookbooks/:id/recipes/:recipeId/remove` | Remove a recipe from a cookbook (never deletes the recipe itself) |
+| POST | `/cookbooks/:id/visibility` | Switch a cookbook between Private and Public (`visibility=private\|public`, fails closed to Private) — REW-19 |
 
-All `/cookbooks*` routes require auth and are private to the owner (no sharing — see REW-19, out of scope). Mutation endpoints share a 30-requests/minute-per-user rate limit. See [Cookbooks API](cookbooks.md) for full details, including the recipe-view integration and RLS enforcement.
+All `/cookbooks*` routes require auth and act only on the caller's own cookbooks. Mutation endpoints share a 30-requests/minute-per-user rate limit. See [Cookbooks API](cookbooks.md) for full details, including the recipe-view integration and RLS enforcement.
+
+### Public cookbook sharing (REW-19)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/c/:id` | Public, unauthenticated read-only view of a **Public** cookbook and its published recipes. Private, nonexistent, and malformed IDs all return an identical 404 |
+| GET | `/search?q=…` | Recipe search, extended with a capped secondary "Cookbooks" section (up to 5 Public cookbooks, page 1 only) |
+
+Both run exclusively on the anon-key Supabase client, so a draft recipe inside a shared cookbook is invisible at the database layer rather than filtered in application code. A cookbook's UUID is its share identifier — there is no share token. See [Cookbooks API](cookbooks.md) for the full contract.
 
 ### Meal Plans (REW-63)
 
@@ -157,7 +167,7 @@ All management routes require `requireAdmin` and use the request-scoped access t
 - [Recipe Author Default](recipe-author-default.md) - Account-name defaulting on recipe create/import (REW-46)
 - [Required Prep Time / Total Time](recipe-required-times.md) - Required-field enforcement and the Cook Time → Total Time display rename (REW-52)
 - [Recipe Likes API](recipe-likes.md) - `/api/likes/:recipeId` endpoints, the My Recipes favorite control, and the draft-recipe restriction (REW-21, REW-55)
-- [Cookbooks API](cookbooks.md) - `/cookbooks*` endpoints, RLS-enforced privacy, and the recipe view "Save to Cookbook(s)" integration (REW-62)
+- [Cookbooks API](cookbooks.md) - `/cookbooks*` endpoints, RLS-enforced privacy, the recipe view "Save to Cookbook(s)" integration (REW-62), and Private/Public cookbook sharing via `POST /cookbooks/:id/visibility` and the public `GET /c/:id` (REW-19)
 - [Meal Plans API](meal-plans.md) - `/meal-plans*` and `/api/meal-plans*` endpoints, the shared "Add to Meal Plan" modal, and the own-or-published recipe visibility rule (REW-63)
 - [Help & Feedback](help-feedback.md) - authenticated form routes, validation, durable intake, and RLS boundaries (REW-70)
 - [Admin Help & Feedback](admin-feedback.md) - isolated admin authentication, queue/detail workflow, provisioning, CSRF, and RLS boundaries (REW-71)

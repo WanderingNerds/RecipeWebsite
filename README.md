@@ -46,7 +46,9 @@ A recipe website built with Node.js, Express, and Supabase Auth.
    ASSIGNMENT_EMAIL_FROM=Potluck <verified-sender@example.com>
    ```
 
-   Note: `APP_URL` is required for email confirmation links and admin assignment links to work correctly in production. In development, it defaults to `http://localhost:3000`. `ASSIGNMENT_EMAIL_FROM` must use a sender accepted by the configured Resend account.
+   Note: `APP_URL` is required for email confirmation links, admin assignment links, and — as of REW-19 — the copyable cookbook share link (`<APP_URL>/c/<id>`) to work correctly in production. In development, it defaults to `http://localhost:3000`. `ASSIGNMENT_EMAIL_FROM` must use a sender accepted by the configured Resend account.
+
+   No new environment variables were introduced by REW-19.
 
 5. Start the development server:
    ```bash
@@ -67,7 +69,7 @@ A recipe website built with Node.js, Express, and Supabase Auth.
      - Production: `https://your-domain.com/auth/callback`, `https://your-domain.com/auth/reset-password`
      - Development: `http://localhost:3000/auth/callback`, `http://localhost:3000/auth/reset-password`
 4. **Reset Password email template (required — REW-57):** In **Authentication > Email Templates > Reset Password**, paste the template from `docs/email-templates/reset-password.html`. It links to `{{ .SiteURL }}/auth/reset-password?token_hash={{ .TokenHash }}&type=recovery`, **not** the default `{{ .ConfirmationURL }}`. The default variable points at Supabase's own verify endpoint, which delivers the session as a URL hash fragment; if the computed `redirect_to` isn't on the allow-list above, Supabase falls back further to the Site URL — i.e. the reset link opens the Home page instead of the reset-password form. See `docs/email-templates/README.md` for the full variable reference.
-5. **`APP_URL` must be set in Vercel (required — REW-57):** Set the `APP_URL` environment variable for the **Production** environment in Vercel Project Settings to the canonical production origin (scheme + host, no trailing slash). Without it, password-reset and email-confirmation links generated in production fall back to `http://localhost:3000`, which can never be reached by anyone but the developer and isn't on the Supabase Redirect URL allow-list.
+5. **`APP_URL` must be set in Vercel (required — REW-57):** Set the `APP_URL` environment variable for the **Production** environment in Vercel Project Settings to the canonical production origin (scheme + host, no trailing slash). Without it, password-reset and email-confirmation links generated in production fall back to `http://localhost:3000`, which can never be reached by anyone but the developer and isn't on the Supabase Redirect URL allow-list. As of REW-19 the same value is also the origin of every cookbook share link an owner copies, so a wrong or missing `APP_URL` produces share links that don't work for the people they're sent to.
 6. Authentication is handled automatically by Supabase Auth
 
 ### Administrator feedback setup (REW-71, REW-78)
@@ -91,7 +93,8 @@ recipe-website/
 │   │   ├── categoryRoutes.js   # Category API routes
 │   │   ├── tagRoutes.js        # Tag API routes
 │   │   ├── likeRoutes.js       # Recipe favorite/like API routes (REW-21)
-│   │   ├── cookbookRoutes.js   # Cookbook CRUD + recipe membership routes (REW-62)
+│   │   ├── publicRoutes.js     # Unauthenticated pages: /browse, /search, /r/:id, /c/:id (anon-key client only)
+│   │   ├── cookbookRoutes.js   # Cookbook CRUD + recipe membership + visibility toggle (REW-62, REW-19)
 │   │   ├── mealPlanRoutes.js   # Meal plan CRUD + bulk-add page routes (REW-63)
 │   │   ├── mealPlanApiRoutes.js # Meal plan JSON API backing the "Add to Meal Plan" modal (REW-63)
 │   │   ├── helpFeedbackRoutes.js # Authenticated feedback routes (REW-70)
@@ -101,7 +104,7 @@ recipe-website/
 │   │   ├── imageUtils.js       # Image processing utilities
 │   │   ├── ingredientParser.js # Ingredient parsing
 │   │   ├── ingredientScaler.js # Recipe scaling logic
-│   │   ├── cookbookUtils.js    # Cookbook title validation + recipe-id normalization (REW-62)
+│   │   ├── cookbookUtils.js    # Cookbook title validation, recipe-id normalization (REW-62), fail-closed visibility normalizer (REW-19)
 │   │   ├── mealPlanUtils.js    # Meal plan title + date-range validation (REW-63)
 │   │   ├── helpFeedbackUtils.js # Feedback validation (REW-70)
 │   │   └── adminUtils.js        # Admin claim and workflow validation (REW-71)
@@ -112,7 +115,7 @@ recipe-website/
 │   ├── partials/meal-plan-modal.ejs # Shared "Add to Meal Plan" modal (REW-63)
 │   ├── auth/                   # Login/Register pages
 │   ├── recipes/                # Recipe views (index, new, edit, view)
-│   ├── cookbooks/               # Cookbook views (index, new, view, edit, add-recipes) (REW-62)
+│   ├── cookbooks/               # Cookbook views (index, new, view, edit, add-recipes; public-view for shared cookbooks) (REW-62, REW-19)
 │   ├── meal-plans/              # Meal plan views (index, new, view, edit, add-recipes) (REW-63)
 │   ├── home.ejs                # Home page
 │   └── dashboard.ejs           # Protected dashboard
@@ -123,6 +126,7 @@ recipe-website/
 │       ├── nav.js              # Mobile hamburger nav toggle (REW-50)
 │       ├── likes.js            # Favorite/like button optimistic UI (REW-21; also drives My Recipes cards, REW-55)
 │       ├── meal-plans.js       # "Add to Meal Plan" modal fetch/toggle logic (REW-63)
+│       ├── cookbook-share.js   # Copy-link button on a Public cookbook's share panel (REW-19)
 │       ├── recipe-form.js      # Recipe form handling
 │       └── tags-input.js       # Tag input with autocomplete
 ├── database/
@@ -173,8 +177,19 @@ This local implementation requires migration `013_public_recipe_card_metadata.sq
 - **Create, Rename, and Delete Cookbooks**: Authenticated users can organize their own recipes into named, private collections ("cookbooks") from a dedicated "My Cookbooks" area (linked from the navbar). A cookbook holds any number of recipes, and the same recipe can belong to multiple cookbooks at once.
 - **Add/Remove Recipes**: From a cookbook's detail page, a checklist picker (`/cookbooks/:id/add-recipes`) lets a user bulk-add any of their own recipes — draft or published — into the cookbook. A "Save to Cookbook(s)" widget on the recipe detail page offers the same add/remove actions for one recipe at a time, without leaving the recipe page.
 - **Recipes Are Never Deleted by Cookbook Actions**: Deleting a cookbook removes only the cookbook and its membership records — the recipes in it are untouched and remain in "My Recipes" and any other cookbooks. Removing a recipe from a cookbook works the same way in reverse.
-- **Private by Default**: Cookbooks are visible only to their owner, enforced at the database level (Row Level Security) — there is no policy allowing another user to read a cookbook they don't own, so a direct URL/ID guess can't expose it. Cookbook sharing (REW-19) is a separate, not-yet-built feature.
+- **Private by Default**: Cookbooks are visible only to their owner, enforced at the database level (Row Level Security) — there is no policy allowing another user to read a Private cookbook they don't own, so a direct URL/ID guess can't expose it.
 - See [Cookbooks API](docs/api/cookbooks.md) for the full endpoint list and `database/README.md` for the `cookbooks`/`cookbook_recipes` schema.
+
+### Cookbook Sharing (REW-19)
+- **One Private/Public Choice per Cookbook**: From a cookbook's detail page, the owner can make it Public and make it Private again, as many times as they like. Private stays the default for new cookbooks, and every cookbook that existed before this feature is Private.
+- **Shareable Link**: A Public cookbook is readable by anyone at `/c/<cookbook-id>`, signed in or not. The cookbook's own ID is the share link — the same approach already used for public recipes at `/r/<recipe-id>`, so there is no token to manage. The detail page shows the full URL in a copyable field with a Copy button.
+- **Instant Revocation**: Making a cookbook Private again breaks the link immediately. Visibility is re-read from the database on every request and never cached, so a previously-working link returns a plain "not found" on the very next load.
+- **Discoverable in Search**: Public cookbooks appear as a small secondary "Cookbooks" section on `/search`, beneath the recipe results. Private cookbooks never appear there for anyone, including their owner searching the exact title.
+- **Draft Recipes Never Leak**: A cookbook can contain the owner's Private recipes. A shared cookbook shows **only** Public recipes — to visitors, to other signed-in users, and to the owner opening their own share link. The public page is served entirely through the anonymous database key, so drafts are invisible at the database layer rather than filtered out in application code. A Public cookbook whose recipes are all Private simply renders as empty, with no hint that anything is hidden.
+- **Read-Only for Everyone**: The shared page has no edit, rename, delete, add-recipe, or remove-recipe control for anyone, including the owner. A Private cookbook, a nonexistent one, and a malformed link all return the same 404, so a Private cookbook's existence can't be probed.
+- **Nothing Else Changes**: Sharing a cookbook never changes any recipe's own Private/Public status, never alters cookbook membership, and never affects the rule that deleting a cookbook leaves its recipes intact.
+- **Not included**: saving or cloning someone else's whole shared cookbook into your own account — tracked as follow-up REW-91. Recipe-level cloning (REW-84) already works, so a visitor can open any recipe in a shared cookbook and use Add Recipe today.
+- Requires migration `019_add_cookbook_sharing.sql`. **This feature is code-reviewed but has not been QA-verified against a live Supabase** — see `docs/RELEASE_NOTES_REW-19.md` for the list of unverified acceptance criteria.
 
 ### Meal Plans (REW-63)
 - **Create, Rename/Re-date, and Delete Meal Plans**: Authenticated users can organize recipes for a defined scheduled period (a required start/end date range) from a dedicated "My Meal Plans" area (linked from the navbar). A meal plan holds any number of recipes, and the same recipe can belong to multiple meal plans — and independently, to multiple cookbooks, since the two features don't interact.

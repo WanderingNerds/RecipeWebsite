@@ -11,6 +11,26 @@
         <p style="color: var(--text-muted);"><%= recipes.length %> recipe<%= recipes.length !== 1 ? 's' : '' %></p>
       </div>
       <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+        <%#
+          REW-19 cookbook-level sharing control. Deliberately a labelled
+          control here in the header, NOT another bare badge, so it reads as
+          distinct from the per-recipe Private/Public pills on the cards below.
+          `visibility` follows the REW-85 private|public form convention and is
+          re-normalized fail-closed server side.
+        %>
+        <form class="cookbook-visibility-control" action="/cookbooks/<%= cookbook.id %>/visibility" method="POST">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <span class="cookbook-visibility-label">Cookbook</span>
+          <% if (cookbook.is_public) { %>
+            <span class="cookbook-visibility-badge cookbook-visibility-public">Public</span>
+            <input type="hidden" name="visibility" value="private">
+            <button type="submit" class="btn btn-outline" style="font-size: 0.875rem; padding: 0.5rem 1rem;">Make Private</button>
+          <% } else { %>
+            <span class="cookbook-visibility-badge cookbook-visibility-private">Private</span>
+            <input type="hidden" name="visibility" value="public">
+            <button type="submit" class="btn btn-outline" style="font-size: 0.875rem; padding: 0.5rem 1rem;">Make Public</button>
+          <% } %>
+        </form>
         <a href="/cookbooks/<%= cookbook.id %>/add-recipes" class="btn btn-primary">Add Recipes</a>
         <a href="/cookbooks/<%= cookbook.id %>/edit" class="btn btn-outline">Rename</a>
         <form action="/cookbooks/<%= cookbook.id %>/delete" method="POST" style="margin: 0;" onsubmit="return confirm('Delete this cookbook? Its recipes will not be deleted.');">
@@ -20,6 +40,28 @@
       </div>
     </div>
   </div>
+
+  <%#
+    Share link, shown only while the cookbook is Public. `appUrl` comes from
+    getAppUrl() in the route -- never from the request Host header, because
+    this string exists to be copied and re-shared. Guarded with typeof so
+    templates rendered directly in tests (without appUrl) still render.
+  %>
+  <% if (cookbook.is_public && typeof appUrl !== 'undefined' && appUrl) { %>
+    <div class="cookbook-share-panel" data-cookbook-share>
+      <p class="cookbook-share-panel-label">Anyone with this link can view this cookbook and its Public recipes.</p>
+      <input
+        type="text"
+        class="cookbook-share-url"
+        data-cookbook-share-url
+        value="<%= appUrl %>/c/<%= cookbook.id %>"
+        readonly
+        aria-label="Share link for this cookbook"
+      >
+      <button type="button" class="btn btn-outline" data-cookbook-share-copy>Copy link</button>
+      <span class="cookbook-share-feedback" data-cookbook-share-feedback role="status" aria-live="polite"></span>
+    </div>
+  <% } %>
 
   <% if (recipes.length === 0) { %>
     <div class="empty-state">
@@ -82,3 +124,5 @@
   <% } %>
 
 </div>
+
+<script src="/js/cookbook-share.js"></script>

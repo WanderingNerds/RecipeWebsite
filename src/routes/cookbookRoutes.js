@@ -2,7 +2,12 @@ import { Router } from "express";
 import rateLimit from "express-rate-limit";
 import { requireAuth } from "../middleware/authMiddleware.js";
 import { createSupabaseClient } from "../config/supabase.js";
-import { validateCookbookTitle, normalizeRecipeIdSelection } from "../utils/cookbookUtils.js";
+import { getAppUrl } from "../utils/authUtils.js";
+import {
+  validateCookbookTitle,
+  normalizeRecipeIdSelection,
+  normalizeCookbookVisibility,
+} from "../utils/cookbookUtils.js";
 
 const router = Router();
 
@@ -242,6 +247,82 @@ router.post("/:id/update", requireAuth, cookbookLimiter, async (req, res) => {
     res.redirect("/cookbooks");
   }
 });
+
+/**
+ * REW-19: flip a cookbook between Private and Public.
+ *
+ * Exported with an injectable client so the handler itself is unit testable
+ * without a live Supabase, following the handleRecipeUpdate precedent in
+ * recipeRoutes.js. Mounted below with requireAuth + cookbookLimiter.
+ *
+ * Public is what makes the cookbook readable at GET /c/:id and discoverable
+ * in search; Private revokes both on the very next request, because nothing
+ * caches this flag -- every read re-checks it at the database layer.
+ */
+export async function handleCookbookVisibilityUpdate(
+  req,
+  res,
+  { createClient = createSupabaseClient } = {}
+) {
+  try {
+    const { id } = req.params;
+
+    if (!UUID_PATTERN.test(id)) {
+      req.flash("error", "Cookbook not found");
+      return res.redirect("/cookbooks");
+    }
+
+    // Fails closed to Private on anything unexpected (missing field, array
+    // from duplicated inputs, wrong case, non-string) -- a malformed or
+    // forged submission can never accidentally share a cookbook.
+    const isPublic = normalizeCookbookVisibility(req.body.visibility);
+
+    const supabaseClient = createClient(req.accessToken);
+
+    // Belt-and-suspenders ownership check alongside RLS, matching the
+    // convention in the rename/delete handlers above. A missing row and a
+    // row owned by somebody else are deliberately indistinguishable.
+    const { data, error } = await supabaseClient
+      .from("cookbooks")
+      .update({ is_public: isPublic })
+      .eq("id", id)
+      .eq("user_id", req.user.id)
+      .select()
+      .maybeSingle();
+
+    // A real database failure and a row that simply isn't the caller's are
+    // different events and must not be logged identically -- the not-found
+    // path arrives with error === null. The user-facing flash is deliberately
+    // the same for both, so a non-owner still cannot tell the two apart.
+    if (error) {
+      console.error("Error updating cookbook visibility:", error);
+      req.flash("error", "Failed to update sharing. Please try again.");
+      return res.redirect(`/cookbooks/${id}`);
+    }
+
+    if (!data) {
+      req.flash("error", "Failed to update sharing. Please try again.");
+      return res.redirect(`/cookbooks/${id}`);
+    }
+
+    req.flash(
+      "success",
+      isPublic
+        ? "This cookbook is now Public. Anyone with the link can view it."
+        : "This cookbook is now Private. Its share link no longer works."
+    );
+    res.redirect(`/cookbooks/${id}`);
+  } catch (error) {
+    console.error("Error in cookbook visibility update:", error);
+    req.flash("error", "An unexpected error occurred");
+    res.redirect("/cookbooks");
+  }
+}
+
+// POST /cookbooks/:id/visibility - Share or unshare a cookbook (REW-19)
+router.post("/:id/visibility", requireAuth, cookbookLimiter, (req, res) =>
+  handleCookbookVisibilityUpdate(req, res)
+);
 
 // POST /cookbooks/:id/delete - Delete a cookbook (never deletes its recipes)
 router.post("/:id/delete", requireAuth, cookbookLimiter, async (req, res) => {
@@ -533,6 +614,11 @@ router.get("/:id", requireAuth, async (req, res) => {
       title: cookbook.title,
       cookbook,
       recipes,
+      // Share-link origin comes from APP_URL/getAppUrl() only, never from the
+      // request's Host / X-Forwarded-Host -- this string is explicitly
+      // designed to be copied and re-shared by a human, so a header-derived
+      // origin would be a ready-made phishing vector (see REW-57).
+      appUrl: getAppUrl(),
     });
   } catch (error) {
     console.error("Error viewing cookbook:", error);

@@ -18,6 +18,13 @@
     <button type="submit" class="btn btn-primary">Search</button>
   </form>
 
+  <%#
+    REW-19: Public cookbooks are a secondary result surface. `cookbooks` is
+    guarded with typeof so this template still renders for callers that pass
+    only recipe locals.
+  %>
+  <% const cookbookResults = (typeof cookbooks !== 'undefined' && cookbooks) ? cookbooks : []; %>
+
   <% if (!query) { %>
 
     <div class="empty-state">
@@ -26,7 +33,7 @@
       <a href="/browse" class="btn btn-outline">Browse all recipes</a>
     </div>
 
-  <% } else if (recipes.length === 0) { %>
+  <% } else if (recipes.length === 0 && cookbookResults.length === 0) { %>
 
     <div class="empty-state">
       <h3>No recipes match &ldquo;<%= query %>&rdquo;</h3>
@@ -36,21 +43,47 @@
 
   <% } else { %>
 
-    <p class="result-count">
-      <%= totalCount %> <%= totalCount === 1 ? "recipe" : "recipes" %> matching &ldquo;<%= query %>&rdquo;
-    </p>
+    <% if (recipes.length === 0) { %>
 
-    <div class="recipe-grid">
-      <% recipes.forEach(recipe => { %>
-        <%- include('../partials/recipe-card', { recipe }) %>
-      <% }); %>
-    </div>
+      <%# Matching cookbooks but no matching recipes: show the cookbooks
+          rather than a dead-end "no results" page. %>
+      <p class="result-count">
+        No recipes match &ldquo;<%= query %>&rdquo;, but these cookbooks do.
+      </p>
 
-    <%- include('../partials/pagination', {
-      page,
-      totalPages,
-      baseHref: `/search?q=${encodeURIComponent(query)}&`
-    }) %>
+    <% } else { %>
+
+      <p class="result-count">
+        <%= totalCount %> <%= totalCount === 1 ? "recipe" : "recipes" %> matching &ldquo;<%= query %>&rdquo;
+      </p>
+
+      <div class="recipe-grid">
+        <% recipes.forEach(recipe => { %>
+          <%- include('../partials/recipe-card', { recipe }) %>
+        <% }); %>
+      </div>
+
+      <%- include('../partials/pagination', {
+        page,
+        totalPages,
+        baseHref: `/search?q=${encodeURIComponent(query)}&`
+      }) %>
+
+    <% } %>
+
+    <% if (cookbookResults.length > 0) { %>
+      <section class="cookbook-result-section">
+        <h2 class="cookbook-result-heading">Cookbooks</h2>
+        <ul class="cookbook-result-list">
+          <% cookbookResults.forEach(cookbook => { %>
+            <li class="cookbook-result-item">
+              <a href="/c/<%= cookbook.id %>"><%= cookbook.title %></a>
+              <span class="cookbook-count-badge"><%= cookbook.recipe_count %> recipe<%= Number(cookbook.recipe_count) !== 1 ? 's' : '' %></span>
+            </li>
+          <% }); %>
+        </ul>
+      </section>
+    <% } %>
 
   <% } %>
 

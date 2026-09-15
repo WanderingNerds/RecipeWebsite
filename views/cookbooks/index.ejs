@@ -29,6 +29,14 @@
             <span class="cookbook-count-badge"><%= cookbook.recipeCount %> recipe<%= cookbook.recipeCount !== 1 ? 's' : '' %></span>
           </div>
 
+          <%# REW-19: only shared cookbooks are marked, so the default (Private)
+              list stays visually unchanged. Falsy/absent is_public renders nothing. %>
+          <% if (cookbook.is_public) { %>
+            <div style="margin-bottom: 0.25rem;">
+              <span class="cookbook-visibility-badge cookbook-visibility-public">Public</span>
+            </div>
+          <% } %>
+
           <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem; margin-bottom: 0.75rem;">
             Created <%= new Date(cookbook.created_at).toLocaleDateString() %>
           </p>
