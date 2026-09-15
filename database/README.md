@@ -37,6 +37,7 @@ To set up the database in your Supabase project, follow these steps:
    | 17 | `017_add_feedback_progress_comments.sql` | Append-only, admin-only feedback progress history with durable author snapshots (REW-80) |
    | 18 | `018_add_recipe_clone_provenance.sql` | Immutable clone lineage and durable original-author attribution (REW-84) |
    | 19 | `019_add_cookbook_sharing.sql` | Cookbook sharing: `cookbooks.is_public`, title search vector + indexes, two additive public SELECT policies, anon/authenticated grants, and the `search_cookbooks()` RPC (REW-19) |
+   | 20 | `020_add_meal_plan_sharing.sql` | Meal plan sharing: `meal_plans.is_public`, two additive public SELECT policies (the junction one gated on both plan visibility and recipe publish status), and anon/authenticated grants. **No index, no search vector, no RPC** — Public meal plans are link-only (REW-69) |
 
    **Note on the duplicated `003_` prefix.** Two files ship with a `003_` prefix — `003_create_categories_table.sql` and `003_add_recipe_search.sql`. This is a historical accident, not a pair of alternatives: **both must be run**, in the order shown above. Every migration from `004` onward uses a unique prefix. The search migration was previously missing from this table entirely; it is listed here as of REW-19.
 
@@ -186,9 +187,9 @@ Junction table linking cookbooks to recipes (many-to-many) — a single recipe c
 
 Consumed by `GET/POST /cookbooks*` (`src/routes/cookbookRoutes.js`), the "My Cookbooks" list/detail pages, the recipe picker (`/cookbooks/:id/add-recipes`), and the "Save to Cookbook(s)" widget on the recipe detail view (`views/recipes/view.ejs`, wired up in `src/routes/recipeRoutes.js`'s `GET /:id`). See [Cookbooks API](../docs/api/cookbooks.md).
 
-### meal_plans (REW-63)
+### meal_plans (REW-63, extended by REW-69)
 
-A private, per-user named collection of recipes scoped to a required date range ("meal plans") — in contrast to `cookbooks`, which have no schedule. Modeled directly on the `cookbooks` table pattern, plus the required `start_date`/`end_date` this ticket adds.
+A per-user named collection of recipes scoped to a required date range ("meal plans") — in contrast to `cookbooks`, which have no schedule. Modeled directly on the `cookbooks` table pattern, plus the required `start_date`/`end_date` this ticket adds. Private by default; REW-69 adds an opt-in Public state (see `is_public` below).
 
 | Column | Type | Description |
 |--------|------|--------------|
@@ -197,12 +198,15 @@ A private, per-user named collection of recipes scoped to a required date range 
 | `title` | TEXT | Meal plan name; `NOT NULL` with a `CHECK` requiring non-empty content after trimming |
 | `start_date` | DATE | `NOT NULL` |
 | `end_date` | DATE | `NOT NULL`; `CHECK (end_date >= start_date)` |
+| `is_public` | BOOLEAN | **REW-69.** `NOT NULL DEFAULT false`. `true` means the plan is readable by anyone at `GET /m/:id`. Written only by `POST /meal-plans/:id/visibility` |
 | `created_at` | TIMESTAMPTZ | Creation timestamp |
 | `updated_at` | TIMESTAMPTZ | Last update timestamp (auto-updated via the existing `update_updated_at_column()` trigger function, reused from `001_create_recipes_table.sql`) |
 
 A meal plan belongs to exactly one user. Deleting a meal plan never deletes the recipes in it — see "Cascade behavior" in Notes below. Plain `DATE` columns are used (no time-of-day/timezone handling), and there is no uniqueness/overlap constraint across a user's plans — a user's meal plans may cover overlapping calendar days.
 
-### meal_plan_recipes (REW-63)
+**`is_public` is the whole sharing model (REW-69).** There is no `meal_plan_shares` table and no per-user grant: a plan is either Private (owner-only, the default and the state of every row that existed before migration `020`) or Public (world-readable at its share link). Because visibility is read from this column on every request and never cached, flipping a plan back to Private revokes its share link on the very next request. Unlike `cookbooks.is_public`, it does **not** make the row discoverable in search — migration `020` adds no search vector, no RPC, and no index.
+
+### meal_plan_recipes (REW-63, extended by REW-69)
 
 Junction table linking meal plans to recipes (many-to-many) — a single recipe can belong to any number of a user's meal plans, and a meal plan can hold any number of recipes:
 
@@ -217,7 +221,7 @@ Junction table linking meal plans to recipes (many-to-many) — a single recipe 
 
 **Key difference from `cookbook_recipes`:** the INSERT RLS policy allows adding a recipe that is **either the caller's own recipe (any status) or any other user's *published* recipe** — not owner-only. This mirrors the visibility rule already used by `recipe_likes`, and reflects that "Add to Meal Plan" appears on `/browse`, `/search`, and `/recipes/liked`, which show other users' published recipes, unlike Cookbooks' only entry point (the owner's own recipe page).
 
-Consumed by `GET/POST /meal-plans*` (`src/routes/mealPlanRoutes.js`), the "My Meal Plans" list/detail pages, the bulk recipe picker (`/meal-plans/:id/add-recipes`), and the shared "Add to Meal Plan" modal (`views/partials/meal-plan-modal.ejs`, backed by `src/routes/mealPlanApiRoutes.js` at `/api/meal-plans*`). See [Meal Plans API](../docs/api/meal-plans.md).
+Consumed by `GET/POST /meal-plans*` (`src/routes/mealPlanRoutes.js`), the "My Meal Plans" list/detail pages, the bulk recipe picker (`/meal-plans/:id/add-recipes`), the shared "Add to Meal Plan" modal (`views/partials/meal-plan-modal.ejs`, backed by `src/routes/mealPlanApiRoutes.js` at `/api/meal-plans*`), and — as of REW-69 — the public shared-plan view at `GET /m/:id` in `src/routes/publicRoutes.js`. See [Meal Plans API](../docs/api/meal-plans.md).
 
 ### help_feedback_submissions (REW-70)
 
@@ -309,14 +313,26 @@ Migration 013 adds four SELECT policies and SELECT grants, with no table or colu
 - `GRANT EXECUTE ON FUNCTION public.search_cookbooks(text, integer, integer) TO anon, authenticated`.
 - **No grant, policy, or column on `recipes` was changed by migration 019.** The published/owner SELECT policy from `001` is precisely the mechanism the application relies on to keep drafts out of a shared cookbook, and it must stay as it is.
 
-### meal_plans (REW-63)
-- SELECT/INSERT/UPDATE/DELETE all restricted to `user_id = auth.uid()` — a user can only view, create, rename/re-date, or delete their own meal plans
-- **Deliberately no public/shared SELECT policy** — same structural-privacy approach as `cookbooks`; a direct API/URL request or Supabase query for another user's meal plan ID returns nothing
+### meal_plans (REW-63, extended by REW-69)
+- SELECT/INSERT/UPDATE/DELETE all restricted to `user_id = auth.uid()` — a user can only view, create, rename/re-date, or delete their own meal plans. Migration `020` leaves all four of these owner-only policies untouched.
+- **REW-69 adds one additional SELECT policy, `"Anyone can view public meal plans"`** (`TO anon, authenticated`, `USING (is_public = true)`). Permissive policies are OR'd, so a Private plan remains visible only to its owner, and a Public one becomes readable by everyone.
+- **This supersedes a statement in migration `011`.** That migration's header describes meal plans as "structurally private at the RLS layer" with "deliberately NO public/shared SELECT policy." That was true of REW-63 and is no longer true as of `020`. `011` itself is not edited — it has already been applied — so the header comment there should be read as historical.
+- No new UPDATE policy was added for `is_public` — the existing "Users can update own meal plans" policy already covers an owner writing a new column on a row they can update.
 
-### meal_plan_recipes (REW-63)
+### meal_plan_recipes (REW-63, extended by REW-69)
 - SELECT/DELETE restricted via a subquery to meal plans owned by `auth.uid()` — only a plan's owner can see or remove its contents
 - **INSERT requires plan ownership PLUS a recipe-visibility check that differs from `cookbook_recipes`:** `(recipes.user_id = auth.uid() OR recipes.status = 'published')` — a user can add their own recipe (any status) or any other user's published recipe, but **not** another user's draft/unpublished recipe. A direct insert attempt as another authenticated user targeting a draft recipe they don't own is rejected by Postgres even if application code were buggy. This mirrors the visibility rule already used by `recipe_likes`, not the ownership-only rule used by `cookbook_recipes`.
-- No UPDATE policy needed for membership rows, same reasoning as `recipe_likes`/`cookbook_recipes` — if `planned_servings` becomes user-editable in a future ticket (REW-26), an UPDATE policy scoped the same way as SELECT/DELETE will need to be added then
+- No UPDATE policy needed for membership rows, same reasoning as `recipe_likes`/`cookbook_recipes` — if `planned_servings` becomes user-editable in a future ticket, an UPDATE policy scoped the same way as SELECT/DELETE will need to be added then. Migration `020` adds no such policy; membership stays insert/delete only.
+- **REW-69 adds one additional SELECT policy, `"Anyone can view recipes in public meal plans"`** (`TO anon, authenticated`), gated on **two** `EXISTS` checks that must both hold: the parent `meal_plans` row is `is_public = true` **and** the referenced `recipes` row has `status = 'published'`. The two clauses are `AND`-ed, never `OR`-ed — `OR` would make either condition sufficient on its own and re-open the leak below.
+- Gating on the parent plan alone would **not** have been sufficient. A membership row itself carries `recipe_id`, `planned_servings`, and `created_at`, so an anonymous PostgREST read of `meal_plan_recipes?meal_plan_id=eq.<public_id>&select=recipe_id,created_at` would have disclosed the count, UUIDs, and add-times of the owner's Private recipes even while the recipe rows themselves stayed hidden. The threat model here is the direct anon-key API read, not just the rendered page. This is the same REW-92 lesson applied to `cookbook_recipes` in `019`, and mirrors `013_public_recipe_card_metadata.sql`, which gates every public junction-edge policy on `recipes.status = 'published'`.
+- The owner's own `/meal-plans/:id` view is unaffected: the owner-only policy from `012` is a separate permissive policy, so an owner still sees every membership row, including those pointing at their Private recipes.
+- No RLS recursion risk: `meal_plan_recipes` policies reference `meal_plans` and `recipes`; neither of those tables' policies reference `meal_plan_recipes`.
+
+### Meal plan sharing grants (REW-69)
+- `GRANT SELECT ON public.meal_plans, public.meal_plan_recipes TO anon, authenticated` — explicit rather than relying on Supabase default privileges, matching the pattern in `003_add_recipe_search.sql`, `013_public_recipe_card_metadata.sql`, and `019_add_cookbook_sharing.sql`. The grant only permits the read to be *attempted*; RLS above remains the row-visibility boundary.
+- No function grant — migration `020` creates no RPC.
+- **No grant, policy, or column on `recipes` was changed by migration `020`.** The published/owner SELECT policy from `001` is precisely the mechanism the application relies on to keep Private recipes out of a shared plan, and it must stay as it is.
+- **Accepted residual exposure.** For a **Public** plan, an anon PostgREST read of `meal_plans` can see that row's `user_id`, `created_at`, and `updated_at`, so multiple Public plans can be correlated to one owner UUID. This was raised in review and accepted by design: it is identical to the existing posture for published `recipes` and Public `cookbooks`, and it exposes no Private plan. `meal_plan_recipes.planned_servings` likewise becomes readable for Public plans, but it is schema-only today — no route or view writes it — so nothing is disclosed in practice. Tightening either would require column-level grants, a new app-wide convention that belongs in its own ticket.
 
 ### help_feedback_submissions (REW-70)
 - Authenticated intake requires `user_id = auth.uid()`, `status = 'new'`, and `assignee_id IS NULL`.
@@ -358,6 +374,7 @@ Performance indexes are created on:
 - `meal_plans.(user_id, start_date)` - Composite index to cheaply support a future "upcoming/past plans" sort on the list page
 - `meal_plan_recipes.meal_plan_id` - Fast "recipes in this plan" lookups
 - `meal_plan_recipes.recipe_id` - Fast "which plans contain this recipe" lookups (the "Add to Meal Plan" modal's membership check)
+- **No index was added for meal plan sharing (REW-69).** Unlike cookbooks, there is no public-plan listing and no meal plan search — the only query against a Public plan is `id = ? AND is_public = true`, which the primary key already serves. A partial `created_at` index mirroring `019`'s would sit unused.
 - `help_feedback_submissions.created_at` (descending) - Chronological intake ordering
 - `help_feedback_submissions.(status, created_at)` - Status-filtered queue ordering for REW-71
 - `help_feedback_submissions.assignee_id` - Assignment lookup support for REW-71
@@ -383,7 +400,9 @@ Performance indexes are created on:
 - **REW-19 deployment:** apply migration 019 after 018. It is additive and has no backfill — every existing cookbook is Private afterwards because `is_public` is `NOT NULL DEFAULT false`. No environment variable, package, or Vercel configuration change is required. **This migration has not been applied to any live Supabase project by the pipeline run that produced it, and QA was not run** — the live RLS/grant checks (anonymous and cross-user reads of a Private cookbook's rows, and of a Public cookbook's draft membership edges) remain unverified.
 - **Meal plan cascade behavior (REW-63):** deleting a meal plan (`ON DELETE CASCADE` on `meal_plan_recipes.meal_plan_id`) removes only its `meal_plan_recipes` membership rows — it never touches `recipes`, satisfying "deleting a meal plan does not delete any recipes." Deleting a recipe cascades via `ON DELETE CASCADE` on `meal_plan_recipes.recipe_id` and silently removes it from any meal plans (and cookbooks) it was in — the same junction-table behavior as `cookbook_recipes`, intentional and not a regression.
 - Meal plans can contain a mix of the owner's own draft and published recipes, **and** any other user's published recipes — meal plan membership does not require recipe ownership, unlike cookbook membership. If a recipe added to someone else's plan while published is later reverted to draft by its owner, existing `meal_plan_recipes` rows referencing it are **not** automatically removed (same known-gap pattern already documented above for `recipe_likes`); this edge case was not in scope for REW-63.
-- `meal_plan_recipes.planned_servings` is schema-only in this ticket (REW-63) — no route or view reads or writes it yet. It exists purely so REW-26 (grocery list generation) can be built on top of `meal_plans`/`meal_plan_recipes` without a further migration.
+- `meal_plan_recipes.planned_servings` is schema-only in this ticket (REW-63) — no route or view reads or writes it yet. It exists purely so REW-26 (grocery list generation) can be built on top of `meal_plans`/`meal_plan_recipes` without a further migration. REW-69 makes it anon-readable for Public plans' published edges; since nothing writes it, no data is disclosed in practice.
+- **Meal plan sharing and Private-recipe privacy (REW-69):** `meal_plans.is_public` is a plan-level flag only. Setting it never reads or writes any recipe's `status`, never adds or removes membership rows, never alters `start_date`/`end_date`, and never changes meal plan delete/cascade behavior. Because a Public plan can still contain the owner's Private recipes, the application reads `/m/:id` and its recipes exclusively through the **anon-key** Supabase client, where `auth.uid()` is null and the `recipes` SELECT policy from `001` therefore returns published rows only. An explicit `status = 'published'` predicate in the query and in the `meal_plan_recipes` policy are defence in depth on top of that. A deliberate consequence: a Public plan whose recipes are all Private renders as an empty plan, with an empty state that must not hint that hidden recipes exist. Unlike cookbooks, a Public plan is link-only — it is never surfaced in site search.
+- **REW-69 deployment:** apply migration 020 after 019. It is additive and has no backfill — every existing meal plan is Private afterwards because `is_public` is `NOT NULL DEFAULT false`. No environment variable, package, or Vercel configuration change is required, though `APP_URL` must already be correct in production since it is the origin of every meal plan share link. **This migration has not been applied to any live Supabase project by the pipeline run that produced it, and QA was not run** — the live RLS/grant checks (anonymous and cross-user reads of a Private plan's rows, and of a Public plan's Private membership edges) remain unverified.
 - **REW-70 deployment:** apply migration 014 after migration 013. Live migration, RLS, account-delete `NO ACTION`, and successful storage/refresh checks remain pending.
 - **REW-71 deployment:** apply migration 015 after 014, set a user's trusted Auth `app_metadata.role` to `admin`, insert the matching `admin_profiles` row, and refresh/re-authenticate. The application does not use a service-role key or expose self-promotion.
 - **REW-78 deployment:** apply migration 016 after 015 to idempotently backfill Andrew and Victoria's assignment profiles from their existing, independently authorized Auth users. The migration does not grant administrator access.
@@ -435,5 +454,15 @@ DROP TABLE IF EXISTS meal_plans;
 ```
 
 **Warning:** This permanently deletes all meal plans and meal-plan-recipe associations. Recipes themselves are unaffected.
+
+To remove **only** meal plan sharing (REW-69), leaving meal plans themselves intact:
+
+```sql
+DROP POLICY IF EXISTS "Anyone can view recipes in public meal plans" ON public.meal_plan_recipes;
+DROP POLICY IF EXISTS "Anyone can view public meal plans" ON public.meal_plans;
+ALTER TABLE meal_plans DROP COLUMN IF EXISTS is_public;
+```
+
+This returns meal plans to REW-63 (owner-only) behavior with no data loss — every plan and every membership row survives; only the sharing state is discarded. Any share links handed out beforehand stop working. The application's `GET /m/:id` and `POST /meal-plans/:id/visibility` must be removed or disabled alongside it, or they will error. There is no index, function, or generated column to drop, because migration `020` created none.
 
 **Warning:** This permanently deletes all category and tag data.

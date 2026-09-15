@@ -325,3 +325,140 @@ test('the capped cookbook section is shown once, not repeated on every recipe pa
     supabase.rpc = original;
   }
 });
+
+// ---------------------------------------------------------------------------
+// REW-69: meal plan sharing
+// ---------------------------------------------------------------------------
+
+test('public meal plan view filters on id and is_public on every request', async () => {
+  const detail = router.stack.find(layer => layer.route?.path === '/m/:id').route.stack[0].handle;
+  const calls = [];
+  const query = {
+    select() { return this; },
+    eq(...args) { calls.push(args); return this; },
+    async maybeSingle() { return { data: null, error: null }; },
+  };
+  const original = supabase.from;
+  const tables = [];
+  supabase.from = table => { tables.push(table); return query; };
+  const output = {};
+  try {
+    const res = { status(code) { output.status = code; return this; }, render(view, data) { output.view = view; output.data = data; } };
+    await detail({ params: { id: '123e4567-e89b-42d3-a456-426614174000' } }, res, () => {});
+  } finally {
+    supabase.from = original;
+  }
+  assert.deepEqual(calls, [
+    ['id', '123e4567-e89b-42d3-a456-426614174000'],
+    ['is_public', true],
+  ]);
+  // A private meal plan must never trigger a second, membership-revealing query
+  assert.deepEqual(tables, ['meal_plans']);
+  assert.equal(output.status, 404);
+  assert.equal(output.view, 'error');
+});
+
+test('private, missing and malformed meal plan ids render one identical not-found', async () => {
+  const detail = router.stack.find(layer => layer.route?.path === '/m/:id').route.stack[0].handle;
+  const query = {
+    select() { return this; },
+    eq() { return this; },
+    async maybeSingle() { return { data: null, error: null }; },
+  };
+  const original = supabase.from;
+  supabase.from = () => query;
+  const rendered = [];
+  try {
+    for (const id of ['123e4567-e89b-42d3-a456-426614174000', 'not-a-uuid', '../admin']) {
+      const res = { status(code) { this.code = code; return this; }, render(view, data) { rendered.push({ code: this.code, view, data }); } };
+      await detail({ params: { id } }, res, () => {});
+    }
+  } finally {
+    supabase.from = original;
+  }
+  assert.equal(rendered.length, 3);
+  for (const result of rendered) {
+    assert.equal(result.code, 404);
+    assert.equal(result.view, 'error');
+    assert.deepEqual(result.data, rendered[0].data);
+  }
+});
+
+test('public meal plan view reads through the anon client and never an owner-scoped one', async () => {
+  const source = await readFile(new URL('./publicRoutes.js', import.meta.url), 'utf8');
+  const handler = source.slice(source.indexOf("router.get(\"/m/:id\""));
+  assert.doesNotMatch(handler, /createSupabaseClient|req\.accessToken|sb-access-token/);
+  // The recipe fetch for /m/:id must be anon-only too
+  const fetcher = source.slice(
+    source.indexOf('async function getPublicMealPlanRecipes'),
+    source.indexOf("router.get(\"/m/:id\"")
+  );
+  assert.doesNotMatch(fetcher, /createSupabaseClient|req\.accessToken|sb-access-token/);
+  assert.match(fetcher, /recipes!inner/);
+  assert.match(fetcher, /\.eq\("recipes\.status", "published"\)/);
+  // The shared page has no use for user_id, so it is never selected
+  assert.match(handler, /\.select\("id, title, start_date, end_date"\)/);
+});
+
+test('meal plan sharing migration keeps privacy at the database layer', async () => {
+  const migration = await readFile(new URL('../../database/migrations/020_add_meal_plan_sharing.sql', import.meta.url), 'utf8');
+  // Private by default, including for every pre-existing row
+  assert.match(migration, /is_public\s+BOOLEAN\s+NOT\s+NULL\s+DEFAULT\s+false/i);
+  // Visibility must be evaluated per request, never precomputed
+  assert.doesNotMatch(migration, /MATERIALIZED\s+VIEW/i);
+  // Recipe privacy is owned by migration 001 and must not be relaxed here.
+  // Check executable SQL only -- prose comments legitimately discuss the
+  // recipes table's policies.
+  const sql = migration
+    .split('\n')
+    .filter(line => !line.trimStart().startsWith('--'))
+    .join('\n');
+  assert.doesNotMatch(sql, /CREATE\s+POLICY[\s\S]{0,200}?\sON\s+(public\.)?recipes\b/i);
+  assert.doesNotMatch(sql, /ALTER\s+TABLE\s+(public\.)?recipes\b/i);
+  assert.doesNotMatch(sql, /GRANT[^;]*\sON\s+(public\.)?recipes\b/i);
+});
+
+test('public meal_plan_recipes policy hides private membership edges, not just private recipes', async () => {
+  // REW-92, applied to meal plans: a membership row carries recipe_id,
+  // planned_servings and created_at, so gating the public policy on the parent
+  // plan alone would let an anon PostgREST read of
+  // /rest/v1/meal_plan_recipes?meal_plan_id=eq.<public_id> disclose the count,
+  // UUIDs and add-times of the owner's PRIVATE recipes -- even though the
+  // recipe rows themselves stay hidden. The edge must be gated on the recipe's
+  // status too, matching 013_public_recipe_card_metadata.sql and 019.
+  const migration = await readFile(new URL('../../database/migrations/020_add_meal_plan_sharing.sql', import.meta.url), 'utf8');
+  const policy = migration.slice(
+    migration.indexOf('CREATE POLICY "Anyone can view recipes in public meal plans"'),
+    migration.indexOf('-- No new UPDATE policy')
+  );
+  assert.ok(policy, 'the public meal_plan_recipes policy should exist');
+  assert.match(policy, /is_public\s*=\s*true/i);
+  assert.match(policy, /status\s*=\s*'published'/i);
+  assert.match(policy, /meal_plan_recipes\.recipe_id/i);
+  // Both conditions must be required together, never either/or
+  assert.match(policy, /\bAND\s+EXISTS\b/i);
+  assert.doesNotMatch(policy, /\bOR\s+EXISTS\b/i);
+});
+
+test('meal plan sharing migration only adds policies, leaving 011 and 012 intact', async () => {
+  const migration = await readFile(new URL('../../database/migrations/020_add_meal_plan_sharing.sql', import.meta.url), 'utf8');
+  // The rollback note in the header legitimately mentions DROP statements, so
+  // assert against executable SQL only.
+  const statements = migration
+    .split('\n')
+    .filter(line => !line.trimStart().startsWith('--'))
+    .join('\n');
+  assert.doesNotMatch(statements, /DROP\s+POLICY/i);
+  assert.doesNotMatch(statements, /ALTER\s+POLICY/i);
+  assert.doesNotMatch(statements, /DROP\s+TABLE/i);
+  assert.doesNotMatch(statements, /DROP\s+COLUMN/i);
+  const createdPolicies = statements.match(/CREATE POLICY "([^"]+)"/g) || [];
+  assert.deepEqual(createdPolicies, [
+    'CREATE POLICY "Anyone can view public meal plans"',
+    'CREATE POLICY "Anyone can view recipes in public meal plans"',
+  ]);
+  // Both new policies are reachable by signed-out visitors and signed-in
+  // non-owners alike
+  assert.equal((statements.match(/FOR SELECT TO anon, authenticated/g) || []).length, 2);
+  assert.match(statements, /GRANT SELECT ON public\.meal_plans, public\.meal_plan_recipes TO anon, authenticated;/);
+});

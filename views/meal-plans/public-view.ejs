@@ -1,0 +1,65 @@
+<%#
+  REW-69: read-only view of a shared (Public) meal plan.
+
+  This page is read-only for EVERYONE, including the owner opening their own
+  share link -- there is intentionally no isOwner branch and no mutation form
+  anywhere in this template, so there is nothing here to get wrong.
+
+  The recipes handed to this template come from the anon-key Supabase client,
+  so RLS has already removed every Private recipe -- the owner's own drafts and
+  any other user's recipe that has since been switched back to Private. Nothing
+  here may hint that hidden recipes exist -- no "n hidden" counter, no
+  placeholder card.
+
+  The date range uses the exact same expression as views/meal-plans/view.ejs so
+  owner and visitor see identical formatting. start_date/end_date arrive from
+  Supabase as YYYY-MM-DD strings; the 'T00:00:00' suffix stops the value
+  drifting a day under timezone parsing.
+%>
+<div class="container" style="max-width: 1200px; padding: 2rem 1rem;">
+
+  <div style="margin-bottom: 2rem;">
+    <a href="/browse" style="color: var(--primary-color); text-decoration: none; display: inline-flex; align-items: center; margin-bottom: 1rem;">
+      &larr; Browse recipes
+    </a>
+
+    <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: start; gap: 1rem; margin-bottom: 1rem;">
+      <div>
+        <h1 style="margin-bottom: 0.5rem;"><%= mealPlan.title %></h1>
+        <p style="color: var(--text-muted); margin-bottom: 0.25rem;">
+          <%= new Date(mealPlan.start_date + 'T00:00:00').toLocaleDateString() %> &ndash; <%= new Date(mealPlan.end_date + 'T00:00:00').toLocaleDateString() %>
+        </p>
+        <p style="color: var(--text-muted);">
+          <%= recipes.length %> recipe<%= recipes.length !== 1 ? 's' : '' %>
+        </p>
+      </div>
+      <span class="meal-plan-visibility-badge meal-plan-visibility-public">Shared meal plan</span>
+    </div>
+  </div>
+
+  <% if (recipes.length === 0) { %>
+    <div class="empty-state">
+      <h3>Nothing to see here yet</h3>
+      <p>This meal plan doesn&rsquo;t include any Public recipes yet.</p>
+      <a href="/browse" class="btn btn-outline">Browse all recipes</a>
+    </div>
+  <% } else { %>
+    <div class="organization-card-grid">
+      <% recipes.forEach(recipe => { %>
+        <%- include('../partials/recipe-card', { recipe }) %>
+      <% }); %>
+    </div>
+  <% } %>
+
+  <% if (typeof user === 'undefined' || !user) { %>
+    <div class="signup-cta">
+      <h3>Want to plan your week like this?</h3>
+      <p>Create a free account to build your own meal plans and share them.</p>
+      <div class="signup-cta-actions">
+        <a href="/auth/register" class="btn btn-primary">Sign Up</a>
+        <a href="/auth/login" class="btn btn-outline">Login</a>
+      </div>
+    </div>
+  <% } %>
+
+</div>

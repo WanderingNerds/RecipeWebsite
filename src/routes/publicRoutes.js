@@ -314,4 +314,87 @@ router.get("/c/:id", async (req, res, next) => {
   }
 });
 
+/**
+ * REW-69: fetch the recipes in a Public meal plan for an anonymous visitor.
+ *
+ * Deliberately NOT a reuse of getMealPlanRecipes() in mealPlanRoutes.js --
+ * that helper is module-private, takes an owner-scoped client, and selects
+ * `status`, which this page has no use for. This one always runs on the
+ * module-level anon `supabase` client, where auth.uid() is null, so the
+ * recipes SELECT policy from migration 001 returns published rows only. That
+ * is the actual guarantee that a Private recipe sitting in a Public meal plan
+ * never reaches a visitor -- including the owner viewing their own share link.
+ *
+ * The !inner embed drops membership rows whose recipe is RLS-invisible instead
+ * of returning them with a null recipe, and the explicit status predicate is
+ * defence in depth on top of RLS, mirroring GET /r/:id and GET /c/:id.
+ *
+ * Ordered by the junction row's created_at descending, matching the owner
+ * view's ordering in getMealPlanRecipes().
+ */
+async function getPublicMealPlanRecipes(mealPlanId) {
+  const { data, error } = await supabase
+    .from("meal_plan_recipes")
+    .select(
+      "created_at, recipes!inner(id, title, author, prep_time, cook_time, servings, difficulty, thumbnail_url, created_at)"
+    )
+    .eq("meal_plan_id", mealPlanId)
+    .eq("recipes.status", "published")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("Error loading public meal plan recipes:", error);
+    return [];
+  }
+
+  // Defensive: a recipe deleted in the same instant as this query could still
+  // yield a null embed, same race getMealPlanRecipes() guards against.
+  return (data || []).map((row) => row.recipes).filter(Boolean);
+}
+
+// GET /m/:id - Public read-only view of a shared meal plan (REW-69)
+router.get("/m/:id", async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    // Postgres rejects a malformed uuid outright, so screen it here
+    if (!UUID_PATTERN.test(id)) {
+      return renderNotFound(res, "That meal plan doesn't exist or isn't shared.");
+    }
+
+    // Only the columns the template needs -- user_id has no business being
+    // handed to a public page.
+    const { data: mealPlan, error } = await supabase
+      .from("meal_plans")
+      .select("id, title, start_date, end_date")
+      .eq("id", id)
+      .eq("is_public", true)
+      .maybeSingle();
+
+    if (error) {
+      console.error("Error loading public meal plan:", error);
+      return next(error);
+    }
+
+    // A Private meal plan and a nonexistent one must be indistinguishable from
+    // out here: same status, same message, same template, no extra query on
+    // either branch that could be timed.
+    if (!mealPlan) {
+      return renderNotFound(res, "That meal plan doesn't exist or isn't shared.");
+    }
+
+    const recipes = await getPublicMealPlanRecipes(id);
+
+    // No owner-scoped client is ever constructed in this handler, and the page
+    // is unconditionally read-only -- there is no isOwner branch to get wrong.
+    res.render("meal-plans/public-view", {
+      title: mealPlan.title,
+      mealPlan,
+      recipes,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 export default router;
