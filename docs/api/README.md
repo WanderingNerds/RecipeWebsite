@@ -44,6 +44,8 @@ All API endpoints require authentication unless otherwise noted. Authentication 
 
 `POST /recipes/import/parse` is a multipart upload (`file` field) behind `requireAuth`, the import rate limiter, Multer, and `csrfProtection`, in that order. Every rejection it can produce returns JSON, so the browser client never has to parse an HTML error page. See [Recipe Import Limits & Error Contract](recipe-import-limits.md) for the full status/body table and the reasoning behind the 4MB ceiling.
 
+Image uploads on that endpoint are additionally capped at **40,000,000 decoded pixels** and downscaled to fit 2000x2000 before OCR (REW-95). The 4MB Multer limit bounds encoded bytes; this bounds the decompressed bitmap. An image over the cap returns the same `400` + `{ "error": "Could not process image. Please try a different image." }` as any other image failure — the response surface is unchanged, and no sharp internals are leaked. **Branch-only: implemented and reviewed on `REW-95-ocr-decoded-pixel-cap`, not QA-verified, not yet merged.** See [OCR/PDF Text Parsing](recipe-import-ocr-parsing.md#image-normalization-before-ocr-rew-95).
+
 ### Recipe Likes / Favorites (REW-21, REW-55)
 
 | Method | Endpoint | Description |
@@ -163,7 +165,7 @@ All management routes require `requireAdmin` and use the request-scoped access t
 ## Detailed Documentation
 
 - [Recipe Scaling API](recipe-scaling.md) - Real-time ingredient scaling
-- [Recipe Import - OCR/PDF Parsing](recipe-import-ocr-parsing.md) - Text extraction and parsing from PDFs and images
+- [Recipe Import - OCR/PDF Parsing](recipe-import-ocr-parsing.md) - Text extraction and parsing from PDFs and images, plus the pre-OCR image normalization and decoded-pixel cap (REW-95)
 - [Recipe Import Save API](recipe-import-save.md) - Authenticated draft/publish persistence and required Cook Time validation (REW-77)
 - [Recipe Import Limits & Error Contract](recipe-import-limits.md) - Upload size cap, import rate limit, and the JSON error responses from `POST /recipes/import/parse` (REW-43)
 - [Recipe Visibility](recipe-visibility.md) - Private/Public mapping, fail-closed inputs, cloning, and public read enforcement (REW-85)
@@ -237,6 +239,11 @@ an opaque platform error — see
 [Recipe Import Limits & Error Contract](recipe-import-limits.md). Recipe photo uploads
 (`recipeRoutes.js`) are still configured at 5MB, which is *above* that platform cap and therefore
 cannot fully work in production; tracked as REW-94.
+
+**Decoded-pixel cap (images, import path only).** Upload size caps bound encoded bytes, which says
+nothing about how large an image decompresses. Imported images are additionally capped at 40MP
+decoded and downscaled to 2000x2000 before OCR (REW-95, on branch — reviewed, not QA-verified, not
+merged). The recipe **photo** upload path has no equivalent cap; tracked as REW-96.
 
 When the recipe import limit is exceeded, requests receive `429` with:
 ```json

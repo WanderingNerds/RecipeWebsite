@@ -27,6 +27,12 @@ parse failure.
 | Max upload size | `MAX_IMPORT_FILE_SIZE_BYTES` | 4MB (`4 * 1024 * 1024`) | 2MB |
 | Size shown in UI copy | `MAX_IMPORT_FILE_SIZE_LABEL` | `"4MB"` (derived from the byte constant) | n/a |
 
+A second, complementary cap applies to images only. `OCR_MAX_INPUT_PIXELS` (40,000,000) and
+`OCR_MAX_DIMENSION` (2000) in `src/utils/recipeImporter.js` bound the **decoded** bitmap before OCR
+runs; the Multer limit above bounds **encoded** bytes only. Added in REW-95 — see
+[OCR/PDF Text Parsing](recipe-import-ocr-parsing.md#image-normalization-before-ocr-rew-95). These
+constants live on branch `REW-95-ocr-decoded-pixel-cap` and are **not yet merged to `main`**.
+
 The global production limiter in `src/app.js` was raised from 100 to 300 requests per 15 minutes
 per IP at the same time. That change is part of the same fix, not an unrelated one: a single import
 costs roughly three requests (`/parse`, `/check-title`, `/save`) plus page and static traffic, so
@@ -126,9 +132,12 @@ through to the full import page.
 - **Recipe photo uploads exceed the platform cap.** `imageUpload` in `src/routes/recipeRoutes.js`
   allows 5MB, above Vercel's 4.5MB request cap. Pre-existing and out of scope for REW-43 — tracked
   in **REW-94**.
-- **No decoded-pixel cap on the OCR path.** Nothing bounds the decompressed pixel count of an
-  uploaded image, so a decompression-bomb image is a live risk. REW-43 raises the worst-case decode
-  budget roughly tenfold, which is why this was filed — tracked in **REW-95**.
+- **Decoded-pixel cap on the OCR path — addressed on branch, not yet merged.** Nothing on `main`
+  bounds the decompressed pixel count of an uploaded image, so a decompression-bomb image remains a
+  live risk in the deployed code. REW-43 raised the worst-case decode budget roughly tenfold, which
+  is why **REW-95** was filed. REW-95 is implemented and code-reviewed on branch
+  `REW-95-ocr-decoded-pixel-cap` (40MP decoded cap, 2000px downscale, grayscale, generic error
+  mapping) but has **not been QA-verified and is not merged**. Until it lands, treat this as open.
 - **`max:` vs `limit:`.** `importLimiterOptions` uses `max:`, the deprecated spelling in
   express-rate-limit v8. `limit:` is preferred and should be adopted before any v9 upgrade.
 - **Hardcoded view copy.** `views/recipes/import.ejs` and `views/partials/import-modal.ejs` still
@@ -150,3 +159,4 @@ through to the full import page.
 | Date | Change |
 |------|--------|
 | 2026-09-14 | Initial documentation, covering the REW-43 limit raise and JSON error contract |
+| 2026-09-14 | REW-95: documented the decoded-pixel cap alongside the encoded-byte cap; updated the "no decoded-pixel cap" limitation to reflect branch status (reviewed, not QA'd, not merged) |
