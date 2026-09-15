@@ -9,10 +9,13 @@
 
 import { fileTypeFromBuffer } from "file-type";
 import { PDFExtract } from "pdf.js-extract";
-import Tesseract from "tesseract.js";
+import { createWorker } from "tesseract.js";
+import { OCR_TIMEOUT_MS } from "../config/functionLimits.js";
 
-// OCR timeout in milliseconds
-const OCR_TIMEOUT_MS = 30000;
+// OCR timeout in milliseconds. Derived from the deployed function's maxDuration
+// in src/config/functionLimits.js so it can never exceed the platform deadline;
+// re-exported here because this is where callers and tests look for it.
+export { OCR_TIMEOUT_MS };
 
 /**
  * Supported MIME types for import
@@ -258,23 +261,52 @@ export async function parsePdf(fileBuffer) {
 }
 
 /**
+ * Start a Tesseract worker for a single OCR run.
+ *
+ * An explicit worker (rather than the one-shot Tesseract.recognize helper) is
+ * what makes the timeout path able to reclaim the worker instead of leaving
+ * abandoned OCR running inside a warm serverless container.
+ *
+ * @returns {Promise<Object>} An initialized Tesseract worker
+ */
+function createOcrWorker() {
+  return createWorker("eng", undefined, {
+    logger: () => {}, // Suppress progress logging
+  });
+}
+
+/**
  * OCR image and parse extracted text as recipe
  * @param {Buffer} fileBuffer - Image file contents
  * @param {string} mimeType - Image MIME type
+ * @param {Object} [options] - Test seams; production callers pass nothing
+ * @param {number} [options.timeoutMs] - OCR budget, defaults to OCR_TIMEOUT_MS
+ * @param {Function} [options.createWorkerImpl] - Injectable OCR worker factory
  * @returns {Promise<Object>} Parsed recipe data
  */
-export async function parseImage(fileBuffer, mimeType) {
+export async function parseImage(
+  fileBuffer,
+  mimeType,
+  { timeoutMs = OCR_TIMEOUT_MS, createWorkerImpl = createOcrWorker } = {}
+) {
   // Create a promise that rejects after timeout
+  let timeoutHandle;
   const timeoutPromise = new Promise((_, reject) => {
-    setTimeout(() => {
+    timeoutHandle = setTimeout(() => {
       reject(new Error("Image processing timed out. Try a clearer image."));
-    }, OCR_TIMEOUT_MS);
+    }, timeoutMs);
   });
 
-  // OCR the image
-  const ocrPromise = Tesseract.recognize(fileBuffer, "eng", {
-    logger: () => {}, // Suppress progress logging
-  });
+  // OCR the image. Worker startup is inside the raced promise so a slow start
+  // spends the OCR budget rather than sitting outside the timeout entirely.
+  let worker = null;
+  const workerPromise = Promise.resolve()
+    .then(() => createWorkerImpl())
+    .then((created) => {
+      worker = created;
+      return created;
+    });
+  const ocrPromise = workerPromise.then((created) => created.recognize(fileBuffer));
 
   let result;
   try {
@@ -284,6 +316,34 @@ export async function parseImage(fileBuffer, mimeType) {
       throw error;
     }
     throw new Error("Could not process image. Please try a different image.");
+  } finally {
+    // Runs on every path (success, timeout, OCR error): stop the pending timer
+    // so a successful OCR does not keep the process awake for the rest of the
+    // budget, and release the worker so abandoned OCR cannot degrade the next
+    // request in a warm container. Termination failures are logged server-side
+    // and swallowed - they must never replace the user-facing error.
+    clearTimeout(timeoutHandle);
+    if (worker) {
+      try {
+        await worker.terminate();
+      } catch (terminateError) {
+        console.error("Failed to terminate OCR worker:", terminateError);
+      }
+    } else {
+      // Bailed out before the worker finished starting: do not block the
+      // response on startup, but terminate it as soon as it exists. Startup
+      // failure and termination failure are logged distinctly so the log does
+      // not claim a cleanup problem when the worker never started at all.
+      workerPromise.then(
+        (created) =>
+          Promise.resolve(created?.terminate?.()).catch((terminateError) => {
+            console.error("Failed to terminate OCR worker:", terminateError);
+          }),
+        (startupError) => {
+          console.error("OCR worker startup failed:", startupError);
+        }
+      );
+    }
   }
 
   const text = result.data.text;

@@ -164,6 +164,15 @@ document.addEventListener("DOMContentLoaded", function () {
     if (status === 401 || status === 403) {
       return "Your session expired. Please refresh the page and try again.";
     }
+    // Gateway-level timeouts (the platform killing the function before our own
+    // OCR timeout can answer) return an HTML body, so there is no data.error to
+    // show. Defence in depth behind the server-side OCR budget. The copy stays
+    // format-neutral because this branch also fires for PDF and JSON uploads -
+    // the PDF path has no application-level timeout of its own yet (REW-97),
+    // so a slow PDF is the most likely way to reach it.
+    if (status === 502 || status === 503 || status === 504) {
+      return "The import took too long. Try a smaller file.";
+    }
     return "Failed to parse file. Please try again.";
   }
 

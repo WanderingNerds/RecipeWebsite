@@ -82,7 +82,8 @@ Apply migrations 014, 015, and 016 in order. Administrator access is still provi
 recipe-website/
 ├── src/
 │   ├── config/
-│   │   └── supabase.js         # Supabase client
+│   │   ├── supabase.js         # Supabase client
+│   │   └── functionLimits.js   # Serverless invocation budget: mirrored Vercel maxDuration, derived OCR timeout (REW-93)
 │   ├── middleware/
 │   │   ├── authMiddleware.js   # Auth middleware
 │   │   └── errorHandler.js     # Error handling
@@ -162,7 +163,7 @@ Local/static QA passes 185/185 with zero skips, including listener-backed CSRF/a
 - **Required Prep Time / Total Time (REW-52)**: The manual "New Recipe" and "Edit Recipe" forms require both Prep Time and Total Time before a recipe can be saved (draft or published), with inline validation that highlights the missing field(s) and clears as soon as a value is entered; enforced server-side too. "Total Time" is a display-only relabel of the existing Cook Time field — no new database column was added. As of REW-77, Import Recipe also requires the same underlying Cook Time value for draft and publish saves, while imported Prep Time remains optional; see [Recipe Import Save API](docs/api/recipe-import-save.md).
 - **Private/Public Recipe Visibility (REW-85)**: Manual creation, import review, cloning, and owner editing use a single Private/Public choice and one save action. Private is the default and maps to stored `draft`; Public maps to `published`. Missing or invalid input fails closed to Private. Authenticated users can clone any recipe visible to them into a new Private recipe they own; photos and relationship records are not copied. See [Recipe Visibility](docs/api/recipe-visibility.md).
 
-### Recipe Import (REW-12, REW-43)
+### Recipe Import (REW-12, REW-43, REW-93)
 
 Authenticated users can import a recipe from a single JSON-LD, PDF, or image file at `/recipes/import`; PDFs are text-extracted and images are read with OCR, then the parsed result is shown for review before saving.
 
@@ -171,8 +172,9 @@ Current limits (raised in REW-43 after QA reported the previous ceilings were to
 - **25 imports per 15 minutes per IP** (was 5) on `POST /recipes/import/parse`.
 - **4MB per file** (was 2MB) — enough for phone photos of a recipe page and scanned PDFs, and deliberately under Vercel's hard 4.5MB request-body cap so oversize uploads get a clean JSON error instead of a platform error page.
 - **300 general requests per 15 minutes per IP** in production (was 100), sized so one multi-recipe import session fits in a single window.
+- **8 seconds of OCR per import** (REW-93). `src/config/functionLimits.js` mirrors `vercel.json`'s 10-second `maxDuration` and subtracts a 2-second reserve for parsing, decoding, and the response, so the app's own timeout always fires before the platform kills the request. A test reads the real `vercel.json` and fails if the two values drift apart. Note the behaviour change: an image that previously ran to the 10-second platform deadline now fails at 8 seconds — but with a readable "Image processing timed out" message instead of an opaque platform error page.
 
-Every rejection from the parse endpoint now returns JSON — `429` for the rate limit, `413` for an oversize file, `400` for an unsupported or malformed upload — so the import screen shows the real reason instead of a generic parse failure. See [Recipe Import Limits & Error Contract](docs/api/recipe-import-limits.md).
+Every rejection from the parse endpoint now returns JSON — `429` for the rate limit, `413` for an oversize file, `400` for an unsupported or malformed upload or an OCR timeout — so the import screen shows the real reason instead of a generic parse failure. A gateway-level timeout that still slips through (most likely a slow PDF; the PDF path has no timeout of its own yet, tracked in REW-97) shows "The import took too long. Try a smaller file." See [Recipe Import Limits & Error Contract](docs/api/recipe-import-limits.md) and [OCR/PDF Text Parsing](docs/api/recipe-import-ocr-parsing.md).
 
 ### Browse Recipe Cards (REW-59)
 
