@@ -24,19 +24,48 @@ export function validateImportCookTime(cookTime) {
     : "Cook Time is required";
 }
 
-// Rate limiter for imports: 5 imports per 15 minutes
-const importLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5,
-  message: "Too many import attempts. Please try again in 15 minutes.",
+// Import rate-limit window: 15 minutes (unchanged).
+export const IMPORT_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
+
+// Import rate limit: 25 parses per window per IP. Each parse buffers the whole
+// file in memory and runs PDF extraction or OCR, so the ceiling stays bounded.
+export const IMPORT_RATE_LIMIT_MAX = 25;
+
+// Max import upload size: 4MB. Deliberately below Vercel's 4.5MB request-body
+// cap so oversize uploads get our JSON 413 instead of an opaque platform error.
+export const MAX_IMPORT_FILE_SIZE_BYTES = 4 * 1024 * 1024;
+
+// Human-readable form of the upload cap, derived from the byte constant so a
+// future limit change cannot leave stale copy behind.
+export const MAX_IMPORT_FILE_SIZE_LABEL = `${MAX_IMPORT_FILE_SIZE_BYTES / (1024 * 1024)}MB`;
+
+export const IMPORT_RATE_LIMIT_MESSAGE =
+  "Too many import attempts. Please try again in 15 minutes.";
+export const IMPORT_FILE_TOO_LARGE_MESSAGE = `File must be under ${MAX_IMPORT_FILE_SIZE_LABEL}`;
+export const IMPORT_UNSUPPORTED_TYPE_MESSAGE =
+  "Unsupported file type. Please upload a JSON, PDF, or image file.";
+export const IMPORT_INVALID_UPLOAD_MESSAGE =
+  "Invalid upload. Please select a single recipe file.";
+
+// Rate limiter for imports: 25 imports per 15 minutes per IP.
+// The message is an object so the 429 body is JSON (public/js/import.js reads
+// data.error) instead of plain text.
+// Frozen because the object is shared live with the constructed limiter;
+// mutating it after construction would desync config from behaviour.
+export const importLimiterOptions = Object.freeze({
+  windowMs: IMPORT_RATE_LIMIT_WINDOW_MS,
+  max: IMPORT_RATE_LIMIT_MAX,
+  message: { error: IMPORT_RATE_LIMIT_MESSAGE },
   standardHeaders: true,
   legacyHeaders: false,
 });
 
-// Configure multer for import uploads (memory storage, 2MB limit)
-const importUpload = multer({
+export const importLimiter = rateLimit(importLimiterOptions);
+
+// Configure multer for import uploads (memory storage, 4MB limit)
+export const importUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 2 * 1024 * 1024 }, // 2MB
+  limits: { fileSize: MAX_IMPORT_FILE_SIZE_BYTES }, // 4MB
   fileFilter: (req, file, cb) => {
     const allowedTypes = [
       "application/json",
@@ -48,10 +77,36 @@ const importUpload = multer({
     if (allowedTypes.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error("Unsupported file type. Please upload a JSON, PDF, or image file."));
+      const error = new Error(IMPORT_UNSUPPORTED_TYPE_MESSAGE);
+      error.code = "UNSUPPORTED_FILE_TYPE";
+      cb(error);
     }
   },
 });
+
+/**
+ * Error handler for the multer stage of POST /recipes/import/parse.
+ *
+ * Without this, multer's rejections fall through to the global errorHandler,
+ * which renders an HTML page; the client then cannot JSON-parse the body and
+ * shows an unrelated message. Every MulterError is answered with JSON, not just
+ * LIMIT_FILE_SIZE, so codes like LIMIT_UNEXPECTED_FILE, LIMIT_PART_COUNT, and
+ * LIMIT_FIELD_VALUE stay parseable by the client. Unrelated errors are
+ * delegated untouched.
+ */
+export function handleImportUploadError(err, req, res, next) {
+  if (err instanceof multer.MulterError) {
+    return err.code === "LIMIT_FILE_SIZE"
+      ? res.status(413).json({ error: IMPORT_FILE_TOO_LARGE_MESSAGE })
+      : res.status(400).json({ error: IMPORT_INVALID_UPLOAD_MESSAGE });
+  }
+
+  if (err && err.code === "UNSUPPORTED_FILE_TYPE") {
+    return res.status(400).json({ error: IMPORT_UNSUPPORTED_TYPE_MESSAGE });
+  }
+
+  return next(err);
+}
 
 /**
  * GET /recipes/import
@@ -94,7 +149,7 @@ router.get("/", requireAuth, (req, res) => handleImportForm(req, res));
  * POST /recipes/import/parse
  * Parse uploaded file and return JSON preview
  */
-router.post("/parse", requireAuth, importLimiter, importUpload.single("file"), csrfProtection, async (req, res) => {
+router.post("/parse", requireAuth, importLimiter, importUpload.single("file"), handleImportUploadError, csrfProtection, async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({

@@ -21,6 +21,8 @@ Implement recipe import functionality allowing users to import recipes from supp
 | Batch import | **No** - Single imports only for initial release |
 | Duplicate titles | **Force user to create a new title** if recipe title already exists |
 
+> Superseded by REW-43: the 2MB maximum file size and 5-imports-per-15-minutes rate limit recorded in this plan are now 4MB and 25 imports per 15 minutes.
+
 ---
 
 ## Supported Import Formats

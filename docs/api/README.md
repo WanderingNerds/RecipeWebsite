@@ -38,8 +38,11 @@ All API endpoints require authentication unless otherwise noted. Authentication 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/recipes/import` | Render import page with upload form (Author field pre-filled with account display name, REW-46) |
-| POST | `/recipes/import/parse` | Parse uploaded file, return JSON preview |
+| POST | `/recipes/import/parse` | Parse uploaded file, return JSON preview (single file, max **4MB**, max **25 parses per 15 minutes per IP** — REW-43) |
+| POST | `/recipes/import/check-title` | Check whether the current user already has a recipe with a given title |
 | POST | `/recipes/import/save` | Save imported recipe after user confirmation (requires non-blank `cookTime`; accepts fail-closed Private/Public visibility and server-defaulted `author`) |
+
+`POST /recipes/import/parse` is a multipart upload (`file` field) behind `requireAuth`, the import rate limiter, Multer, and `csrfProtection`, in that order. Every rejection it can produce returns JSON, so the browser client never has to parse an HTML error page. See [Recipe Import Limits & Error Contract](recipe-import-limits.md) for the full status/body table and the reasoning behind the 4MB ceiling.
 
 ### Recipe Likes / Favorites (REW-21, REW-55)
 
@@ -162,6 +165,7 @@ All management routes require `requireAdmin` and use the request-scoped access t
 - [Recipe Scaling API](recipe-scaling.md) - Real-time ingredient scaling
 - [Recipe Import - OCR/PDF Parsing](recipe-import-ocr-parsing.md) - Text extraction and parsing from PDFs and images
 - [Recipe Import Save API](recipe-import-save.md) - Authenticated draft/publish persistence and required Cook Time validation (REW-77)
+- [Recipe Import Limits & Error Contract](recipe-import-limits.md) - Upload size cap, import rate limit, and the JSON error responses from `POST /recipes/import/parse` (REW-43)
 - [Recipe Visibility](recipe-visibility.md) - Private/Public mapping, fail-closed inputs, cloning, and public read enforcement (REW-85)
 - [Add Recipe / Cloning](recipe-cloning.md) - authenticated copy contract, immutable attribution, copied fields and relationship isolation (REW-84)
 - [Recipe Author Default](recipe-author-default.md) - Account-name defaulting on recipe create/import (REW-46)
@@ -214,16 +218,36 @@ Most endpoints return JSON for API calls or render HTML views for page requests.
 
 The API includes rate limiting to prevent abuse:
 
-- **General:** 100 requests per 15 minutes per IP
-- **File Uploads:** 10 uploads per 15 minutes per IP
-- **Recipe Imports:** 5 imports per 15 minutes per user
+| Limiter | Limit | Scope | Active in |
+|---------|-------|-------|-----------|
+| **General** (`src/app.js`) | 300 requests per 15 minutes per IP | Every request | Production only (`NODE_ENV === 'production'`) |
+| **File Uploads** (`src/routes/recipeRoutes.js`) | 10 uploads per 15 minutes per IP | Recipe photo uploads | All environments |
+| **Recipe Imports** (`src/routes/importRoutes.js`) | 25 imports per 15 minutes per IP | `POST /recipes/import/parse` | All environments |
 
-When rate limited, requests receive:
+Limits are keyed by client IP, not by user account — `express-rate-limit`'s default key is
+the client IP. Users behind the same NAT share a budget. Per-user keying was considered and
+rejected for the import limiter: it would let one IP multiply its budget by creating accounts.
+
+The general limiter is only registered when `NODE_ENV === 'production'`, so local development
+and the test suite are not rate-limited. The two route-level limiters are always active.
+
+**Upload size caps:** recipe imports accept a single file up to **4MB**, deliberately below
+Vercel's hard 4.5MB request-body cap so oversize uploads return this app's JSON `413` rather than
+an opaque platform error — see
+[Recipe Import Limits & Error Contract](recipe-import-limits.md). Recipe photo uploads
+(`recipeRoutes.js`) are still configured at 5MB, which is *above* that platform cap and therefore
+cannot fully work in production; tracked as REW-94.
+
+When the recipe import limit is exceeded, requests receive `429` with:
 ```json
 {
-  "message": "Too many requests. Please try again later."
+  "error": "Too many import attempts. Please try again in 15 minutes."
 }
 ```
+
+The general limiter responds with `429` and the body
+`Too many requests from this IP, please try again later.` sent via `res.send(string)`,
+so it is served as `Content-Type: text/html` rather than JSON.
 
 ---
 
