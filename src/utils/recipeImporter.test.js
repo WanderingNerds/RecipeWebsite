@@ -5,7 +5,6 @@ import {
   parseJsonLd,
   parseImage,
   validateImportFile,
-  parseImage,
   normalizeImageForOcr,
   OCR_MAX_INPUT_PIXELS,
   OCR_MAX_DIMENSION,

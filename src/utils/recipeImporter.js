@@ -11,6 +11,7 @@ import { fileTypeFromBuffer } from "file-type";
 import { PDFExtract } from "pdf.js-extract";
 import sharp from "sharp";
 import Tesseract from "tesseract.js";
+import { OCR_TIMEOUT_MS } from "../config/functionLimits.js";
 
 // OCR timeout in milliseconds. Derived from the deployed function's maxDuration
 // in src/config/functionLimits.js so it can never exceed the platform deadline;
