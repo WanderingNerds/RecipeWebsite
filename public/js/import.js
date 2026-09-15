@@ -44,8 +44,14 @@ document.addEventListener("DOMContentLoaded", function () {
   const csrfInput = document.querySelector('input[name="_csrf"]');
   const csrfToken = csrfInput ? csrfInput.value : "";
 
-  // Max file size in bytes (2MB)
-  const MAX_FILE_SIZE = 2 * 1024 * 1024;
+  // Max file size in bytes (4MB) - must stay at or below the server limit in
+  // src/routes/importRoutes.js (MAX_IMPORT_FILE_SIZE_BYTES)
+  const MAX_FILE_SIZE = 4 * 1024 * 1024;
+
+  // Copy derived from MAX_FILE_SIZE so a limit change cannot leave stale text
+  // behind. Mirrors IMPORT_FILE_TOO_LARGE_MESSAGE on the server.
+  const MAX_FILE_SIZE_LABEL = `${MAX_FILE_SIZE / (1024 * 1024)}MB`;
+  const FILE_TOO_LARGE_MESSAGE = `File must be under ${MAX_FILE_SIZE_LABEL}`;
 
   // Allowed MIME types
   const ALLOWED_TYPES = [
@@ -115,7 +121,7 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     if (file.size > MAX_FILE_SIZE) {
-      return "File must be under 2MB";
+      return FILE_TOO_LARGE_MESSAGE;
     }
 
     // Check MIME type
@@ -129,6 +135,36 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     return null;
+  }
+
+  /**
+   * Read a response body as JSON, returning null when the body is not JSON
+   * (for example a plain-text rate-limit body or an HTML error page).
+   */
+  async function readJsonBody(response) {
+    try {
+      return await response.json();
+    } catch (error) {
+      return null;
+    }
+  }
+
+  /**
+   * Human-readable fallback for error responses without a JSON body.
+   */
+  function errorMessageForStatus(status) {
+    if (status === 429) {
+      return "Too many import attempts. Please try again in 15 minutes.";
+    }
+    if (status === 413) {
+      return FILE_TOO_LARGE_MESSAGE;
+    }
+    // 401/403 are auth/CSRF rejections (expired session, rotated token), not
+    // parse failures - telling the user to refresh is the actionable fix.
+    if (status === 401 || status === 403) {
+      return "Your session expired. Please refresh the page and try again.";
+    }
+    return "Failed to parse file. Please try again.";
   }
 
   /**
@@ -155,13 +191,13 @@ document.addEventListener("DOMContentLoaded", function () {
         body: formData,
       });
 
-      const data = await response.json();
+      const data = await readJsonBody(response);
 
       if (!response.ok) {
-        throw new Error(data.error || "Failed to parse file");
+        throw new Error((data && data.error) || errorMessageForStatus(response.status));
       }
 
-      if (data.success && data.recipe) {
+      if (data && data.success && data.recipe) {
         displayPreview(data.recipe);
       } else {
         throw new Error("Invalid response from server");

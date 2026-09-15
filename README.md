@@ -158,6 +158,18 @@ Local/static QA passes 185/185 with zero skips, including listener-backed CSRF/a
 - **Required Prep Time / Total Time (REW-52)**: The manual "New Recipe" and "Edit Recipe" forms require both Prep Time and Total Time before a recipe can be saved (draft or published), with inline validation that highlights the missing field(s) and clears as soon as a value is entered; enforced server-side too. "Total Time" is a display-only relabel of the existing Cook Time field — no new database column was added. As of REW-77, Import Recipe also requires the same underlying Cook Time value for draft and publish saves, while imported Prep Time remains optional; see [Recipe Import Save API](docs/api/recipe-import-save.md).
 - **Private/Public Recipe Visibility (REW-85)**: Manual creation, import review, cloning, and owner editing use a single Private/Public choice and one save action. Private is the default and maps to stored `draft`; Public maps to `published`. Missing or invalid input fails closed to Private. Authenticated users can clone any recipe visible to them into a new Private recipe they own; photos and relationship records are not copied. See [Recipe Visibility](docs/api/recipe-visibility.md).
 
+### Recipe Import (REW-12, REW-43)
+
+Authenticated users can import a recipe from a single JSON-LD, PDF, or image file at `/recipes/import`; PDFs are text-extracted and images are read with OCR, then the parsed result is shown for review before saving.
+
+Current limits (raised in REW-43 after QA reported the previous ceilings were too low):
+
+- **25 imports per 15 minutes per IP** (was 5) on `POST /recipes/import/parse`.
+- **4MB per file** (was 2MB) — enough for phone photos of a recipe page and scanned PDFs, and deliberately under Vercel's hard 4.5MB request-body cap so oversize uploads get a clean JSON error instead of a platform error page.
+- **300 general requests per 15 minutes per IP** in production (was 100), sized so one multi-recipe import session fits in a single window.
+
+Every rejection from the parse endpoint now returns JSON — `429` for the rate limit, `413` for an oversize file, `400` for an unsupported or malformed upload — so the import screen shows the real reason instead of a generic parse failure. See [Recipe Import Limits & Error Contract](docs/api/recipe-import-limits.md).
+
 ### Browse Recipe Cards (REW-59)
 
 Browse and My Recipes share their core card layout: thumbnail, title/status, author, all categories, tags, separate prep/cook times, servings, difficulty, and creation date. Browse keeps public recipe links and Meal Plan controls; My Recipes keeps favorite, filter, View/Edit/Delete controls. Browse badges are informational. Long titles and badges wrap within cards.
@@ -239,3 +251,4 @@ This local implementation requires migration `013_public_recipe_card_metadata.sq
 - HTTP-only secure cookies
 - Helmet.js for security headers
 - CORS configuration
+- Rate limiting: 300 requests / 15 minutes per IP globally (production only), 25 recipe imports / 15 minutes per IP, 10 photo uploads / 15 minutes per IP. All limits are keyed by client IP, not by user account. See the [rate limiting table](docs/api/README.md#rate-limiting).

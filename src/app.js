@@ -71,7 +71,10 @@ app.use(flash());
 if (process.env.NODE_ENV === 'production') {
   const generalLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100, // Limit each IP to 100 requests per windowMs
+    // Sized so a multi-recipe import session fits in one window: each import
+    // costs ~3 requests (parse, check-title, save) plus page/static traffic,
+    // and the per-route import limiter allows 25 parses per window.
+    max: 300, // Limit each IP to 300 requests per windowMs
     message: 'Too many requests from this IP, please try again later.',
     standardHeaders: true,
     legacyHeaders: false,
