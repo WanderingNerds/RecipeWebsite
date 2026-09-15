@@ -1,6 +1,7 @@
 import { Router } from "express";
 import rateLimit from "express-rate-limit";
-import { createSupabaseClient, supabase } from "../config/supabase.js";
+import { createSupabaseClient } from "../config/supabase.js";
+import { createRequireApiAuth } from "../middleware/authMiddleware.js";
 import { validateMealPlanTitle, validateDateRange } from "../utils/mealPlanUtils.js";
 
 const router = Router();
@@ -22,36 +23,18 @@ const mealPlanApiLimiter = rateLimit({
 });
 
 /**
- * API-specific auth middleware that returns JSON errors instead of
- * redirecting. Duplicated from likeRoutes.js's requireApiAuth rather than
- * shared, matching this repo's existing per-route-file helper convention.
+ * API auth for this file. The implementation is shared from
+ * middleware/authMiddleware.js (REW-86, previously copied verbatim into
+ * likeRoutes.js, mealPlanApiRoutes.js and cookbookApiRoutes.js); only the
+ * log label is customized here.
  *
  * Unlike likeRoutes.js (where GET is public), EVERY route in this file
  * requires auth -- meal plans have no public/shared read at all, so there
  * is no anonymous-GET case to support here.
  */
-async function requireApiAuth(req, res, next) {
-  try {
-    const accessToken = req.cookies["sb-access-token"];
-
-    if (!accessToken) {
-      return res.status(401).json({ error: "Authentication required" });
-    }
-
-    const { data: { user }, error } = await supabase.auth.getUser(accessToken);
-
-    if (error || !user) {
-      return res.status(401).json({ error: "Invalid or expired session" });
-    }
-
-    req.user = user;
-    req.accessToken = accessToken;
-    next();
-  } catch (error) {
-    console.error("Meal plan API auth error:", error);
-    res.status(500).json({ error: "Authentication error" });
-  }
-}
+const requireApiAuth = createRequireApiAuth({
+  logLabel: "Meal plan API auth error:",
+});
 
 /**
  * Serialize a meal_plans row for JSON responses.

@@ -29,9 +29,12 @@ All API endpoints require authentication unless otherwise noted. Authentication 
 | GET | `/recipes/:id` | View a single recipe |
 | GET | `/recipes/:id/edit` | Get form data for editing a recipe (Prep Time and Total Time/`cookTime` are required, REW-52) |
 | POST | `/recipes/:id/update` | Update a recipe (rejects blank `prepTime`/`cookTime`, REW-52; optional `photo` upload under the same 4MB cap — REW-94) |
+| POST | `/recipes/:id/visibility` | Flip one recipe between Private and Public from its My Recipes card (`visibility=private\|public`, fails closed to Private) — REW-86 |
 | POST | `/recipes/:id/delete` | Delete a recipe |
 | POST | `/recipes/:id/clone` | Add another user's Public recipe as a new Private, independently owned recipe (REW-84) |
 | GET | `/recipes/:id/scale` | Get scaled ingredient data (JSON) |
+
+`POST /recipes/:id/visibility` is a urlencoded form post behind `requireAuth`, route-level `csrfProtection`, and a 60-per-15-minutes-per-IP limiter, in that order. It answers with a flash and a redirect to a server-rebuilt `/recipes` path — never a caller-supplied URL. See [My Recipes Recipe Card](my-recipes-card.md). **Branch-only: implemented and reviewed on `REW-86-standardize-my-recipes-card`, QA not run, not yet merged.**
 
 `POST /recipes` and `POST /recipes/:id/update` are multipart form posts (`photo` field, optional, single file) behind `requireAuth`, the upload rate limiter, Multer, `handleRecipeImageUploadError`, and `csrfProtection`, in that order. Unlike the import endpoint they answer with a flash message and a redirect rather than JSON, because they are ordinary HTML form posts. See [Recipe Photo Upload](recipe-photo-upload.md) for the limits, the error contract, the redirect targets, and the client-side pre-check. **Branch-only: implemented and reviewed on `REW-94-recipe-image-upload-limit-vercel-cap`, not QA-verified, not yet merged.**
 
@@ -77,6 +80,17 @@ Favorite/like controls (`.like-btn`) call these endpoints from the recipe detail
 | POST | `/cookbooks/:id/visibility` | Switch a cookbook between Private and Public (`visibility=private\|public`, fails closed to Private) — REW-19 |
 
 All `/cookbooks*` routes require auth and act only on the caller's own cookbooks. Mutation endpoints share a 30-requests/minute-per-user rate limit. See [Cookbooks API](cookbooks.md) for full details, including the recipe-view integration and RLS enforcement.
+
+### Cookbooks JSON API (REW-86)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/cookbooks?recipeId=` | JSON: list the caller's cookbooks, each flagged with `containsRecipe` for the given recipe |
+| POST | `/api/cookbooks` | JSON: quick-create a cookbook (backs the "+ Cookbook" modal's inline mini-form) |
+| POST | `/api/cookbooks/:id/recipes/:recipeId` | JSON: add the recipe to a cookbook — **owner-only on both sides**, duplicate-safe |
+| DELETE | `/api/cookbooks/:id/recipes/:recipeId` | JSON: remove the membership row (never the recipe) |
+
+`src/routes/cookbookApiRoutes.js`, mounted at `/api/cookbooks`. Every route requires auth and returns JSON `401` if unauthenticated, consistent with `/api/likes*` and `/api/meal-plans*`. Mutations run `requireApiAuth` → `csrfProtection` → a 30-per-minute-per-user limiter; `GET /` carries no CSRF check by design, since it changes nothing. Unlike `/api/meal-plans*`, this surface is **owner-only** — a user cannot add another user's Public recipe to their cookbook, matching the existing `cookbook_recipes` RLS policy. See [My Recipes Recipe Card](my-recipes-card.md). **Branch-only: implemented and reviewed on `REW-86-standardize-my-recipes-card`, QA not run, not yet merged.**
 
 ### Public cookbook sharing (REW-19)
 
@@ -180,7 +194,8 @@ All management routes require `requireAdmin` and use the request-scoped access t
 - [Recipe Import Save API](recipe-import-save.md) - Authenticated draft/publish persistence and required Cook Time validation (REW-77)
 - [Recipe Import Limits & Error Contract](recipe-import-limits.md) - Upload size cap, import rate limit, and the JSON error responses from `POST /recipes/import/parse` (REW-43)
 - [Recipe Photo Upload](recipe-photo-upload.md) - Photo size cap, upload rate limit, the flash-and-redirect error contract on `POST /recipes` and `POST /recipes/:id/update`, and the client-side pre-check (REW-94)
-- [Recipe Visibility](recipe-visibility.md) - Private/Public mapping, fail-closed inputs, cloning, and public read enforcement (REW-85)
+- [Recipe Visibility](recipe-visibility.md) - Private/Public mapping, fail-closed inputs, cloning, and public read enforcement (REW-85), plus the card-level toggle `POST /recipes/:id/visibility` (REW-86)
+- [My Recipes Recipe Card](my-recipes-card.md) - the owner card contract, the card-level visibility toggle, the `/api/cookbooks` JSON API behind "+ Cookbook", the inert Share placeholder, and the shared `requireApiAuth` extraction (REW-86)
 - [Add Recipe / Cloning](recipe-cloning.md) - authenticated copy contract, immutable attribution, copied fields and relationship isolation (REW-84)
 - [Recipe Author Default](recipe-author-default.md) - Account-name defaulting on recipe create/import (REW-46)
 - [Required Prep Time / Total Time](recipe-required-times.md) - Required-field enforcement and the Cook Time → Total Time display rename (REW-52)
@@ -237,13 +252,18 @@ The API includes rate limiting to prevent abuse:
 | **General** (`src/app.js`) | 300 requests per 15 minutes per IP | Every request | Production only (`NODE_ENV === 'production'`) |
 | **File Uploads** (`src/routes/recipeRoutes.js`) | 10 uploads per 15 minutes per IP | Recipe photo uploads | All environments |
 | **Recipe Imports** (`src/routes/importRoutes.js`) | 25 imports per 15 minutes per IP | `POST /recipes/import/parse` | All environments |
+| **Recipe Visibility** (`src/routes/recipeRoutes.js`) | 60 changes per 15 minutes per IP | `POST /recipes/:id/visibility` (REW-86) | All environments |
+| **Cookbook API** (`src/routes/cookbookApiRoutes.js`) | 30 mutations per minute per **user** | `POST`/`DELETE` on `/api/cookbooks*` (REW-86) | All environments |
 
 Limits are keyed by client IP, not by user account — `express-rate-limit`'s default key is
 the client IP. Users behind the same NAT share a budget. Per-user keying was considered and
 rejected for the import limiter: it would let one IP multiply its budget by creating accounts.
 
 The general limiter is only registered when `NODE_ENV === 'production'`, so local development
-and the test suite are not rate-limited. The two route-level limiters are always active.
+and the test suite are not rate-limited. The route-level limiters are always active. The two
+REW-86 limiters are keyed differently on purpose: the visibility form post is IP-keyed like the
+other `recipeRoutes.js` limiters, while the cookbook JSON API is user-keyed because every route on
+it already runs behind auth (the same choice `/api/meal-plans*` and `/api/likes*` make).
 
 **Upload size caps:** recipe imports accept a single file up to **4MB**, deliberately below
 Vercel's hard 4.5MB request-body cap so oversize uploads return this app's JSON `413` rather than
@@ -285,3 +305,5 @@ All unsafe non-multipart requests require a CSRF token. For form submissions, in
 ```
 
 Same-origin JavaScript requests receive the token through the shared fetch wrapper's `x-csrf-token` header. Multipart routes bypass the pre-parser middleware and apply the same CSRF validation after Multer exposes `_csrf`; cross-origin requests do not receive a token.
+
+**Known gap (REW-99):** the global `csrfProtectionExceptMultipart` wrapper in `src/app.js` skips token validation for *any* `multipart/form-data` body, not just the Multer routes that need it. Newer state-changing routes therefore re-apply `csrfProtection` explicitly at the route level — `POST /recipes/:id/clone`, `POST /recipes/:id/visibility`, and every `/api/cookbooks*` mutation do this — so a forged cross-site multipart POST cannot reach them unchecked. The central fix is tracked as [REW-99](https://wanderingnerds.atlassian.net/browse/REW-99) and was deliberately deferred rather than attempted inside a card-standardization ticket. In each case CSRF runs *before* the route's rate limiter, so a forged request cannot burn the victim's limiter quota.

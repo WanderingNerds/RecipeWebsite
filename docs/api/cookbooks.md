@@ -106,6 +106,44 @@ Removes a recipe from a cookbook (deletes the `cookbook_recipes` row only — **
 
 ---
 
+## JSON API (REW-86) — `src/routes/cookbookApiRoutes.js`, mounted at `/api/cookbooks`
+
+A separate, additive JSON surface backing the `+ Cookbook` action on recipe cards. It does **not**
+replace any route above; the recipe detail page's "Save to Cookbook(s)" widget still uses the
+form-based routes, which are unchanged.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/cookbooks?recipeId=<uuid>` | List the caller's cookbooks (`id`, `title`) with a `containsRecipe` flag per cookbook |
+| POST | `/api/cookbooks` | Quick-create a cookbook (`{ title }`, same `validateCookbookTitle()` rules) |
+| POST | `/api/cookbooks/:id/recipes/:recipeId` | Add an owned recipe to an owned cookbook, duplicate-safe |
+| DELETE | `/api/cookbooks/:id/recipes/:recipeId` | Remove the membership row only |
+
+- **Auth:** `requireApiAuth` on every route — JSON `401`, never a login redirect. There is no
+  anonymous read case here; the public cookbook read stays at `GET /c/:id`.
+- **CSRF:** re-applied at the route level on every mutation (`requireApiAuth` → `csrfProtection` →
+  limiter), because the global `csrfProtectionExceptMultipart` skips multipart bodies. `GET /` is
+  not CSRF-checked, by design, since it changes nothing.
+- **Rate limit:** a dedicated `cookbookApiLimiter`, 30 mutations/minute keyed on `req.user.id` —
+  separate from `cookbookLimiter` on the form routes, mirroring `mealPlanApiLimiter`.
+- **Authorization:** identical rules to `POST /cookbooks/:id/recipes/:recipeId` — the cookbook must
+  be the caller's and so must the recipe. Owner-only is the correct rule for the My Recipes surface
+  this powers; widening to other users' Public recipes remains REW-59's call. Not-found and
+  not-owned return the same `404`.
+- **Idempotency:** `upsert(..., { onConflict: "cookbook_id,recipe_id", ignoreDuplicates: true })`,
+  so a double click is a no-op rather than a primary-key error.
+- **Client:** `views/partials/cookbook-modal.ejs` (included once in the layout, gated on `user`) and
+  `public/js/cookbooks.js` (external file — CSP is `script-src 'self'`; fetches inherit the
+  `x-csrf-token` header from the `main.js` wrapper; titles render via `textContent`).
+
+Covered by `src/routes/cookbookApiRoutes.test.js` (15 cases). See
+[My Recipes Recipe Card](my-recipes-card.md) for the full contract and response table.
+**Branch-only: implemented and reviewed on `REW-86-standardize-my-recipes-card`, QA not run, not
+yet merged. REW-59 has its own cookbook JSON API on its branch — whoever merges second must
+reconcile the two rather than shipping both.**
+
+---
+
 ## Public surfaces (REW-19) — `src/routes/publicRoutes.js`
 
 These two routes are **unauthenticated**. Every query on them runs on the module-level **anon-key** Supabase client exported from `src/config/supabase.js` — never `createSupabaseClient(req.accessToken)`, and never any owner-scoped client, even when the person viewing is the cookbook's own owner. That is not a stylistic preference: under the anon key `auth.uid()` is null, so the `recipes` SELECT policy from migration `001` (owner **or** `status = 'published'`) can only ever return published recipes. Draft privacy in a shared cookbook is therefore structural, not a filter a future edit could forget.
@@ -233,3 +271,4 @@ Suite result: **355 tests, 353 passing.** The 2 failures are pre-existing enviro
 |------|--------|
 | 2026-09-08 | Page created documenting REW-62 (new feature — no prior version to reconcile). |
 | 2026-09-14 | REW-19 cookbook sharing: added `POST /cookbooks/:id/visibility`, the public `GET /c/:id` surface, the `GET /search` Cookbooks section, owner-facing share UI, and sharing-specific security notes. Corrected the stale "CSRF is disabled repo-wide" claim in Security — CSRF is enforced. Reviewer-approved; QA not run. |
+| 2026-09-15 | REW-86: added the `/api/cookbooks` JSON API section (list-with-membership, quick-create, duplicate-safe add, remove) backing the `+ Cookbook` card action, plus its modal/JS client. No change to any existing `/cookbooks*` route, and no migration. Reviewer-approved; QA not run; branch not merged. |

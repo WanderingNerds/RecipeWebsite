@@ -30,8 +30,24 @@ const addRecipeLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Per-route cap for the card-level Private/Public toggle (REW-86). Mirrors
+// addRecipeLimiter's shape so a script cannot churn a recipe's visibility
+// even in environments where the global limiter in app.js is inactive.
+const visibilityLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  message: "Too many visibility changes. Please try again later.",
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+// Upper bound on a filter value round-tripped through the visibility form.
+// Slug lists are short; anything longer is junk and gets dropped rather than
+// reflected back into a redirect.
+const MAX_FILTER_VALUE_LENGTH = 300;
 
 // Max recipe photo upload size: 4MB. Deliberately below Vercel's 4.5MB
 // request-body cap (VERCEL_MAX_REQUEST_BODY_BYTES) so an oversize photo is
@@ -835,6 +851,122 @@ export async function handleRecipeUpdate(req, res, { createClient = createSupaba
 }
 
 router.post("/:id/update", requireAuth, uploadLimiter, imageUpload.single("photo"), handleRecipeImageUploadError, csrfProtection, (req, res) => handleRecipeUpdate(req, res));
+
+/**
+ * REW-86: rebuild the My Recipes list URL after a card-level visibility flip.
+ *
+ * The path is a hard-coded literal and only two whitelisted filter values are
+ * ever appended, percent-encoded through URLSearchParams. A caller-supplied
+ * return URL is deliberately never accepted or echoed into a Location header,
+ * so this cannot become an open redirect no matter what the form posts.
+ *
+ * @param {object} body - req.body (untrusted)
+ * @returns {string} an app-relative path, always beginning "/recipes"
+ */
+export function buildRecipesListPath(body) {
+  const source = body && typeof body === "object" ? body : {};
+  const params = new URLSearchParams();
+
+  for (const field of ["category", "tags"]) {
+    const raw = source[field];
+    // Only a plain, reasonably-sized string round-trips. Arrays (duplicated
+    // inputs), objects, and numbers are dropped rather than coerced.
+    if (typeof raw !== "string") continue;
+    const value = raw.trim();
+    if (!value || value.length > MAX_FILTER_VALUE_LENGTH) continue;
+    params.set(field, value);
+  }
+
+  const query = params.toString();
+  return query ? `/recipes?${query}` : "/recipes";
+}
+
+/**
+ * REW-86: flip a single recipe between Private (draft) and Public
+ * (published) straight from its My Recipes card.
+ *
+ * Exported with an injectable client so the handler is unit testable without
+ * a live Supabase, following handleCookbookVisibilityUpdate in
+ * cookbookRoutes.js. handleRecipeUpdate is deliberately untouched -- the full
+ * edit form keeps owning form-level visibility.
+ */
+export async function handleRecipeVisibilityUpdate(
+  req,
+  res,
+  { createClient = createSupabaseClient } = {}
+) {
+  let returnPath = "/recipes";
+
+  try {
+    returnPath = buildRecipesListPath(req.body);
+
+    const { id } = req.params;
+
+    if (!UUID_PATTERN.test(id)) {
+      req.flash("error", "Recipe not found");
+      return res.redirect(returnPath);
+    }
+
+    // Fails closed to draft (Private) on anything unexpected -- missing
+    // field, array from duplicated inputs, wrong case, non-string. A
+    // malformed or forged submission can never accidentally publish a
+    // recipe. This is the REW-85 rule and it must not regress.
+    const status = normalizeRecipeVisibility(req.body.visibility);
+
+    const supabaseClient = createClient(req.accessToken);
+
+    // Belt-and-suspenders ownership check alongside RLS, matching the
+    // convention in the update/delete handlers above. A missing row and a
+    // row owned by somebody else are deliberately indistinguishable.
+    const { data, error } = await supabaseClient
+      .from("recipes")
+      .update({ status })
+      .eq("id", id)
+      .eq("user_id", req.user.id)
+      .select()
+      .maybeSingle();
+
+    // A real database failure and a row that simply isn't the caller's are
+    // different events and must not be logged identically -- the not-found
+    // path arrives with error === null. The user-facing flash is the same
+    // for both, so a non-owner cannot probe which recipes exist.
+    if (error) {
+      console.error("Error updating recipe visibility:", error);
+      req.flash("error", "Failed to update visibility. Please try again.");
+      return res.redirect(returnPath);
+    }
+
+    if (!data) {
+      req.flash("error", "Failed to update visibility. Please try again.");
+      return res.redirect(returnPath);
+    }
+
+    req.flash(
+      "success",
+      status === "published"
+        ? "This recipe is now Public. Anyone can find it on Browse."
+        : "This recipe is now Private. Only you can see it."
+    );
+    res.redirect(returnPath);
+  } catch (error) {
+    console.error("Error in recipe visibility update:", error);
+    req.flash("error", "An unexpected error occurred");
+    res.redirect(returnPath);
+  }
+}
+
+// POST /recipes/:id/visibility - Flip a recipe Private/Public from its card
+// (REW-86). csrfProtection is re-applied at the route level rather than left
+// to the global csrfProtectionExceptMultipart in app.js: that wrapper skips
+// token validation for any multipart/form-data body, so a forged cross-site
+// multipart POST would otherwise reach this handler unchecked. Same
+// precedent as POST /:id/clone above. The card's form posts urlencoded with
+// a hidden _csrf field, so this is transparent to legitimate submissions.
+// csrfProtection runs before the rate limiter so a forged cross-site request
+// is rejected without burning any of the victim's limiter quota.
+router.post("/:id/visibility", requireAuth, csrfProtection, visibilityLimiter, (req, res) =>
+  handleRecipeVisibilityUpdate(req, res)
+);
 
 // POST /recipes/:id/delete - Delete a recipe
 router.post("/:id/delete", requireAuth, async (req, res) => {

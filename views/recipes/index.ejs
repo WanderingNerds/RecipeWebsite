@@ -64,7 +64,12 @@
   <% } else { %>
     <div class="organization-card-grid">
       <% recipes.forEach(recipe => { %>
-        <%- include('../partials/recipe-summary-card', { recipe, isPublic: false }) %>
+        <%#
+          selectedCategory / selectedTags are passed explicitly so the card's
+          Private/Public toggle form can round-trip the active filter and the
+          redirect-after-POST can rebuild this same filtered list server-side.
+        %>
+        <%- include('../partials/recipe-summary-card', { recipe, isPublic: false, selectedCategory, selectedTags }) %>
       <% }); %>
     </div>
   <% } %>

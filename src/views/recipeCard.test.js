@@ -19,7 +19,7 @@ const mealPlanTriggers = (html) => html.match(/class="[^"]*meal-plan-add-btn[^"]
 test('Both card surfaces render all core metadata in the same order with escaped text', async () => {
   for (const isPublic of [true, false]) {
     const html = await render(isPublic);
-    const fields = ['<h3', 'By Chef &lt;script&gt;', 'Breakfast', 'Lunch', 'Dinner', '&lt;script&gt;alert(1)&lt;/script&gt;', 'Family', 'Prep: 10 minutes', 'Cook: 30 minutes', '4 servings', 'Easy', 'Created'];
+    const fields = ['<h3', 'By Chef &lt;script&gt;', 'Breakfast', 'Lunch', 'Dinner', '&lt;script&gt;alert(1)&lt;/script&gt;', 'Family', 'Prep Time: 10 minutes', 'Cook Time: 30 minutes', 'Servings: 4', 'Difficulty: Easy', 'Created'];
     let previous = -1;
     for (const field of fields) {
       const index = html.indexOf(field);
@@ -42,7 +42,7 @@ test('Zero, one, and multiple tags render without an empty tag row', async () =>
 
 test('Missing optional fields omit their metadata cleanly', async () => {
   const html = await render(true, { author: null, thumbnail_url: null, prep_time: null, cook_time: null, servings: null, difficulty: null, tags: null, categories: null });
-  assert.doesNotMatch(html, /<img|By |Prep:|Cook:| servings|tag-badge|category-badge|undefined|null/);
+  assert.doesNotMatch(html, /<img|By |Prep Time:|Cook Time:|Servings:|Difficulty:|tag-badge|category-badge|undefined|null/);
 });
 
 test('Owned clone cards show escaped immutable attribution separately from author', async () => {
@@ -76,13 +76,56 @@ test('Private controls retain filters, favorites and protected deletion', async 
   assert.match(draft, />Private<\/span>/);
 });
 
+test('REW-86 owner cards expose a fail-closed visibility toggle that round-trips the active filter', async () => {
+  const published = await ejs.renderFile(`${views}partials/recipe-summary-card.ejs`, {
+    recipe, isPublic: false, user: { id: 'owner' }, csrfToken: 'csrf-test',
+    selectedCategory: 'dinner', selectedTags: 'safe,family',
+  });
+  assert.match(published, /action="\/recipes\/recipe-1\/visibility" method="POST"/);
+  // The submitted value is always the OPPOSITE of the current state, and the
+  // form carries its own CSRF token plus the filters to restore.
+  assert.match(published, /name="visibility" value="private"/);
+  assert.doesNotMatch(published, /name="visibility" value="public"/);
+  assert.match(published, /name="category" value="dinner"/);
+  assert.match(published, /name="tags" value="safe,family"/);
+  assert.equal((published.match(/name="_csrf" value="csrf-test"/g) || []).length, 2);
+  assert.match(published, />Make Private</);
+
+  const draft = await render(false, { status: 'draft' }, { id: 'owner' });
+  assert.match(draft, /name="visibility" value="public"/);
+  assert.match(draft, />Make Public</);
+  assert.match(draft, />Private<\/span>/);
+  // No filter active: the hidden fields are present but empty, never absent
+  // and never carrying a caller-supplied URL.
+  assert.match(draft, /name="category" value=""/);
+  assert.match(draft, /name="tags" value=""/);
+});
+
+test('REW-86 owner cards add a Cookbook trigger and an inert Share placeholder', async () => {
+  const html = await render(false, {}, { id: 'owner' });
+  assert.equal((html.match(/class="[^"]*cookbook-add-btn[^"]*"[^>]*data-recipe-id="recipe-1"/g) || []).length, 1);
+  assert.doesNotMatch(html, /cookbook-add-btn-guest/);
+
+  // Share is visible but does nothing: disabled, no href, no target URL.
+  assert.match(html, /class="btn btn-outline recipe-share-btn" disabled aria-disabled="true"/);
+  assert.match(html, /title="Sharing is coming soon"/);
+  assert.doesNotMatch(html, /href="\/r\/recipe-1"/);
+});
+
+test('REW-86 owner-only controls never leak onto the public Browse card', async () => {
+  for (const user of [null, { id: 'owner' }, { id: 'other' }]) {
+    const html = await render(true, { user_id: 'owner' }, user);
+    assert.doesNotMatch(html, /\/visibility|recipe-share-btn|cookbook-add-btn|Make Public|Make Private/);
+  }
+});
+
 test('Search keeps its existing card presentation and sparse data contract', async () => {
   const html = await ejs.renderFile(`${views}recipes/search.ejs`, { query: 'rice', recipes: [recipe], user: null, totalCount: 1, page: 1, totalPages: 1 });
   assert.match(html, /class="recipe-card"/);
   assert.equal(mealPlanTriggers(html).length, 1);
   assert.match(html, /meal-plan-add-btn-guest/);
   assert.doesNotMatch(html, />View<\/a>/);
-  assert.doesNotMatch(html, /recipe-summary-card|Prep:|Cook:|Created|tag-badge/);
+  assert.doesNotMatch(html, /recipe-summary-card|Prep Time:|Cook Time:|Created|tag-badge/);
 });
 
 test('Browse and My Recipes pages both use shared cards with one meal-plan trigger per recipe', async () => {
@@ -91,8 +134,8 @@ test('Browse and My Recipes pages both use shared cards with one meal-plan trigg
   const own = await ejs.renderFile(`${views}recipes/index.ejs`, { ...common, categories: [], userTags: [], selectedCategory: '', selectedTags: '' });
   for (const html of [browse, own]) {
     assert.equal((html.match(/feature-card recipe-summary-card/g) || []).length, 1);
-    assert.match(html, /Prep: 10 minutes/);
-    assert.match(html, /Cook: 30 minutes/);
+    assert.match(html, /Prep Time: 10 minutes/);
+    assert.match(html, /Cook Time: 30 minutes/);
     assert.match(html, /class="tag-badge"/);
     assert.equal(mealPlanTriggers(html).length, 1);
     assert.doesNotMatch(html, /meal-plan-add-btn-guest/);

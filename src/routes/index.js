@@ -4,6 +4,7 @@ import recipeRoutes from "./recipeRoutes.js";
 import cookbookRoutes from "./cookbookRoutes.js";
 import mealPlanRoutes from "./mealPlanRoutes.js";
 import mealPlanApiRoutes from "./mealPlanApiRoutes.js";
+import cookbookApiRoutes from "./cookbookApiRoutes.js";
 import importRoutes from "./importRoutes.js";
 import categoryRoutes from "./categoryRoutes.js";
 import tagRoutes from "./tagRoutes.js";
@@ -120,11 +121,12 @@ router.use("/meal-plans", mealPlanRoutes);
 // Authenticated Help & Feedback intake (REW-70)
 router.use("/help-feedback", helpFeedbackRoutes);
 
-// API routes for categories, tags, likes, and meal plans
+// API routes for categories, tags, likes, meal plans, and cookbooks
 router.use("/api/categories", categoryRoutes);
 router.use("/api/tags", tagRoutes);
 router.use("/api/likes", likeRoutes);
 router.use("/api/meal-plans", mealPlanApiRoutes);
+router.use("/api/cookbooks", cookbookApiRoutes);
 
 // Protected dashboard (example)
 router.get("/dashboard", requireAuth, (req, res) => {
