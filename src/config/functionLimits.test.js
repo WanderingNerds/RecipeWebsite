@@ -7,6 +7,7 @@ import {
   VERCEL_MAX_DURATION_MS,
   FUNCTION_RESERVE_MS,
   OCR_TIMEOUT_MS,
+  VERCEL_MAX_REQUEST_BODY_BYTES,
 } from "./functionLimits.js";
 
 const vercelConfigUrl = new URL("../../vercel.json", import.meta.url);
@@ -53,4 +54,27 @@ test("OCR budget is a positive integer that leaves room under the platform deadl
     FUNCTION_RESERVE_MS >= 1500,
     "the non-OCR reserve must stay large enough for parsing, normalization, and the response"
   );
+});
+
+test("VERCEL_MAX_REQUEST_BODY_BYTES pins Vercel's 4.5MB request-body cap", () => {
+  assert.equal(
+    VERCEL_MAX_REQUEST_BODY_BYTES,
+    4.5 * 1024 * 1024,
+    "the platform cap is 4.5MB; changing this number silently re-opens every "
+      + "upload route to FUNCTION_PAYLOAD_TOO_LARGE"
+  );
+  assert.equal(VERCEL_MAX_REQUEST_BODY_BYTES, 4718592);
+  assert.ok(
+    typeof VERCEL_MAX_REQUEST_BODY_BYTES === "number"
+      && Number.isFinite(VERCEL_MAX_REQUEST_BODY_BYTES)
+      && VERCEL_MAX_REQUEST_BODY_BYTES > 0,
+    "VERCEL_MAX_REQUEST_BODY_BYTES must be a positive finite number"
+  );
+});
+
+test("adding the request-body cap left the duration constants untouched", () => {
+  assert.equal(VERCEL_MAX_DURATION_SECONDS, 10);
+  assert.equal(VERCEL_MAX_DURATION_MS, 10000);
+  assert.equal(FUNCTION_RESERVE_MS, 2000);
+  assert.equal(OCR_TIMEOUT_MS, 8000);
 });

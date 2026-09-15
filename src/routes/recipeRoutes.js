@@ -14,7 +14,7 @@ import { normalizeRecipeVisibility } from "../utils/recipeVisibility.js";
 const router = Router();
 
 // Rate limiter specifically for file uploads
-const uploadLimiter = rateLimit({
+export const uploadLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 10, // Limit to 10 uploads per 15 minutes
   message: 'Too many file uploads. Please try again later.',
@@ -33,22 +33,98 @@ const addRecipeLimiter = rateLimit({
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+// Max recipe photo upload size: 4MB. Deliberately below Vercel's 4.5MB
+// request-body cap (VERCEL_MAX_REQUEST_BODY_BYTES) so an oversize photo is
+// rejected by this app - with a flashed message on the form - instead of by the
+// platform's opaque FUNCTION_PAYLOAD_TOO_LARGE page, which never reaches our
+// code. The remaining headroom under the cap covers multipart framing, the
+// other form fields, and headers, all of which count toward the platform's
+// measurement of the body.
+// Matches MAX_IMPORT_FILE_SIZE_BYTES so there is one number to remember.
+export const MAX_RECIPE_IMAGE_SIZE_BYTES = 4 * 1024 * 1024;
+
+// Human-readable form of the photo cap, derived from the byte constant so a
+// future limit change cannot leave stale copy behind.
+export const MAX_RECIPE_IMAGE_SIZE_LABEL = `${MAX_RECIPE_IMAGE_SIZE_BYTES / (1024 * 1024)}MB`;
+
+export const RECIPE_IMAGE_TOO_LARGE_MESSAGE = `Photo must be under ${MAX_RECIPE_IMAGE_SIZE_LABEL}`;
+export const RECIPE_IMAGE_NOT_AN_IMAGE_MESSAGE =
+  "Only image files are allowed. Please choose a JPEG, PNG, GIF, or WebP photo.";
+export const RECIPE_IMAGE_INVALID_UPLOAD_MESSAGE =
+  "Invalid upload. Please select a single photo and try again.";
+
 // Configure multer to store files in memory
 const storage = multer.memoryStorage();
-const upload = multer({
+export const imageUpload = multer({
   storage: storage,
   limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB limit
+    fileSize: MAX_RECIPE_IMAGE_SIZE_BYTES,
   },
   fileFilter: (req, file, cb) => {
-    // Only accept image files
+    // Only accept image files. Note this is the client-supplied mimetype and is
+    // a convenience filter only - validateImageFile's magic-byte sniff in the
+    // handlers below is the real gate.
     if (file.mimetype.startsWith("image/")) {
       cb(null, true);
     } else {
-      cb(new Error("Only image files are allowed"));
+      const error = new Error(RECIPE_IMAGE_NOT_AN_IMAGE_MESSAGE);
+      error.code = "UNSUPPORTED_FILE_TYPE";
+      cb(error);
     }
   },
 });
+
+/**
+ * Error handler for the multer stage of the two recipe photo upload routes.
+ *
+ * Without this, a rejection (oversize file, unexpected field, non-image
+ * mimetype) falls through to the global errorHandler, which renders a generic
+ * 500 "Something went wrong" page and discards everything the user typed into
+ * the form. Mirrors handleImportUploadError in src/routes/importRoutes.js, but
+ * HTML-shaped: these routes are ordinary form posts, so the answer is a flash
+ * plus a redirect back to the form rather than JSON.
+ *
+ * This runs before route-level csrfProtection (which must run after multer, as
+ * it needs the parsed _csrf body field). That is safe and intentional: the
+ * request is already past requireAuth, and this handler performs no state
+ * change - it only flashes a fixed string and redirects to a path it derives
+ * itself. req.params.id is gated on UUID_PATTERN before it can shape the
+ * Location header.
+ */
+export function handleRecipeImageUploadError(err, req, res, next) {
+  const rawId = req?.params?.id;
+  const redirectTo = rawId
+    ? (UUID_PATTERN.test(rawId) ? `/recipes/${rawId}/edit` : "/recipes")
+    : "/recipes/new";
+
+  const flashAndRedirect = (message) => {
+    if (typeof req?.flash === "function") {
+      req.flash("error", message);
+    }
+    // Multer aborts as soon as the limit trips, but the client may still be
+    // sending the rest of the body. Unpipe multer's busboy and drain the
+    // remainder so the response is not written into a half-read request, which
+    // on a host that does not buffer the upload surfaces to the user as a
+    // connection reset instead of the flashed message below.
+    if (typeof req?.unpipe === "function") req.unpipe();
+    if (typeof req?.resume === "function") req.resume();
+    return res.redirect(redirectTo);
+  };
+
+  if (err instanceof multer.MulterError) {
+    return flashAndRedirect(
+      err.code === "LIMIT_FILE_SIZE"
+        ? RECIPE_IMAGE_TOO_LARGE_MESSAGE
+        : RECIPE_IMAGE_INVALID_UPLOAD_MESSAGE
+    );
+  }
+
+  if (err && err.code === "UNSUPPORTED_FILE_TYPE") {
+    return flashAndRedirect(RECIPE_IMAGE_NOT_AN_IMAGE_MESSAGE);
+  }
+
+  return next(err);
+}
 
 /**
  * Generate a URL-friendly slug from a string
@@ -423,7 +499,7 @@ export async function handleRecipeCreate(req, res, { createClient = createSupaba
   }
 }
 
-router.post("/", requireAuth, uploadLimiter, upload.single("photo"), csrfProtection, (req, res) => handleRecipeCreate(req, res));
+router.post("/", requireAuth, uploadLimiter, imageUpload.single("photo"), handleRecipeImageUploadError, csrfProtection, (req, res) => handleRecipeCreate(req, res));
 
 // POST /recipes/:id/clone - Add an independent, private copy of a public recipe.
 export async function handleRecipeClone(req, res, { createClient = createSupabaseClient } = {}) {
@@ -758,7 +834,7 @@ export async function handleRecipeUpdate(req, res, { createClient = createSupaba
   }
 }
 
-router.post("/:id/update", requireAuth, uploadLimiter, upload.single("photo"), csrfProtection, (req, res) => handleRecipeUpdate(req, res));
+router.post("/:id/update", requireAuth, uploadLimiter, imageUpload.single("photo"), handleRecipeImageUploadError, csrfProtection, (req, res) => handleRecipeUpdate(req, res));
 
 // POST /recipes/:id/delete - Delete a recipe
 router.post("/:id/delete", requireAuth, async (req, res) => {

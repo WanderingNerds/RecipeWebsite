@@ -25,13 +25,15 @@ All API endpoints require authentication unless otherwise noted. Authentication 
 |--------|----------|-------------|
 | GET | `/recipes` | List user's recipes (with optional category/tag filtering); each recipe includes a server-rendered favorite/like state, batch-fetched from `recipe_likes` (REW-55) |
 | GET | `/recipes/new` | Get form data for creating a recipe (Author field pre-filled with account display name, REW-46; Prep Time and Total Time/`cookTime` are required, REW-52) |
-| POST | `/recipes` | Create a new recipe (Author defaults server-side to account display name if blank/missing, REW-46; rejects blank `prepTime`/`cookTime`, REW-52) |
+| POST | `/recipes` | Create a new recipe (Author defaults server-side to account display name if blank/missing, REW-46; rejects blank `prepTime`/`cookTime`, REW-52; optional `photo` upload, max **4MB**, max **10 uploads per 15 minutes per IP** — REW-94) |
 | GET | `/recipes/:id` | View a single recipe |
 | GET | `/recipes/:id/edit` | Get form data for editing a recipe (Prep Time and Total Time/`cookTime` are required, REW-52) |
-| POST | `/recipes/:id/update` | Update a recipe (rejects blank `prepTime`/`cookTime`, REW-52) |
+| POST | `/recipes/:id/update` | Update a recipe (rejects blank `prepTime`/`cookTime`, REW-52; optional `photo` upload under the same 4MB cap — REW-94) |
 | POST | `/recipes/:id/delete` | Delete a recipe |
 | POST | `/recipes/:id/clone` | Add another user's Public recipe as a new Private, independently owned recipe (REW-84) |
 | GET | `/recipes/:id/scale` | Get scaled ingredient data (JSON) |
+
+`POST /recipes` and `POST /recipes/:id/update` are multipart form posts (`photo` field, optional, single file) behind `requireAuth`, the upload rate limiter, Multer, `handleRecipeImageUploadError`, and `csrfProtection`, in that order. Unlike the import endpoint they answer with a flash message and a redirect rather than JSON, because they are ordinary HTML form posts. See [Recipe Photo Upload](recipe-photo-upload.md) for the limits, the error contract, the redirect targets, and the client-side pre-check. **Branch-only: implemented and reviewed on `REW-94-recipe-image-upload-limit-vercel-cap`, not QA-verified, not yet merged.**
 
 ### Recipe Import (REW-12)
 
@@ -177,6 +179,7 @@ All management routes require `requireAdmin` and use the request-scoped access t
 - [Recipe Import - OCR/PDF Parsing](recipe-import-ocr-parsing.md) - Text extraction and parsing from PDFs and images, plus the pre-OCR image normalization and decoded-pixel cap (REW-95)
 - [Recipe Import Save API](recipe-import-save.md) - Authenticated draft/publish persistence and required Cook Time validation (REW-77)
 - [Recipe Import Limits & Error Contract](recipe-import-limits.md) - Upload size cap, import rate limit, and the JSON error responses from `POST /recipes/import/parse` (REW-43)
+- [Recipe Photo Upload](recipe-photo-upload.md) - Photo size cap, upload rate limit, the flash-and-redirect error contract on `POST /recipes` and `POST /recipes/:id/update`, and the client-side pre-check (REW-94)
 - [Recipe Visibility](recipe-visibility.md) - Private/Public mapping, fail-closed inputs, cloning, and public read enforcement (REW-85)
 - [Add Recipe / Cloning](recipe-cloning.md) - authenticated copy contract, immutable attribution, copied fields and relationship isolation (REW-84)
 - [Recipe Author Default](recipe-author-default.md) - Account-name defaulting on recipe create/import (REW-46)
@@ -246,8 +249,14 @@ and the test suite are not rate-limited. The two route-level limiters are always
 Vercel's hard 4.5MB request-body cap so oversize uploads return this app's JSON `413` rather than
 an opaque platform error — see
 [Recipe Import Limits & Error Contract](recipe-import-limits.md). Recipe photo uploads
-(`recipeRoutes.js`) are still configured at 5MB, which is *above* that platform cap and therefore
-cannot fully work in production; tracked as REW-94.
+(`imageUpload` in `recipeRoutes.js`) accept a single file up to **4MB** for the same reason
+(REW-94, on branch — reviewed, not QA-verified, not merged); a rejected photo is answered with a
+flashed message on the recipe form rather than the generic error page. See
+[Recipe Photo Upload](recipe-photo-upload.md).
+
+Both caps are pinned below `VERCEL_MAX_REQUEST_BODY_BYTES` in `src/config/functionLimits.js`
+(`4.5 * 1024 * 1024`) by tests, so neither can drift back above the platform limit without failing
+the suite.
 
 **Decoded-pixel cap (images, import path only).** Upload size caps bound encoded bytes, which says
 nothing about how large an image decompresses. Imported images are additionally capped at 40MP

@@ -60,3 +60,26 @@ export const FUNCTION_RESERVE_MS = 2000;
  * @type {number}
  */
 export const OCR_TIMEOUT_MS = VERCEL_MAX_DURATION_MS - FUNCTION_RESERVE_MS;
+
+/**
+ * Mirrors Vercel's hard request-body cap for Functions: 4.5MB.
+ *
+ * The platform rejects any request whose body exceeds this with a
+ * FUNCTION_PAYLOAD_TOO_LARGE 413 *before* the function is invoked, so no
+ * application-level limit, error handler, or flash message can run for such a
+ * request - the user just gets an opaque platform error page. Every upload cap
+ * in this codebase must therefore sit strictly below this number, with enough
+ * headroom for multipart framing, field data, and headers, all of which count
+ * toward the platform's measurement of the body.
+ *
+ * Mirrored as a JS constant for the same reason as the duration constants
+ * above: it is a platform property, not something readable at runtime, so the
+ * only defence against drift is a test that pins it (see
+ * src/config/functionLimits.test.js) plus per-route tests asserting each upload
+ * limit stays under it.
+ *
+ * https://vercel.com/docs/errors/FUNCTION_PAYLOAD_TOO_LARGE
+ *
+ * @type {number}
+ */
+export const VERCEL_MAX_REQUEST_BODY_BYTES = 4.5 * 1024 * 1024;
