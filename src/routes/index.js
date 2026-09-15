@@ -54,12 +54,37 @@ router.use("/admin/feedback", adminFeedbackRoutes);
 // Import routes (must be BEFORE /recipes to prevent /:id matching "import")
 router.use("/recipes/import", importRoutes);
 
-// Liked recipes page (must be BEFORE /recipes to prevent /:id matching "liked")
-router.get("/recipes/liked", requireAuth, async (req, res) => {
-  try {
-    const supabaseClient = createSupabaseClient(req.accessToken);
+// Columns the standardized My Favorites card needs (REW-87). Mirrors
+// CARD_COLUMNS in publicRoutes.js -- the Browse card reads the same shape --
+// plus two fields only the favorites surface uses:
+//
+//   user_id         decides whether Edit/Delete are drawn. Presentational
+//                   only, never rendered into the HTML, and never the sole
+//                   authorization check: /recipes/:id/edit, /:id/update and
+//                   /:id/delete each enforce ownership themselves.
+//   original_author immutable "Adapted from" attribution, shown on both
+//                   detail views and therefore on this card too.
+//
+// Body fields (instructions, notes) stay off a listing query.
+const FAVORITE_CARD_COLUMNS =
+  "id, user_id, title, status, author, original_author, prep_time, cook_time, servings, difficulty, thumbnail_url, created_at, recipe_categories(categories(id, name, slug, icon)), recipe_tags(tags(id, name, slug))";
 
-    // Fetch user's liked recipes with recipe details
+/**
+ * GET /recipes/liked - "My Favorites".
+ *
+ * Exported for handler-level tests; the route below is the only production
+ * caller. `createClient` is injectable for the same reason.
+ */
+export async function handleLikedRecipes(
+  req,
+  res,
+  { createClient = createSupabaseClient, publicClient = supabase } = {}
+) {
+  try {
+    const supabaseClient = createClient(req.accessToken);
+
+    // Which recipes this user has favorited, newest favorite first. Stays on
+    // the request-scoped client: recipe_likes is RLS-scoped to the caller.
     const { data: likes, error: likesError } = await supabaseClient
       .from("recipe_likes")
       .select("recipe_id, created_at")
@@ -67,22 +92,26 @@ router.get("/recipes/liked", requireAuth, async (req, res) => {
 
     if (likesError) {
       console.error("Error fetching liked recipes:", likesError);
-      req.flash("error", "Failed to load liked recipes");
+      req.flash("error", "Failed to load favorites");
       return res.redirect("/dashboard");
     }
 
     if (!likes || likes.length === 0) {
       return res.render("recipes/liked", {
-        title: "Liked Recipes",
+        title: "My Favorites",
         recipes: [],
       });
     }
 
-    // Fetch the actual recipe data for liked recipes
+    // The recipe rows themselves come from the anon client, exactly as Browse
+    // does: these are other people's recipes and RLS must limit the read to
+    // published ones. The .eq("status", "published") filter is belt and
+    // braces on top of that -- a favorite whose owner later flips it Private
+    // must disappear from this page rather than leak.
     const recipeIds = likes.map((l) => l.recipe_id);
-    const { data: recipes, error: recipesError } = await supabase
+    const { data: recipes, error: recipesError } = await publicClient
       .from("recipes")
-      .select("id, title, author, prep_time, cook_time, servings, difficulty, thumbnail_url, created_at")
+      .select(FAVORITE_CARD_COLUMNS)
       .in("id", recipeIds)
       .eq("status", "published");
 
@@ -92,22 +121,44 @@ router.get("/recipes/liked", requireAuth, async (req, res) => {
       return res.redirect("/dashboard");
     }
 
+    // One query, then flatten the embedded junction rows into the flat
+    // categories/tags the card expects -- same mapping as GET /browse, and
+    // deliberately not the per-recipe fan-out GET /recipes still uses.
+    //
+    // isLiked is stamped rather than queried: by construction every recipe
+    // reachable from this list is one the caller has favorited.
+    const recipeMap = new Map(
+      (recipes ?? []).map(({ recipe_categories, recipe_tags, ...recipe }) => [
+        recipe.id,
+        {
+          ...recipe,
+          categories: (recipe_categories ?? []).map(link => link?.categories).filter(Boolean),
+          tags: (recipe_tags ?? []).map(link => link?.tags).filter(Boolean),
+          isLiked: true,
+        },
+      ])
+    );
+
     // Sort recipes by the order they were liked (most recent first)
-    const recipeMap = new Map(recipes?.map((r) => [r.id, r]) || []);
     const sortedRecipes = likes
       .map((l) => recipeMap.get(l.recipe_id))
       .filter(Boolean);
 
     res.render("recipes/liked", {
-      title: "Liked Recipes",
+      title: "My Favorites",
       recipes: sortedRecipes,
     });
   } catch (error) {
-    console.error("Error loading liked recipes page:", error);
+    console.error("Error loading favorites page:", error);
     req.flash("error", "An unexpected error occurred");
     res.redirect("/dashboard");
   }
-});
+}
+
+// Favorites page (must be BEFORE /recipes to prevent /:id matching "liked").
+// The URL stays /recipes/liked: the dashboard card, the navbar and any
+// bookmark point at it. Only the wording changed (REW-66 terminology).
+router.get("/recipes/liked", requireAuth, (req, res) => handleLikedRecipes(req, res));
 
 // Recipe routes
 router.use("/recipes", recipeRoutes);
