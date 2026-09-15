@@ -3,13 +3,16 @@ import assert from "node:assert/strict";
 import sharp from "sharp";
 import {
   parseJsonLd,
+  parseImage,
   validateImportFile,
   parseImage,
   normalizeImageForOcr,
   OCR_MAX_INPUT_PIXELS,
   OCR_MAX_DIMENSION,
   SUPPORTED_MIME_TYPES,
+  OCR_TIMEOUT_MS,
 } from "./recipeImporter.js";
+import { OCR_TIMEOUT_MS as CONFIG_OCR_TIMEOUT_MS } from "../config/functionLimits.js";
 
 // Helper to create a buffer from JSON
 function jsonBuffer(obj) {

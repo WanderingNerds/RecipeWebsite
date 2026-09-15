@@ -248,6 +248,52 @@ test("import client prefers a server-supplied JSON error over the status fallbac
   assert.equal(message, "Unsupported file type. Please upload a JSON, PDF, or image file.");
 });
 
+// --- REW-93: gateway timeouts get readable copy, JSON errors still win ---
+
+test("import client shows timeout copy when a gateway returns 504 with an HTML body", async () => {
+  for (const status of [502, 503, 504]) {
+    const { elements } = await runImportClient({
+      fetchImpl: () => Promise.resolve({
+        ok: false,
+        status,
+        json: () => Promise.reject(new SyntaxError("Unexpected token < in JSON at position 0")),
+      }),
+    });
+
+    const message = await uploadThroughClient(elements, {
+      name: "recipe.jpg",
+      type: "image/jpeg",
+      size: 1024,
+    });
+
+    assert.equal(
+      message,
+      "The import took too long. Try a smaller file.",
+      `status ${status} must surface the gateway-timeout copy, not the generic parse failure`
+    );
+    assert.doesNotMatch(message, /SyntaxError|Unexpected token/);
+  }
+});
+
+test("import client prefers the server OCR timeout message from a 400 JSON body", async () => {
+  const serverMessage = "Image processing timed out. Try a clearer image.";
+  const { elements } = await runImportClient({
+    fetchImpl: () => Promise.resolve({
+      ok: false,
+      status: 400,
+      json: () => Promise.resolve({ error: serverMessage }),
+    }),
+  });
+
+  const message = await uploadThroughClient(elements, {
+    name: "recipe.jpg",
+    type: "image/jpeg",
+    size: 1024,
+  });
+
+  assert.equal(message, serverMessage);
+});
+
 test("import page states the 4MB maximum file size", async () => {
   const html = await ejs.renderFile(view, {
     csrfToken: "csrf-test",

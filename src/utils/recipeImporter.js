@@ -12,8 +12,10 @@ import { PDFExtract } from "pdf.js-extract";
 import sharp from "sharp";
 import Tesseract from "tesseract.js";
 
-// OCR timeout in milliseconds
-const OCR_TIMEOUT_MS = 30000;
+// OCR timeout in milliseconds. Derived from the deployed function's maxDuration
+// in src/config/functionLimits.js so it can never exceed the platform deadline;
+// re-exported here because this is where callers and tests look for it.
+export { OCR_TIMEOUT_MS };
 
 // Max decoded pixels accepted on the OCR path: 40,000,000 (REW-95).
 // The multer limit in importRoutes.js bounds *encoded* bytes only; a highly
@@ -364,7 +366,7 @@ export async function parseImage(fileBuffer, mimeType, options = {}) {
   const timeoutPromise = new Promise((_, reject) => {
     timeoutId = setTimeout(() => {
       reject(new Error("Image processing timed out. Try a clearer image."));
-    }, OCR_TIMEOUT_MS);
+    }, timeoutMs);
   });
 
   // OCR the normalized image

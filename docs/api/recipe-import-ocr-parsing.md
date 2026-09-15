@@ -451,6 +451,79 @@ return parsed;
 
 ---
 
+## OCR execution budget and worker lifecycle (REW-93)
+
+`parseImage` runs inside a serverless function with a hard wall clock, so the OCR step is bounded
+before the platform can kill the request out from under it.
+
+### Where the budget comes from
+
+`src/config/functionLimits.js` is the single source of truth. `VERCEL_MAX_DURATION_SECONDS` (`10`)
+mirrors `vercel.json` → `functions["server.js"].maxDuration`; `FUNCTION_RESERVE_MS` (`2000`) covers
+the non-OCR work in the same invocation; `OCR_TIMEOUT_MS` is the remainder, **8000 ms**.
+`recipeImporter.js` imports that value and re-exports it, so there is no OCR timeout literal in the
+importer. `src/config/functionLimits.test.js` reads the real `vercel.json` from disk and fails if
+the mirrored value drifts. `vercel.json` is not read at runtime — it is build configuration and is
+not guaranteed to be in the deployed function bundle.
+
+Before REW-93 the importer used a 30-second literal that the 10-second platform deadline made
+unreachable, so a slow OCR produced an opaque platform timeout page rather than the application's
+own JSON error.
+
+### Signature
+
+```javascript
+parseImage(fileBuffer, mimeType, { timeoutMs, createWorkerImpl })
+```
+
+Both options are test seams with production defaults (`OCR_TIMEOUT_MS` and the internal
+`createOcrWorker`). Production callers pass nothing. Tests inject a fake worker so no test spawns
+Tesseract or performs real OCR.
+
+### Lifecycle
+
+`createWorker` → `recognize` → `terminate`, rather than the one-shot `Tesseract.recognize` helper,
+specifically so the timeout path can reclaim the worker. Worker startup happens inside the raced
+promise, so a slow cold start spends the OCR budget rather than sitting outside the timeout
+entirely. A single `finally` runs on all paths — success, timeout, and OCR error — and it:
+
+1. Clears the pending timeout handle, so a successful OCR does not hold the event loop for the
+   remainder of the budget.
+2. Terminates the worker. If `terminate` throws, the failure is logged as
+   `"Failed to terminate OCR worker:"` and swallowed; it must never replace the user-facing error.
+3. Handles the cold-start race where the timeout fires before the worker finishes starting: the
+   response is not blocked on startup, but the worker is terminated as soon as it exists. A worker
+   that never starts is logged distinctly as `"OCR worker startup failed:"`.
+
+### Error messages
+
+| Condition | Message |
+|-----------|---------|
+| OCR exceeded the budget | `Image processing timed out. Try a clearer image.` |
+| OCR failed for any other reason | `Could not process image. Please try a different image.` |
+| OCR returned fewer than 20 characters | `Could not extract enough text from image. Try a clearer image.` |
+
+The `"timed out"` substring is **load-bearing**: `parseImage` branches on
+`error.message.includes("timed out")` to decide whether to re-throw the timeout or replace it with
+the generic message, and REW-95's tests assert that non-timeout import errors never contain it. Do
+not reword the timeout message. None of these messages may carry buffer sizes, pixel counts, file
+paths, timing values, worker internals, or stack traces — `src/routes/importRoutes.js` returns
+`error.message` straight to the client.
+
+### Unverified
+
+QA did not run for REW-93. It has not been confirmed on a deployed function that a real ~4MB phone
+photo completes OCR within 8 seconds, that the 2000 ms reserve is sufficient once REW-95's `sharp`
+normalization shares the invocation, or that a warm container is unaffected by the import
+immediately following a timed-out one.
+
+### Not covered: the PDF path
+
+`parsePdf` has no timeout at all. A large multi-page PDF can still run to the platform deadline.
+Tracked in **REW-97**.
+
+---
+
 ## Sample Input/Output
 
 ### Input (OCR Text)
@@ -507,8 +580,10 @@ Instructions
 ## Related Documentation
 
 - [Recipe Import Plan](../plans/REW-12-file-import.md) - Full feature specification
+- [Recipe Import Limits & Error Contract](recipe-import-limits.md) - Upload cap, rate limit, time budget, and the JSON error contract
 - [Recipe Scaling API](recipe-scaling.md) - How imported recipes can be scaled
 - [API Overview](README.md) - All API endpoints
+- [Release notes: REW-93](../RELEASE_NOTES_REW-93.md) - The derived OCR budget and worker lifecycle
 
 ---
 
