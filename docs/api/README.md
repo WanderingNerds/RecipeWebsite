@@ -85,16 +85,17 @@ All `/cookbooks*` routes require auth and act only on the caller's own cookbooks
 
 Both run exclusively on the anon-key Supabase client, so a draft recipe inside a shared cookbook is invisible at the database layer rather than filtered in application code. A cookbook's UUID is its share identifier — there is no share token. See [Cookbooks API](cookbooks.md) for the full contract.
 
-### Meal Plans (REW-63)
+### Meal Plans (REW-63, REW-69)
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/meal-plans` | List the current user's meal plans with a per-plan recipe count |
+| GET | `/meal-plans` | List the current user's meal plans with a per-plan recipe count, marking Public plans |
 | GET | `/meal-plans/new` | Render the create-meal-plan form (title + start/end date) |
 | POST | `/meal-plans` | Create a meal plan (title required; start/end date required, `end >= start`) |
 | GET | `/meal-plans/:id` | View a meal plan and all recipes currently in it |
 | GET | `/meal-plans/:id/edit` | Render the rename/re-date form |
 | POST | `/meal-plans/:id/update` | Rename and/or re-date a meal plan |
+| POST | `/meal-plans/:id/visibility` | Switch a meal plan between Private and Public (`visibility=private\|public`, fails closed to Private) — REW-69 |
 | POST | `/meal-plans/:id/delete` | Delete a meal plan (never deletes the recipes in it) |
 | GET | `/meal-plans/:id/add-recipes` | Render a checklist of the owner's own recipes (draft + published) to bulk-add to a plan |
 | POST | `/meal-plans/:id/add-recipes` | Bulk-add selected (owner's own) recipes to a meal plan |
@@ -104,7 +105,15 @@ Both run exclusively on the anon-key Supabase client, so a draft recipe inside a
 | POST | `/api/meal-plans/:id/recipes/:recipeId` | JSON: add a recipe to a meal plan — allows the caller's own recipe (any status) or **any published recipe**, not owner-only |
 | DELETE | `/api/meal-plans/:id/recipes/:recipeId` | JSON: remove a recipe from a meal plan |
 
-All `/meal-plans*` page routes require auth and redirect to login if unauthenticated, consistent with `/cookbooks*`. All `/api/meal-plans*` routes require auth and return JSON `401` if unauthenticated, consistent with `/api/likes*` (there is no anonymous-GET case for meal plans). Mutation endpoints on both surfaces share a 30-requests/minute-per-user rate limit. Meal plans are private to their owner (RLS-enforced, no sharing), unlike Cookbooks' owner-only recipe rule — a meal plan can contain the owner's own recipes (any status) *or* any other user's published recipes, mirroring `recipe_likes`' visibility rule. See [Meal Plans API](meal-plans.md) for full details, including the RLS enforcement and two non-blocking reviewer-flagged follow-ups.
+All `/meal-plans*` page routes require auth and redirect to login if unauthenticated, consistent with `/cookbooks*`. All `/api/meal-plans*` routes require auth and return JSON `401` if unauthenticated, consistent with `/api/likes*` (there is no anonymous-GET case on that surface). Mutation endpoints on both surfaces share a 30-requests/minute-per-user rate limit. Meal plans are private by default and RLS-enforced; as of REW-69 an owner can opt one plan at a time into a Public share link (see below). Unlike Cookbooks' owner-only recipe rule, a meal plan can contain the owner's own recipes (any status) *or* any other user's published recipes, mirroring `recipe_likes`' visibility rule. See [Meal Plans API](meal-plans.md) for full details, including the RLS enforcement and two non-blocking reviewer-flagged follow-ups.
+
+### Public meal plan sharing (REW-69)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/m/:id` | Public, unauthenticated read-only view of a **Public** meal plan: title, date range, and its published recipes. Private, nonexistent, and malformed IDs all return an identical 404 |
+
+Runs exclusively on the anon-key Supabase client, so a Private recipe inside a shared plan is invisible at the database layer rather than filtered in application code. A plan's UUID is its share identifier — there is no share token. **Unlike Public cookbooks, Public meal plans are link-only and are never surfaced in `/search`** — a time-boxed personal schedule is not browsable content. See [Meal Plans API](meal-plans.md) for the full contract.
 
 ### Help & Feedback (REW-70)
 
@@ -174,7 +183,7 @@ All management routes require `requireAdmin` and use the request-scoped access t
 - [Required Prep Time / Total Time](recipe-required-times.md) - Required-field enforcement and the Cook Time → Total Time display rename (REW-52)
 - [Recipe Likes API](recipe-likes.md) - `/api/likes/:recipeId` endpoints, the My Recipes favorite control, and the draft-recipe restriction (REW-21, REW-55)
 - [Cookbooks API](cookbooks.md) - `/cookbooks*` endpoints, RLS-enforced privacy, the recipe view "Save to Cookbook(s)" integration (REW-62), and Private/Public cookbook sharing via `POST /cookbooks/:id/visibility` and the public `GET /c/:id` (REW-19)
-- [Meal Plans API](meal-plans.md) - `/meal-plans*` and `/api/meal-plans*` endpoints, the shared "Add to Meal Plan" modal, and the own-or-published recipe visibility rule (REW-63)
+- [Meal Plans API](meal-plans.md) - `/meal-plans*` and `/api/meal-plans*` endpoints, the shared "Add to Meal Plan" modal, and the own-or-published recipe visibility rule (REW-63), plus Private/Public meal plan sharing via `POST /meal-plans/:id/visibility` and the link-only public `GET /m/:id` (REW-69)
 - [Help & Feedback](help-feedback.md) - authenticated form routes, validation, durable intake, and RLS boundaries (REW-70)
 - [Admin Help & Feedback](admin-feedback.md) - isolated admin authentication, queue/detail workflow, provisioning, CSRF, and RLS boundaries (REW-71)
 - [Categories and Tags](../CATEGORIES_AND_TAGS.md) - Full categories/tags documentation

@@ -1,6 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { validateMealPlanTitle, validateDateRange } from "./mealPlanUtils.js";
+import {
+  validateMealPlanTitle,
+  validateDateRange,
+  normalizeMealPlanVisibility,
+  MEAL_PLAN_VISIBILITY,
+} from "./mealPlanUtils.js";
 
 test("validateMealPlanTitle: accepts and trims a normal title", () => {
   const result = validateMealPlanTitle("  Week of Sept 8  ");
@@ -97,4 +102,46 @@ test("validateDateRange: trims whitespace around valid dates", () => {
   assert.equal(result.valid, true);
   assert.equal(result.startDate, "2026-09-08");
   assert.equal(result.endDate, "2026-09-14");
+});
+
+// ---------------------------------------------------------------------------
+// REW-69: meal plan sharing visibility normalizer
+// ---------------------------------------------------------------------------
+
+test("normalizeMealPlanVisibility: the literal string 'public' makes a plan Public", () => {
+  assert.equal(normalizeMealPlanVisibility("public"), true);
+  assert.equal(normalizeMealPlanVisibility(MEAL_PLAN_VISIBILITY.PUBLIC), true);
+});
+
+test("normalizeMealPlanVisibility: everything else fails closed to Private", () => {
+  // A malformed, duplicated or forged submission must never share a plan.
+  for (const value of [
+    "private",
+    MEAL_PLAN_VISIBILITY.PRIVATE,
+    undefined,
+    null,
+    "",
+    "PUBLIC",
+    "Public",
+    " public",
+    "public ",
+    "true",
+    "published",
+    ["public"],
+    { visibility: "public" },
+    {},
+    42,
+    true,
+  ]) {
+    assert.equal(
+      normalizeMealPlanVisibility(value),
+      false,
+      `${JSON.stringify(value) ?? String(value)} must not make a meal plan Public`
+    );
+  }
+});
+
+test("MEAL_PLAN_VISIBILITY uses the REW-85 private|public form convention and is frozen", () => {
+  assert.deepEqual({ ...MEAL_PLAN_VISIBILITY }, { PRIVATE: "private", PUBLIC: "public" });
+  assert.equal(Object.isFrozen(MEAL_PLAN_VISIBILITY), true);
 });

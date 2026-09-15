@@ -46,7 +46,7 @@ A recipe website built with Node.js, Express, and Supabase Auth.
    ASSIGNMENT_EMAIL_FROM=Potluck <verified-sender@example.com>
    ```
 
-   Note: `APP_URL` is required for email confirmation links, admin assignment links, and — as of REW-19 — the copyable cookbook share link (`<APP_URL>/c/<id>`) to work correctly in production. In development, it defaults to `http://localhost:3000`. `ASSIGNMENT_EMAIL_FROM` must use a sender accepted by the configured Resend account.
+   Note: `APP_URL` is required for email confirmation links, admin assignment links, the copyable cookbook share link (`<APP_URL>/c/<id>`, REW-19), and — as of REW-69 — the copyable meal plan share link (`<APP_URL>/m/<id>`) to work correctly in production. In development, it defaults to `http://localhost:3000`. `ASSIGNMENT_EMAIL_FROM` must use a sender accepted by the configured Resend account.
 
    No new environment variables were introduced by REW-19.
 
@@ -93,9 +93,9 @@ recipe-website/
 │   │   ├── categoryRoutes.js   # Category API routes
 │   │   ├── tagRoutes.js        # Tag API routes
 │   │   ├── likeRoutes.js       # Recipe favorite/like API routes (REW-21)
-│   │   ├── publicRoutes.js     # Unauthenticated pages: /browse, /search, /r/:id, /c/:id (anon-key client only)
+│   │   ├── publicRoutes.js     # Unauthenticated pages: /browse, /search, /r/:id, /c/:id, /m/:id (anon-key client only)
 │   │   ├── cookbookRoutes.js   # Cookbook CRUD + recipe membership + visibility toggle (REW-62, REW-19)
-│   │   ├── mealPlanRoutes.js   # Meal plan CRUD + bulk-add page routes (REW-63)
+│   │   ├── mealPlanRoutes.js   # Meal plan CRUD + bulk-add page routes + visibility toggle (REW-63, REW-69)
 │   │   ├── mealPlanApiRoutes.js # Meal plan JSON API backing the "Add to Meal Plan" modal (REW-63)
 │   │   ├── helpFeedbackRoutes.js # Authenticated feedback routes (REW-70)
 │   │   ├── adminAuthRoutes.js   # Isolated administrator sign-in/logout (REW-71)
@@ -105,7 +105,7 @@ recipe-website/
 │   │   ├── ingredientParser.js # Ingredient parsing
 │   │   ├── ingredientScaler.js # Recipe scaling logic
 │   │   ├── cookbookUtils.js    # Cookbook title validation, recipe-id normalization (REW-62), fail-closed visibility normalizer (REW-19)
-│   │   ├── mealPlanUtils.js    # Meal plan title + date-range validation (REW-63)
+│   │   ├── mealPlanUtils.js    # Meal plan title + date-range validation (REW-63), fail-closed visibility normalizer (REW-69)
 │   │   ├── helpFeedbackUtils.js # Feedback validation (REW-70)
 │   │   └── adminUtils.js        # Admin claim and workflow validation (REW-71)
 │   └── app.js                  # Express app setup
@@ -116,7 +116,7 @@ recipe-website/
 │   ├── auth/                   # Login/Register pages
 │   ├── recipes/                # Recipe views (index, new, edit, view)
 │   ├── cookbooks/               # Cookbook views (index, new, view, edit, add-recipes; public-view for shared cookbooks) (REW-62, REW-19)
-│   ├── meal-plans/              # Meal plan views (index, new, view, edit, add-recipes) (REW-63)
+│   ├── meal-plans/              # Meal plan views (index, new, view, edit, add-recipes, grocery-list; public-view for shared plans) (REW-63, REW-26, REW-69)
 │   ├── home.ejs                # Home page
 │   └── dashboard.ejs           # Protected dashboard
 ├── public/
@@ -127,6 +127,7 @@ recipe-website/
 │       ├── likes.js            # Favorite/like button optimistic UI (REW-21; also drives My Recipes cards, REW-55)
 │       ├── meal-plans.js       # "Add to Meal Plan" modal fetch/toggle logic (REW-63)
 │       ├── cookbook-share.js   # Copy-link button on a Public cookbook's share panel (REW-19)
+│       ├── meal-plan-share.js  # Copy-link button on a Public meal plan's share panel (REW-69)
 │       ├── recipe-form.js      # Recipe form handling
 │       └── tags-input.js       # Tag input with autocomplete
 ├── database/
@@ -210,9 +211,22 @@ This local implementation requires migration `013_public_recipe_card_metadata.sq
 - **Add to Meal Plan from Cards and Recipe Pages**: An "Add to Meal Plan" button on recipe cards (`/browse`, `/search`, `/recipes/liked`) and on both the owner's recipe page and the public recipe page opens a shared modal (no full page reload) listing the user's meal plans with add/remove toggles, plus an inline "+ New meal plan" quick-create option. A plan's own detail page also offers a bulk checklist picker (`/meal-plans/:id/add-recipes`) scoped to the owner's own recipes.
 - **Own-or-Published Recipe Visibility (differs from Cookbooks)**: A user can add any of their own recipes (draft or published) to a meal plan, and can also add another user's *published* recipe — mirroring the same visibility rule already used by Recipe Likes. A user cannot add another user's draft/unpublished recipe; this is enforced at the database (RLS) level, not just in the UI.
 - **Recipes Are Never Deleted by Meal Plan Actions**: Deleting a meal plan removes only the plan and its membership records — the recipes in it are untouched and remain in "My Recipes," any cookbooks, and any other meal plans. Removing a recipe from a plan works the same way in reverse.
-- **Private by Default**: Meal plans are visible only to their owner, enforced at the database level (Row Level Security) — there is no policy allowing another user to read a meal plan they don't own, so a direct URL/ID guess can't expose it.
+- **Private by Default**: Meal plans are visible only to their owner, enforced at the database level (Row Level Security) — a direct URL/ID guess can't expose a Private plan. As of REW-69 an owner can opt an individual plan into a Public share link; see "Meal Plan Sharing" below.
 - **Forward-compatible with Grocery Lists (REW-26, not built yet)**: The `meal_plan_recipes` junction table includes a nullable `planned_servings` column, unused by any current UI, so a future grocery-list feature can scale a recipe's ingredients per plan without another migration.
 - See [Meal Plans API](docs/api/meal-plans.md) for the full endpoint list (including two non-blocking reviewer-flagged follow-ups) and `database/README.md` for the `meal_plans`/`meal_plan_recipes` schema.
+
+### Meal Plan Sharing (REW-69)
+- **One Private/Public Choice per Meal Plan**: From a plan's detail page, the owner can make it Public and make it Private again, as many times as they like. Private stays the default for new plans, and every meal plan that existed before this feature is Private.
+- **Shareable Link**: A Public meal plan is readable by anyone at `/m/<meal-plan-id>`, signed in or not. The plan's own ID is the share link — the same approach already used for public recipes at `/r/<recipe-id>` and shared cookbooks at `/c/<cookbook-id>`, so there is no token to manage. The detail page shows the full URL in a copyable field with a Copy button.
+- **What a Recipient Sees**: The plan's title, its scheduled start–end date range (formatted exactly as the owner sees it), and its Public recipes as read-only cards linking through to `/r/:id`. There is no per-day or meal-slot grid, because the meal plan feature does not have one yet — a plan's recipes are listed most-recently-added first.
+- **Instant Revocation**: Making a plan Private again breaks the link immediately. Visibility is re-read from the database on every request and never cached, so a previously-working link returns a plain "not found" on the very next load.
+- **Link-Only, Not Searchable**: Unlike Public cookbooks, Public meal plans never appear in site search. A meal plan is a time-boxed personal schedule, not browsable content, so it is shared by handing someone the link and nothing more.
+- **Private Recipes Never Leak**: A plan can contain the owner's Private recipes. A shared plan shows **only** Public recipes — to visitors, to other signed-in users, and to the owner opening their own share link. The public page is served entirely through the anonymous database key, so Private recipes are invisible at the database layer rather than filtered out in application code. A Public plan whose recipes are all Private simply renders as empty, with no hint that anything is hidden.
+- **Read-Only for Everyone**: The shared page has no edit, rename, re-date, delete, add-recipe, remove-recipe, or grocery-list control for anyone, including the owner. A Private plan, a nonexistent one, and a malformed link all return the same 404, so a Private plan's existence can't be probed.
+- **Sharing One Plan Exposes No Others**: There is no listing surface that enumerates a user's plans, and `/m/:id` for any Private plan returns the same 404 as a nonexistent one.
+- **Nothing Else Changes**: Sharing a plan never changes any recipe's own Private/Public status, never alters plan membership or dates, and never affects the rule that deleting a meal plan leaves its recipes intact. Making a plan Public grants read access to `/m/:id` only — `/meal-plans/:id`, `/edit`, `/add-recipes`, `/grocery-list`, and every `/api/meal-plans/*` route stay owner-only.
+- **Not included**: saving or copying someone else's shared plan into your own account, a grocery list on the shared page, per-user or email-based sharing, and search discoverability. Each is a possible follow-up ticket.
+- Requires migration `020_add_meal_plan_sharing.sql`. **This feature is code-reviewed but has not been QA-verified against a live Supabase** — see `docs/RELEASE_NOTES_REW-69.md` for the list of unverified acceptance criteria.
 
 ### Instant Recipe Scaling (REW-11)
 - **Real-time Scaling**: Adjust recipe servings without page reloads
