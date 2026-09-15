@@ -85,7 +85,7 @@ recipe-website/
 │   │   ├── supabase.js         # Supabase client
 │   │   └── functionLimits.js   # Serverless invocation budget: mirrored Vercel maxDuration, derived OCR timeout (REW-93)
 │   ├── middleware/
-│   │   ├── authMiddleware.js   # Auth middleware
+│   │   ├── authMiddleware.js   # Auth middleware; also the shared createRequireApiAuth JSON-401 factory used by every /api route file (REW-86)
 │   │   └── errorHandler.js     # Error handling
 │   ├── routes/
 │   │   ├── index.js            # Main routes
@@ -98,6 +98,7 @@ recipe-website/
 │   │   ├── cookbookRoutes.js   # Cookbook CRUD + recipe membership + visibility toggle (REW-62, REW-19)
 │   │   ├── mealPlanRoutes.js   # Meal plan CRUD + bulk-add page routes + visibility toggle (REW-63, REW-69)
 │   │   ├── mealPlanApiRoutes.js # Meal plan JSON API backing the "Add to Meal Plan" modal (REW-63)
+│   │   ├── cookbookApiRoutes.js # Cookbook JSON API backing the "+ Cookbook" card modal (REW-86)
 │   │   ├── helpFeedbackRoutes.js # Authenticated feedback routes (REW-70)
 │   │   ├── adminAuthRoutes.js   # Isolated administrator sign-in/logout (REW-71)
 │   │   └── adminFeedbackRoutes.js # Admin-only feedback queue and workflow (REW-71)
@@ -114,6 +115,8 @@ recipe-website/
 │   ├── layouts/main.ejs        # Main layout
 │   ├── partials/navbar.ejs     # Navigation bar
 │   ├── partials/meal-plan-modal.ejs # Shared "Add to Meal Plan" modal (REW-63)
+│   ├── partials/cookbook-modal.ejs  # Shared "Add to Cookbook" modal (REW-86)
+│   ├── partials/recipe-summary-card.ejs # Shared recipe card for My Recipes and Browse (REW-59, REW-86)
 │   ├── auth/                   # Login/Register pages
 │   ├── recipes/                # Recipe views (index, new, edit, view)
 │   ├── cookbooks/               # Cookbook views (index, new, view, edit, add-recipes; public-view for shared cookbooks) (REW-62, REW-19)
@@ -127,6 +130,7 @@ recipe-website/
 │       ├── nav.js              # Mobile hamburger nav toggle (REW-50)
 │       ├── likes.js            # Favorite/like button optimistic UI (REW-21; also drives My Recipes cards, REW-55)
 │       ├── meal-plans.js       # "Add to Meal Plan" modal fetch/toggle logic (REW-63)
+│       ├── cookbooks.js        # "+ Cookbook" modal fetch/toggle logic (REW-86)
 │       ├── cookbook-share.js   # Copy-link button on a Public cookbook's share panel (REW-19)
 │       ├── meal-plan-share.js  # Copy-link button on a Public meal plan's share panel (REW-69)
 │       ├── recipe-form.js      # Recipe form handling
@@ -185,6 +189,19 @@ Every rejection from the parse endpoint now returns JSON — `429` for the rate 
 Browse and My Recipes share their core card layout: thumbnail, title/status, author, all categories, tags, separate prep/cook times, servings, difficulty, and creation date. Browse keeps public recipe links and Meal Plan controls; My Recipes keeps favorite, filter, View/Edit/Delete controls. Browse badges are informational. Long titles and badges wrap within cards.
 
 This local implementation requires migration `013_public_recipe_card_metadata.sql` before release. Staging RLS verification and live end-to-end acceptance are pending; see [Browse route documentation](docs/api/browse-recipes.md) and the [QA report](docs/qa/rew-59-browse-recipe-cards.md). No new environment variables are required.
+
+### My Recipes Recipe Cards (REW-86)
+
+*Implemented and code-reviewed on branch `REW-86-standardize-my-recipes-card`; **QA was not run**, and the branch is not merged.*
+
+Every card on **My Recipes** (`/recipes`) now carries the same content and the same set of actions: a clickable title, the favorite heart, an owner-only **Private/Public** control, author, categories, tags, `Prep Time:` / `Cook Time:` / `Servings:` / `Difficulty:` metadata, `+ Meal Plan`, `+ Cookbook`, Share, Edit, and Delete. Browse cards share the same template but gain none of the owner controls.
+
+- **Change visibility from the card.** A labelled control replaces the old read-only status pill: it shows the current state and a single "Make Public" / "Make Private" button. It is a normal form submission followed by a redirect, so the whole card re-renders — which is what keeps the favorite heart correct, since a Private recipe can't be favorited. Toggling while a category or tag filter is active returns to the same filtered list. Invalid or tampered input always resolves to Private, never Public.
+- **Add to a cookbook without leaving the page.** `+ Cookbook` opens a modal listing the user's cookbooks with add/remove toggles and an inline "+ New cookbook" quick-create, mirroring the existing "Add to Meal Plan" modal. Adding the same recipe twice is a no-op rather than an error. Only the user's own recipes and own cookbooks are in play.
+- **Share is a placeholder, on purpose.** The button is visible but inert — no link, no request, no URL exposed. Real sharing behavior is [REW-18](https://wanderingnerds.atlassian.net/browse/REW-18). It deliberately does not link to `/r/:id`, which would be misleading for a Private recipe.
+- **No database migration.** Every action touches only the signed-in user's own rows and is already covered by existing RLS.
+
+See [My Recipes Recipe Card](docs/api/my-recipes-card.md) for the route contracts and `docs/RELEASE_NOTES_REW-86.md` for what was and wasn't verified. Known overlap: REW-59 is editing the same shared card partial on its own branch, so expect a merge conflict there and a probable duplicate cookbook API/modal.
 
 ### Favorites / Recipe Likes (REW-21, REW-55)
 - **Heart-Toggle Favoriting**: Authenticated users can like/unlike any **published** recipe from a heart-shaped `.like-btn` control with optimistic UI (instant toggle, reverts on a failed request) and an "Undo" toast after unliking (`public/js/likes.js`, backed by `POST`/`DELETE /api/likes/:recipeId`).
@@ -285,7 +302,8 @@ This local implementation requires migration `013_public_recipe_card_metadata.sq
 - HTTP-only secure cookies
 - Helmet.js for security headers
 - CORS configuration
-- Rate limiting: 300 requests / 15 minutes per IP globally (production only), 25 recipe imports / 15 minutes per IP, 10 photo uploads / 15 minutes per IP. All limits are keyed by client IP, not by user account. See the [rate limiting table](docs/api/README.md#rate-limiting).
+- Rate limiting: 300 requests / 15 minutes per IP globally (production only), 25 recipe imports / 15 minutes per IP, 10 photo uploads / 15 minutes per IP, 60 recipe visibility changes / 15 minutes per IP (REW-86). Those limits are keyed by client IP, not by user account. The JSON API limiters (`/api/likes*`, `/api/meal-plans*`, and `/api/cookbooks*` at 30 mutations/minute — REW-86) are keyed per user, which is safe because those routes all sit behind auth. See the [rate limiting table](docs/api/README.md#rate-limiting).
+- CSRF is enforced globally for unsafe non-multipart requests, but the global wrapper exempts *every* multipart POST rather than only the Multer routes that need it. Newer state-changing routes therefore re-apply `csrfProtection` explicitly at the route level, ahead of their rate limiter — `POST /recipes/:id/clone`, `POST /recipes/:id/visibility`, and every `/api/cookbooks*` mutation. The central fix is tracked as [REW-99](https://wanderingnerds.atlassian.net/browse/REW-99).
 - Upload size caps are pinned below the deployment platform's own request-body cap. `src/config/functionLimits.js` holds `VERCEL_MAX_REQUEST_BODY_BYTES` (4.5MB), and both upload paths — recipe imports and recipe photos — are capped at 4MB with tests asserting they stay strictly under it (REW-43, REW-94). A limit above the platform cap is not a smaller problem than one below it: the platform answers first, so the app's own rate limiting, error handling, and messaging never run.
 - Multer rejections on the recipe photo routes are answered by `handleRecipeImageUploadError` (REW-94, on branch — reviewed, not QA-verified, not merged) with a flash and a redirect to a path derived server-side. `req.params.id` is validated against a UUID pattern before it can reach the `Location` header, and the handler performs no state change, so running it ahead of route-level CSRF validation is safe. The middleware order `requireAuth` → rate limiter → Multer → error handler → `csrfProtection` is asserted by tests on both routes.
 - Decompression-bomb protection on the recipe **import** path (REW-95, on branch — reviewed, not QA-verified, not merged): uploaded images are capped at 40,000,000 decoded pixels and downscaled to 2000x2000 before OCR. Upload size limits bound encoded bytes only, so this is a separate control, not a duplicate one — keep both. Errors are mapped to a single generic message so no library internals reach the HTTP response body. The recipe **photo** upload path (`src/utils/imageUtils.js`) still has no equivalent cap; tracked as REW-96.

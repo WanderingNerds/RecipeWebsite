@@ -26,11 +26,17 @@
                   <span class="like-btn-icon">&#9829;</span>
                 </button>
               <% } %>
-              <% } %>
+              <% } else { %>
+              <%#
+                Browse keeps the read-only status pill. The owner surface
+                below replaces it with the labelled Private/Public control
+                (REW-86), so the state is never shown twice on one card.
+              %>
               <% if (recipe.status === 'draft') { %>
                 <span class="badge-draft badge-draft-sm">Private</span>
               <% } else { %>
                 <span class="badge-published badge-published-sm">Public</span>
+              <% } %>
               <% } %>
             </div>
           </div>
@@ -70,18 +76,23 @@
             </div>
           <% } %>
 
+          <%#
+            REW-86: "Label: value" metadata, matching the format the Browse
+            cards use for the same recipe. Each field keeps its own
+            "omit when empty" guard, so an empty field renders no stray label.
+          %>
           <div class="recipe-summary-metadata" style="display: flex; gap: 1rem; flex-wrap: wrap; font-size: 0.875rem; color: var(--text-muted); margin-top: 0.5rem;">
             <% if (recipe.prep_time) { %>
-              <span>Prep: <%= recipe.prep_time %></span>
+              <span>Prep Time: <%= recipe.prep_time %></span>
             <% } %>
             <% if (recipe.cook_time) { %>
-              <span>Cook: <%= recipe.cook_time %></span>
+              <span>Cook Time: <%= recipe.cook_time %></span>
             <% } %>
             <% if (recipe.servings) { %>
-              <span><%= recipe.servings %> servings</span>
+              <span>Servings: <%= recipe.servings %></span>
             <% } %>
             <% if (recipe.difficulty) { %>
-              <span><%= recipe.difficulty %></span>
+              <span>Difficulty: <%= recipe.difficulty %></span>
             <% } %>
           </div>
 
@@ -94,9 +105,53 @@
             <button type="button" class="btn btn-outline meal-plan-add-btn<%= user ? '' : ' meal-plan-add-btn-guest' %>" data-recipe-id="<%= recipe.id %>" aria-label="<%= user ? 'Add to Meal Plan' : 'Log in to add to Meal Plan' %>">+ Meal Plan</button>
           </div>
           <% } else { %>
+          <%#
+            REW-86 owner-only Private/Public toggle. A plain form POST +
+            redirect rather than AJAX: flipping to Private must also disable
+            the favorite heart above (favorites require status = 'published'),
+            and a full re-render gets that consistency for free.
+
+            `visibility` carries the opposite of the current state and follows
+            the REW-85 private|public form convention; the server re-normalizes
+            it fail-closed, so a tampered value can only ever land on Private.
+
+            category/tags are round-tripped so the redirect can restore the
+            active filter. They are whitelisted field names on a hard-coded
+            /recipes path server-side -- no caller-supplied return URL is ever
+            accepted (see buildRecipesListPath in recipeRoutes.js).
+          %>
+          <form class="recipe-visibility-control" action="/recipes/<%= recipe.id %>/visibility" method="POST">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+            <input type="hidden" name="category" value="<%= typeof selectedCategory !== 'undefined' ? selectedCategory : '' %>">
+            <input type="hidden" name="tags" value="<%= typeof selectedTags !== 'undefined' ? selectedTags : '' %>">
+            <span class="recipe-visibility-label">Visibility</span>
+            <% if (recipe.status === 'published') { %>
+              <span class="badge-published badge-published-sm">Public</span>
+              <input type="hidden" name="visibility" value="private">
+              <button type="submit" class="btn btn-outline recipe-visibility-btn" aria-label="Make <%= recipe.title %> Private">Make Private</button>
+            <% } else { %>
+              <span class="badge-draft badge-draft-sm">Private</span>
+              <input type="hidden" name="visibility" value="public">
+              <button type="submit" class="btn btn-outline recipe-visibility-btn" aria-label="Make <%= recipe.title %> Public">Make Public</button>
+            <% } %>
+          </form>
+
           <!-- Action buttons -->
-          <div class="recipe-card-actions recipe-summary-actions" style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: auto; padding-top: 1rem; border-top: 1px solid var(--border-color);">
+          <%#
+            No `margin-top: auto` here on the owner branch: the visibility
+            control above carries it, so the control + actions sit together
+            at the bottom of the card instead of being split by the gap.
+          %>
+          <div class="recipe-card-actions recipe-summary-actions" style="display: flex; flex-wrap: wrap; gap: 0.5rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
             <button type="button" class="btn btn-outline meal-plan-add-btn<%= user ? '' : ' meal-plan-add-btn-guest' %>" data-recipe-id="<%= recipe.id %>" aria-label="<%= user ? 'Add to Meal Plan' : 'Log in to add to Meal Plan' %>" style="flex: 1; font-size: 0.875rem; padding: 0.5rem 1rem;">+ Meal Plan</button>
+            <button type="button" class="btn btn-outline cookbook-add-btn<%= user ? '' : ' cookbook-add-btn-guest' %>" data-recipe-id="<%= recipe.id %>" aria-label="<%= user ? 'Add to Cookbook' : 'Log in to add to Cookbook' %>" style="flex: 1; font-size: 0.875rem; padding: 0.5rem 1rem;">+ Cookbook</button>
+            <%#
+              REW-86 ships the Share control as a deliberately inert
+              placeholder: no href, no handler, no endpoint. Real sharing
+              behavior is owned by REW-18. It must never link to /r/:id,
+              which would be wrong (and misleading) for a Private recipe.
+            %>
+            <button type="button" class="btn btn-outline recipe-share-btn" disabled aria-disabled="true" title="Sharing is coming soon" aria-label="Share (coming soon)" style="flex: 1; font-size: 0.875rem; padding: 0.5rem 1rem;">Share</button>
             <a href="/recipes/<%= recipe.id %>/edit" class="btn btn-outline" style="flex: 1; text-align: center; font-size: 0.875rem; padding: 0.5rem 1rem;">Edit</a>
             <form action="/recipes/<%= recipe.id %>/delete" method="POST" style="margin: 0; flex: 1;" onsubmit="return confirm('Are you sure you want to delete this recipe? This action cannot be undone.');">
               <input type="hidden" name="_csrf" value="<%= csrfToken %>">

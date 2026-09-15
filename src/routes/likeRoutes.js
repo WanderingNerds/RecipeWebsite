@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { createSupabaseClient, supabase } from "../config/supabase.js";
 import rateLimit from "express-rate-limit";
+import { requireApiAuth } from "../middleware/authMiddleware.js";
 
 const router = Router();
 
@@ -17,32 +18,6 @@ const likeLimiter = rateLimit({
   // Skip IP-based validation since we use user ID
   validate: { xForwardedForHeader: false },
 });
-
-/**
- * API-specific auth middleware that returns JSON errors instead of redirecting
- */
-async function requireApiAuth(req, res, next) {
-  try {
-    const accessToken = req.cookies["sb-access-token"];
-
-    if (!accessToken) {
-      return res.status(401).json({ error: "Authentication required" });
-    }
-
-    const { data: { user }, error } = await supabase.auth.getUser(accessToken);
-
-    if (error || !user) {
-      return res.status(401).json({ error: "Invalid or expired session" });
-    }
-
-    req.user = user;
-    req.accessToken = accessToken;
-    next();
-  } catch (error) {
-    console.error("API auth error:", error);
-    res.status(500).json({ error: "Authentication error" });
-  }
-}
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

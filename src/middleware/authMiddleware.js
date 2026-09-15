@@ -134,3 +134,57 @@ export async function redirectIfAuthenticated(req, res, next) {
     next();
   }
 }
+
+/**
+ * Build an API-specific auth middleware that returns JSON errors instead of
+ * redirecting to the login page.
+ *
+ * REW-86: extracted from likeRoutes.js / mealPlanApiRoutes.js /
+ * cookbookApiRoutes.js, which each carried a verbatim copy. The 401 bodies
+ * are unchanged ({ error: "Authentication required" } with no token,
+ * { error: "Invalid or expired session" } for a rejected one) because
+ * client code branches on them.
+ *
+ * The auth client is injectable for the same reason createRequireAdmin's is:
+ * so the token paths can be unit tested without a live Supabase.
+ *
+ * @param {object} [options]
+ * @param {string} [options.logLabel] - prefix for the unexpected-error log,
+ *   so each mount point stays distinguishable in production logs.
+ * @param {object} [options.authClient] - Supabase client used to verify the
+ *   access token.
+ * @returns {Function} an Express middleware named `requireApiAuth`
+ */
+export function createRequireApiAuth({
+  logLabel = "API auth error:",
+  authClient = supabase,
+} = {}) {
+  return async function requireApiAuth(req, res, next) {
+    try {
+      const accessToken = req.cookies["sb-access-token"];
+
+      if (!accessToken) {
+        return res.status(401).json({ error: "Authentication required" });
+      }
+
+      const { data: { user }, error } = await authClient.auth.getUser(accessToken);
+
+      if (error || !user) {
+        return res.status(401).json({ error: "Invalid or expired session" });
+      }
+
+      req.user = user;
+      req.accessToken = accessToken;
+      next();
+    } catch (error) {
+      console.error(logLabel, error);
+      res.status(500).json({ error: "Authentication error" });
+    }
+  };
+}
+
+/**
+ * Default API auth middleware. Route files that want a distinct log label
+ * build their own instance with createRequireApiAuth.
+ */
+export const requireApiAuth = createRequireApiAuth();
