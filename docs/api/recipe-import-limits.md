@@ -51,6 +51,12 @@ is not implementable on this deployment target. A unit test asserts
 `MAX_IMPORT_FILE_SIZE_BYTES < 4.5 * 1024 * 1024` so the platform cap is encoded in the suite rather
 than only in a comment.
 
+REW-94 applied the same reasoning to the recipe **photo** path, which was still at 5MB — above the
+cap, and therefore unreachable in production between ~4.5MB and 5MB. It also moved the platform
+number itself into `src/config/functionLimits.js` as `VERCEL_MAX_REQUEST_BODY_BYTES`, so the two
+upload paths now pin themselves against one shared constant instead of repeating the literal. See
+[Recipe Photo Upload](recipe-photo-upload.md).
+
 ### Why the limit is per IP
 
 `express-rate-limit`'s default key is the client IP. Per-user keying via `req.user.id` was
@@ -177,9 +183,6 @@ through to the full import page.
   multi-page PDF can still reach the platform deadline and return an opaque timeout page. Same class
   of defect as REW-93, different parser — tracked in **REW-97**. The client's 502/503/504 fallback
   copy is the only mitigation today.
-- **Recipe photo uploads exceed the platform cap.** `imageUpload` in `src/routes/recipeRoutes.js`
-  allows 5MB, above Vercel's 4.5MB request cap. Pre-existing and out of scope for REW-43 — tracked
-  in **REW-94**.
 - **Decoded-pixel cap on the OCR path — addressed on branch, not yet merged.** Nothing on `main`
   bounds the decompressed pixel count of an uploaded image, so a decompression-bomb image remains a
   live risk in the deployed code. REW-43 raised the worst-case decode budget roughly tenfold, which
@@ -195,6 +198,8 @@ through to the full import page.
 ## Related documentation
 
 - [API Overview](README.md) — endpoint tables and the consolidated rate-limit table
+- [Recipe Photo Upload](recipe-photo-upload.md) — the same size/rate controls on the recipe photo
+  path, with a flash-and-redirect error contract instead of JSON (REW-94)
 - [Recipe Import Save API](recipe-import-save.md) — the `/save` step of the same flow
 - [OCR/PDF Text Parsing](recipe-import-ocr-parsing.md) — what happens after a file passes these gates
 - [REW-12 File Import plan](../plans/REW-12-file-import.md) — historical; its 2MB / 5-per-15-minutes

@@ -118,6 +118,7 @@ Pre-existing, untouched: `parseImage`'s `mimeType` parameter is still unused.
 
 - **[REW-93](https://wanderingnerds.atlassian.net/browse/REW-93)** — `OCR_TIMEOUT_MS` (30s) exceeds Vercel's `maxDuration: 10`, and `Promise.race` does not cancel the Tesseract worker; it only stops awaiting it, so orphaned work continues in the background. REW-95 meaningfully lowers the *cost* of that orphaned work (a capped, downscaled, grayscale bitmap is far cheaper to OCR) but does not fix cancellation or the timeout mismatch. Deliberately untouched.
 - **[REW-96](https://wanderingnerds.atlassian.net/browse/REW-96)** — the same decompression-bomb class on the recipe **photo** path: `generateThumbnail()` and `optimizeImage()` in `src/utils/imageUtils.js` call `sharp(imageBuffer)` with no `limitInputPixels`, behind a 5MB Multer cap in `src/routes/recipeRoutes.js`. Filed during this run rather than widening REW-95's scope.
+  *(Later note, 2026-09-15: that photo cap is 4MB as of REW-94, on branch `REW-94-recipe-image-upload-limit-vercel-cap`. The "5MB" above was accurate when this release note was written and is left as the point-in-time record. REW-96 itself is unaffected — an encoded-byte cap of any size does not bound the decoded bitmap.)*
 
 ---
 
