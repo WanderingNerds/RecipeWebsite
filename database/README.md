@@ -20,6 +20,7 @@ To set up the database in your Supabase project, follow these steps:
    | 1 | `001_create_recipes_table.sql` | Main recipes table |
    | 2 | `002_add_thumbnail_url.sql` | Thumbnail support |
    | 3 | `003_create_categories_table.sql` | Categories table with 10 pre-seeded categories |
+   | 3b | `003_add_recipe_search.sql` | Recipe full-text search: generated `tsvector` column, GIN + trigram indexes, published-recipe partial index, and the `search_recipes()` RPC (`STABLE`, `SECURITY INVOKER`) backing `GET /search` |
    | 4 | `004_create_tags_table.sql` | User-owned tags table |
    | 5 | `005_create_recipe_categories_table.sql` | Recipe-categories junction table |
    | 6 | `006_create_recipe_tags_table.sql` | Recipe-tags junction table |
@@ -35,6 +36,9 @@ To set up the database in your Supabase project, follow these steps:
    | 16 | `016_backfill_rew78_admin_profiles.sql` | Idempotently provision Andrew and Victoria's already-authorized admin profiles (REW-78) |
    | 17 | `017_add_feedback_progress_comments.sql` | Append-only, admin-only feedback progress history with durable author snapshots (REW-80) |
    | 18 | `018_add_recipe_clone_provenance.sql` | Immutable clone lineage and durable original-author attribution (REW-84) |
+   | 19 | `019_add_cookbook_sharing.sql` | Cookbook sharing: `cookbooks.is_public`, title search vector + indexes, two additive public SELECT policies, anon/authenticated grants, and the `search_cookbooks()` RPC (REW-19) |
+
+   **Note on the duplicated `003_` prefix.** Two files ship with a `003_` prefix — `003_create_categories_table.sql` and `003_add_recipe_search.sql`. This is a historical accident, not a pair of alternatives: **both must be run**, in the order shown above. Every migration from `004` onward uses a unique prefix. The search migration was previously missing from this table entirely; it is listed here as of REW-19.
 
 4. **Verify the Setup**
    - Go to "Table Editor" in the left sidebar
@@ -152,17 +156,21 @@ Consumed by `POST`/`DELETE`/`GET /api/likes/:recipeId` (`src/routes/likeRoutes.j
 
 ### cookbooks (REW-62)
 
-A private, per-user named collection of the owner's own recipes ("cookbooks"). Modeled directly on the `recipes` table pattern, minus the "published" public-read policy — cookbooks have no public/shared state in this ticket, which is what makes them private by default.
+A per-user named collection of the owner's own recipes ("cookbooks"). Modeled directly on the `recipes` table pattern. Private by default; REW-19 adds an opt-in Public state (see `is_public` below).
 
 | Column | Type | Description |
 |--------|------|--------------|
-| `id` | UUID | Primary Key |
+| `id` | UUID | Primary Key. Also serves as the public share-link identifier at `GET /c/:id` (REW-19) — there is no separate share token or slug |
 | `user_id` | UUID | Foreign Key to `auth.users` (owner) |
 | `title` | TEXT | Cookbook name; `NOT NULL` with a `CHECK` requiring non-empty content after trimming |
+| `is_public` | BOOLEAN | **REW-19.** `NOT NULL DEFAULT false`. `true` means the cookbook is readable by anyone at `GET /c/:id` **and** discoverable in site search. Written only by `POST /cookbooks/:id/visibility` |
+| `search_vector` | TSVECTOR | **REW-19.** `GENERATED ALWAYS AS (to_tsvector('english', coalesce(title, ''))) STORED`. Title-only today (cookbooks have no description column); a future description can be folded in without application changes |
 | `created_at` | TIMESTAMPTZ | Creation timestamp |
 | `updated_at` | TIMESTAMPTZ | Last update timestamp (auto-updated via the existing `update_updated_at_column()` trigger function, reused from `001_create_recipes_table.sql`) |
 
 A cookbook belongs to exactly one user. Deleting a cookbook never deletes the recipes in it — see "Cascade behavior" in Notes below.
+
+**`is_public` is the whole sharing model (REW-19).** There is no `cookbook_shares` table and no per-user grant: a cookbook is either Private (owner-only, the default and the state of every row that existed before migration 019) or Public (world-readable). Because visibility is read from this column on every request and never cached, flipping a cookbook back to Private revokes its share link on the very next request.
 
 ### cookbook_recipes (REW-62)
 
@@ -234,6 +242,24 @@ Migration 017 adds `feedback_progress_comments`, an append-only history keyed to
 
 ---
 
+## Search functions (RPCs)
+
+Both search RPCs are declared `LANGUAGE sql`, `STABLE`, **`SECURITY INVOKER`**, with `SET search_path = public, pg_temp`, and are granted `EXECUTE` to `anon` and `authenticated`. `SECURITY INVOKER` is deliberate and load-bearing: RLS stays the real visibility boundary, so the visibility filter inside each function body is defence in depth rather than the only thing standing between a visitor and private data. Neither function may be converted to `SECURITY DEFINER` without a fresh security review.
+
+### `search_recipes(search_query text, result_limit integer, result_offset integer)`
+
+Added by `003_add_recipe_search.sql`. Ranks published recipes by a generated `tsvector`, with an `ILIKE` partial-title fallback (LIKE metacharacters escaped) so a prefix like "week" still matches "Weeknight Dinner". Returns a `total_count` via `count(*) OVER ()` so the caller can paginate without a second query. Backs `GET /search`.
+
+### `search_cookbooks(search_query text, result_limit integer DEFAULT 5, result_offset integer DEFAULT 0)` (REW-19)
+
+Added by `019_add_cookbook_sharing.sql`. Same shape and same security posture as `search_recipes`, applied to **Public cookbooks only** (`is_public = true` in the function body, on top of the RLS policy). Returns `id`, `title`, `created_at`, `recipe_count`, `rank`, and `total_count`.
+
+`recipe_count` is computed with an explicit `recipes.status = 'published'` join predicate, so an owner searching their own Public cookbook sees the same count a stranger sees — without that predicate, the owner's broader RLS visibility would inflate the number with their own drafts. The count subquery runs in the outer `SELECT`, after `LIMIT`/`OFFSET`, so it evaluates once per returned row rather than once per matched row.
+
+`result_limit` is clamped to 1–50 and `result_offset` floored at 0, matching `search_recipes`. Callers (`GET /search`) request 5 with offset 0 and only on page 1.
+
+---
+
 ## Security
 
 All tables include Row Level Security (RLS) policies:
@@ -265,14 +291,23 @@ Migration 013 adds four SELECT policies and SELECT grants, with no table or colu
 - Like *counts* are exposed publicly via the `get_recipe_like_count()` `SECURITY DEFINER` function, independent of the row-level SELECT policy above
 - The API layer (`recipeExists()` in `src/routes/likeRoutes.js`), not RLS, is what restricts liking to `status = 'published'` recipes — RLS itself does not know about a recipe's status
 
-### cookbooks (REW-62)
-- SELECT/INSERT/UPDATE/DELETE all restricted to `user_id = auth.uid()` — a user can only view, create, rename, or delete their own cookbooks
-- **Deliberately no public/shared SELECT policy** — there is no policy under which a non-owner's `auth.uid()` satisfies any of the four policies above, so a cookbook is structurally private (a direct API/URL request or Supabase query for another user's cookbook ID returns nothing), not just hidden in the UI. REW-19 (cookbook sharing, out of scope for REW-62) would add sharing as an *additional* SELECT policy without reworking this migration.
+### cookbooks (REW-62, extended by REW-19)
+- SELECT/INSERT/UPDATE/DELETE all restricted to `user_id = auth.uid()` — a user can only view, create, rename, or delete their own cookbooks. Migration 019 leaves all four of these owner-only policies untouched.
+- **REW-19 adds one additional SELECT policy, `"Anyone can view public cookbooks"`** (`TO anon, authenticated`, `USING (is_public = true)`). Permissive policies are OR'd, so a Private cookbook remains visible only to its owner, and a Public one becomes readable by everyone. This is the opt-in exception REW-62's migration header anticipated; nothing else about cookbook privacy changed.
+- No new UPDATE policy was added for `is_public` — the existing "Users can update own cookbooks" policy already covers an owner writing a new column on a row they can update.
 
-### cookbook_recipes (REW-62)
+### cookbook_recipes (REW-62, extended by REW-19)
 - SELECT/DELETE restricted via a subquery to cookbooks owned by `auth.uid()` — only a cookbook's owner can see or remove its contents
 - INSERT requires **both** cookbook ownership **and** recipe ownership (a second `EXISTS` check against `recipes.user_id = auth.uid()`) — this is what enforces "add recipes from their own recipes" at the database layer, not just in application code; a user cannot add someone else's recipe (including another user's published recipe) into their own cookbook even if application code were buggy
 - No UPDATE policy needed — membership is insert/delete only, same reasoning as `recipe_likes`
+- **REW-19 adds one additional SELECT policy, `"Anyone can view recipes in public cookbooks"`** (`TO anon, authenticated`), gated on **two** `EXISTS` checks that must both hold: the parent cookbook is `is_public = true` **and** the referenced recipe has `status = 'published'`. Gating on the cookbook alone would not have been sufficient — a membership row itself carries `recipe_id` and `created_at`, so an anonymous PostgREST read of `cookbook_recipes?cookbook_id=eq.<public_id>` would have disclosed the count, UUIDs, and add-times of the owner's draft recipes even while the recipe rows themselves stayed hidden. The threat model here is the direct anon-key API read, not just the rendered page. This mirrors `013_public_recipe_card_metadata.sql`, which gates every public junction-edge policy on `recipes.status = 'published'`.
+- The owner's own `/cookbooks/:id` view is unaffected: the owner-only policy from 010 is a separate permissive policy, so an owner still sees every membership row, including those pointing at their drafts.
+- No RLS recursion risk: `cookbook_recipes` policies reference `cookbooks` and `recipes`; neither of those tables' policies reference `cookbook_recipes`.
+
+### Cookbook sharing grants (REW-19)
+- `GRANT SELECT ON public.cookbooks, public.cookbook_recipes TO anon, authenticated` — explicit rather than relying on Supabase default privileges, matching the pattern in `003_add_recipe_search.sql` and `013_public_recipe_card_metadata.sql`. The grant only permits the read to be *attempted*; RLS above remains the row-visibility boundary.
+- `GRANT EXECUTE ON FUNCTION public.search_cookbooks(text, integer, integer) TO anon, authenticated`.
+- **No grant, policy, or column on `recipes` was changed by migration 019.** The published/owner SELECT policy from `001` is precisely the mechanism the application relies on to keep drafts out of a shared cookbook, and it must stay as it is.
 
 ### meal_plans (REW-63)
 - SELECT/INSERT/UPDATE/DELETE all restricted to `user_id = auth.uid()` — a user can only view, create, rename/re-date, or delete their own meal plans
@@ -311,7 +346,12 @@ Performance indexes are created on:
 - `recipe_likes.recipe_id` - Fast like-count queries
 - `recipe_likes.user_id` - Fast "which recipes has this user liked" queries (My Recipes batch-fetch, Liked Recipes page)
 - `recipe_likes.created_at` (descending) - Sorting the Liked Recipes page by recency
+- `recipes.search_vector` (GIN) and `recipes.title` (GIN trigram) - Full-text and partial-title matching for `search_recipes()` (`003_add_recipe_search.sql`)
+- `recipes.created_at` (descending, partial `WHERE status = 'published'`) - Published-recipe listings
 - `cookbooks.user_id` - Fast "list this user's cookbooks" queries
+- `cookbooks.created_at` (descending, partial `WHERE is_public = true`) - Public-cookbook listings, newest first (REW-19; mirrors the published-recipe partial index)
+- `cookbooks.search_vector` (GIN) - Full-text title matching for `search_cookbooks()` (REW-19)
+- `cookbooks.title` (GIN trigram, `gin_trgm_ops`) - Partial-title `ILIKE` fallback in `search_cookbooks()` (REW-19). Migration 019 runs `CREATE EXTENSION IF NOT EXISTS pg_trgm`, already enabled by `003_add_recipe_search.sql`
 - `cookbook_recipes.cookbook_id` - Fast "recipes in this cookbook" lookups
 - `cookbook_recipes.recipe_id` - Fast "which cookbooks contain this recipe" lookups (recipe view's "Save to Cookbook(s)" widget)
 - `meal_plans.user_id` - Fast "list this user's meal plans" queries
@@ -339,6 +379,8 @@ Performance indexes are created on:
 - `recipe_likes` rows can only exist for `status = 'published'` recipes going forward — the API's `POST /api/likes/:recipeId` handler checks status before inserting — but this is enforced in the application layer, not by a database constraint or trigger. If a published recipe with existing likes is later reverted to draft, its `recipe_likes` rows are **not** automatically removed; the API's read paths (My Recipes card state, `/recipes/liked`, the detail page) still reflect them, they just can't be created fresh against a draft recipe. This edge case (draft-after-published-with-likes) was not in scope for REW-55 or REW-21 — flagging as a known gap, not a bug in either ticket.
 - **Cookbook cascade behavior (REW-62):** deleting a cookbook (`ON DELETE CASCADE` on `cookbook_recipes.cookbook_id`) removes only its `cookbook_recipes` membership rows — it never touches `recipes`, satisfying "delete a cookbook without deleting the recipes in it." Deleting a recipe (existing `POST /recipes/:id/delete`, unchanged by REW-62) cascades via `ON DELETE CASCADE` on `cookbook_recipes.recipe_id` and silently removes it from any cookbooks it was in. This is the same junction-table behavior `recipe_categories`/`recipe_tags` already have, and is intentional, not a regression.
 - Cookbooks have no publish/draft state and can contain a mix of the owner's draft and published recipes — cookbook membership is independent of a recipe's `status`. Both a recipe's own draft/published lifecycle and its cookbook membership can change independently of each other.
+- **Cookbook sharing and draft privacy (REW-19):** `cookbooks.is_public` is a cookbook-level flag only. Setting it never reads or writes any recipe's `status`, never adds or removes membership rows, and never changes cookbook delete/cascade behavior. Because a Public cookbook can still contain the owner's drafts, the application reads `/c/:id` and its recipes exclusively through the **anon-key** Supabase client, where `auth.uid()` is null and the `recipes` SELECT policy from `001` therefore returns published rows only. An explicit `status = 'published'` predicate in the query and in the `cookbook_recipes` policy are defence in depth on top of that. A deliberate consequence: a Public cookbook whose recipes are all Private renders as an empty cookbook, with an empty state that must not hint that hidden recipes exist.
+- **REW-19 deployment:** apply migration 019 after 018. It is additive and has no backfill — every existing cookbook is Private afterwards because `is_public` is `NOT NULL DEFAULT false`. No environment variable, package, or Vercel configuration change is required. **This migration has not been applied to any live Supabase project by the pipeline run that produced it, and QA was not run** — the live RLS/grant checks (anonymous and cross-user reads of a Private cookbook's rows, and of a Public cookbook's draft membership edges) remain unverified.
 - **Meal plan cascade behavior (REW-63):** deleting a meal plan (`ON DELETE CASCADE` on `meal_plan_recipes.meal_plan_id`) removes only its `meal_plan_recipes` membership rows — it never touches `recipes`, satisfying "deleting a meal plan does not delete any recipes." Deleting a recipe cascades via `ON DELETE CASCADE` on `meal_plan_recipes.recipe_id` and silently removes it from any meal plans (and cookbooks) it was in — the same junction-table behavior as `cookbook_recipes`, intentional and not a regression.
 - Meal plans can contain a mix of the owner's own draft and published recipes, **and** any other user's published recipes — meal plan membership does not require recipe ownership, unlike cookbook membership. If a recipe added to someone else's plan while published is later reverted to draft by its owner, existing `meal_plan_recipes` rows referencing it are **not** automatically removed (same known-gap pattern already documented above for `recipe_likes`); this edge case was not in scope for REW-63.
 - `meal_plan_recipes.planned_servings` is schema-only in this ticket (REW-63) — no route or view reads or writes it yet. It exists purely so REW-26 (grocery list generation) can be built on top of `meal_plans`/`meal_plan_recipes` without a further migration.
@@ -369,6 +411,21 @@ DROP TABLE IF EXISTS cookbooks;
 ```
 
 **Warning:** This permanently deletes all cookbooks and cookbook-recipe associations. Recipes themselves are unaffected.
+
+To remove **only** cookbook sharing (REW-19), leaving cookbooks themselves intact:
+
+```sql
+DROP FUNCTION IF EXISTS public.search_cookbooks(text, integer, integer);
+DROP POLICY IF EXISTS "Anyone can view recipes in public cookbooks" ON public.cookbook_recipes;
+DROP POLICY IF EXISTS "Anyone can view public cookbooks" ON public.cookbooks;
+DROP INDEX IF EXISTS idx_cookbooks_title_trgm;
+DROP INDEX IF EXISTS idx_cookbooks_search_vector;
+DROP INDEX IF EXISTS idx_cookbooks_public_created;
+ALTER TABLE cookbooks DROP COLUMN IF EXISTS search_vector;
+ALTER TABLE cookbooks DROP COLUMN IF EXISTS is_public;
+```
+
+This returns cookbooks to REW-62 (owner-only) behavior with no data loss — every cookbook and every membership row survives; only the sharing state is discarded. Any share links handed out beforehand stop working. The application's `GET /c/:id`, `POST /cookbooks/:id/visibility`, and the search page's Cookbooks section must be removed or disabled alongside it, or they will error.
 
 To remove the meal plans feature (REW-63, if needed):
 

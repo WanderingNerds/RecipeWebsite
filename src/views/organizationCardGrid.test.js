@@ -10,6 +10,7 @@ const organizationViews = [
   'views/recipes/liked.ejs',
   'views/cookbooks/index.ejs',
   'views/cookbooks/view.ejs',
+  'views/cookbooks/public-view.ejs',
   'views/meal-plans/index.ejs',
   'views/meal-plans/view.ejs',
 ];

@@ -43,6 +43,9 @@ async function hasUserLiked(supabaseClient, recipeId) {
 
 const PAGE_SIZE = 12;
 const MAX_QUERY_LENGTH = 100;
+// Cookbooks are a secondary result surface on a recipe site: a small capped
+// section, not a paginated one. Recipes keep full pagination.
+const COOKBOOK_RESULT_LIMIT = 5;
 
 // Columns safe to expose on a listing. Body fields (instructions, notes) are
 // only loaded on the detail page.
@@ -77,6 +80,7 @@ router.get("/search", async (req, res, next) => {
         title: "Search Recipes",
         query: "",
         recipes: [],
+        cookbooks: [],
         page: 1,
         totalPages: 0,
         totalCount: 0,
@@ -99,10 +103,41 @@ router.get("/search", async (req, res, next) => {
     // The window function returns the same total on every row
     const totalCount = recipes.length > 0 ? Number(recipes[0].total_count) : 0;
 
+    // REW-19: Public cookbooks are a bonus discovery surface. Reuse the same
+    // already-trimmed/capped `query` rather than re-reading req.query.q.
+    //
+    // The section is a single capped set shown once, on the first page of
+    // recipe results -- it is not paginated alongside the recipe grid. Paging
+    // deeper into recipes would otherwise re-run the same offset-0 query and
+    // repeat the identical five cookbooks on every page, so skip the RPC
+    // entirely past page 1.
+    //
+    // Degrade silently on failure -- a cookbook-search outage must not take
+    // recipe search down with it, so no flash/redirect here.
+    let cookbooks = [];
+
+    if (page === 1) {
+      const { data: cookbookData, error: cookbookError } = await supabase.rpc(
+        "search_cookbooks",
+        {
+          search_query: query,
+          result_limit: COOKBOOK_RESULT_LIMIT,
+          result_offset: 0,
+        }
+      );
+
+      if (cookbookError) {
+        console.error("Error searching cookbooks:", cookbookError);
+      } else {
+        cookbooks = cookbookData ?? [];
+      }
+    }
+
     res.render("recipes/search", {
       title: `Search: ${query}`,
       query,
       recipes,
+      cookbooks,
       page,
       totalPages: Math.ceil(totalCount / PAGE_SIZE),
       totalCount,
@@ -195,6 +230,84 @@ router.get("/r/:id", async (req, res, next) => {
       isOwner: req.user?.id === recipe.user_id,
       likeCount,
       isLiked,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * REW-19: fetch the recipes in a Public cookbook for an anonymous visitor.
+ *
+ * Deliberately NOT a reuse of getCookbookRecipes() in cookbookRoutes.js --
+ * that helper is module-private and takes an owner-scoped client. This one
+ * always runs on the module-level anon `supabase` client, where auth.uid()
+ * is null, so the recipes SELECT policy from migration 001 returns published
+ * rows only. That is the actual guarantee that a draft recipe sitting in a
+ * Public cookbook never reaches a visitor -- including the owner viewing
+ * their own share link.
+ *
+ * The !inner embed drops membership rows whose recipe is RLS-invisible
+ * instead of returning them with a null recipe, and the explicit status
+ * predicate is defence in depth on top of RLS, mirroring GET /r/:id.
+ */
+async function getPublicCookbookRecipes(cookbookId) {
+  const { data, error } = await supabase
+    .from("cookbook_recipes")
+    .select(
+      "created_at, recipes!inner(id, title, author, prep_time, cook_time, servings, difficulty, thumbnail_url, created_at)"
+    )
+    .eq("cookbook_id", cookbookId)
+    .eq("recipes.status", "published")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("Error loading public cookbook recipes:", error);
+    return [];
+  }
+
+  // Defensive: a recipe deleted in the same instant as this query could still
+  // yield a null embed, same race getCookbookRecipes() guards against.
+  return (data || []).map((row) => row.recipes).filter(Boolean);
+}
+
+// GET /c/:id - Public read-only view of a shared cookbook (REW-19)
+router.get("/c/:id", async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    // Postgres rejects a malformed uuid outright, so screen it here
+    if (!UUID_PATTERN.test(id)) {
+      return renderNotFound(res, "That cookbook doesn't exist or isn't shared.");
+    }
+
+    const { data: cookbook, error } = await supabase
+      .from("cookbooks")
+      .select("id, title, created_at")
+      .eq("id", id)
+      .eq("is_public", true)
+      .maybeSingle();
+
+    if (error) {
+      console.error("Error loading public cookbook:", error);
+      return next(error);
+    }
+
+    // A Private cookbook and a nonexistent one must be indistinguishable from
+    // out here: same status, same message, same template, no extra query on
+    // either branch.
+    if (!cookbook) {
+      return renderNotFound(res, "That cookbook doesn't exist or isn't shared.");
+    }
+
+    const recipes = await getPublicCookbookRecipes(id);
+
+    // No owner-scoped client is ever constructed in this handler, and the page
+    // is unconditionally read-only -- there is no isOwner branch to get wrong.
+    res.render("cookbooks/public-view", {
+      title: cookbook.title,
+      cookbook,
+      recipes,
     });
   } catch (error) {
     next(error);

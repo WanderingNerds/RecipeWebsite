@@ -1,6 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { validateCookbookTitle, normalizeRecipeIdSelection } from "./cookbookUtils.js";
+import {
+  validateCookbookTitle,
+  normalizeRecipeIdSelection,
+  normalizeCookbookVisibility,
+  COOKBOOK_VISIBILITY,
+} from "./cookbookUtils.js";
 
 test("validateCookbookTitle: accepts and trims a normal title", () => {
   const result = validateCookbookTitle("  Weeknight Dinners  ");
@@ -77,4 +82,51 @@ test("normalizeRecipeIdSelection: drops malformed, blank, and non-string entries
 test("normalizeRecipeIdSelection: is case-insensitive for UUID hex digits", () => {
   const upper = "3FA85F64-5717-4562-B3FC-2C963F66AFA6";
   assert.deepEqual(normalizeRecipeIdSelection(upper), [upper]);
+});
+
+// REW-19: cookbook sharing. This helper is the only thing standing between a
+// malformed submission and an accidentally-shared cookbook, so it must fail
+// closed to Private on everything except the exact literal "public".
+
+test("normalizeCookbookVisibility: the literal \"public\" is the only value that shares a cookbook", () => {
+  assert.equal(normalizeCookbookVisibility("public"), true);
+  assert.equal(normalizeCookbookVisibility(COOKBOOK_VISIBILITY.PUBLIC), true);
+});
+
+test("normalizeCookbookVisibility: Private stays Private", () => {
+  assert.equal(normalizeCookbookVisibility("private"), false);
+  assert.equal(normalizeCookbookVisibility(COOKBOOK_VISIBILITY.PRIVATE), false);
+});
+
+test("normalizeCookbookVisibility: missing, malformed, and non-string values fail closed to Private", () => {
+  for (const value of [
+    undefined,
+    null,
+    "",
+    "   ",
+    "PUBLIC",
+    "Public",
+    " public",
+    "public ",
+    "true",
+    "published",
+    true,
+    1,
+    0,
+    ["public"],
+    ["public", "private"],
+    { visibility: "public" },
+    () => "public",
+  ]) {
+    assert.equal(
+      normalizeCookbookVisibility(value),
+      false,
+      `${JSON.stringify(value) ?? String(value)} must fail closed to Private`
+    );
+  }
+});
+
+test("COOKBOOK_VISIBILITY matches the REW-85 private|public form convention and is frozen", () => {
+  assert.deepEqual({ ...COOKBOOK_VISIBILITY }, { PRIVATE: "private", PUBLIC: "public" });
+  assert.equal(Object.isFrozen(COOKBOOK_VISIBILITY), true);
 });

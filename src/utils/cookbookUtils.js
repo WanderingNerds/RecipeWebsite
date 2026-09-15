@@ -13,6 +13,17 @@ const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
+ * The two cookbook visibility states, using the same Private/Public
+ * vocabulary and the same `name="visibility"` form-field convention that
+ * RECIPE_VISIBILITY established for recipes in REW-85. Cookbooks store this
+ * as a boolean (`cookbooks.is_public`) rather than a status string.
+ */
+export const COOKBOOK_VISIBILITY = Object.freeze({
+  PRIVATE: "private",
+  PUBLIC: "public",
+});
+
+/**
  * Validate and normalize a cookbook title submitted from a form.
  *
  * Enforces the same "non-empty after trimming" rule as the DB CHECK
@@ -81,4 +92,23 @@ export function normalizeRecipeIdSelection(input) {
   }
 
   return normalized;
+}
+
+/**
+ * Normalize a cookbook visibility value submitted from a form into the
+ * boolean stored in `cookbooks.is_public`.
+ *
+ * Follows the REW-85 form convention (`name="visibility"` with values
+ * "private"/"public") established by normalizeRecipeVisibility() in
+ * recipeVisibility.js, and shares its fail-closed posture: only the exact
+ * string "public" produces a Public cookbook. An array (duplicate form
+ * fields), a missing value, a differently-cased value, or any non-string
+ * all resolve to Private, so a malformed or forged submission can never
+ * accidentally share a cookbook.
+ *
+ * @param {*} value - raw value from req.body.visibility
+ * @returns {boolean} true only for the literal string "public"
+ */
+export function normalizeCookbookVisibility(value) {
+  return value === COOKBOOK_VISIBILITY.PUBLIC;
 }

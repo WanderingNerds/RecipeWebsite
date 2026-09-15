@@ -1,0 +1,55 @@
+<%#
+  REW-19: read-only view of a shared (Public) cookbook.
+
+  This page is read-only for EVERYONE, including the owner opening their own
+  share link -- there is intentionally no isOwner branch and no mutation form
+  anywhere in this template, so there is nothing here to get wrong.
+
+  The recipes handed to this template come from the anon-key Supabase client,
+  so RLS has already removed the owner's Private (draft) recipes. Nothing here
+  may hint that hidden recipes exist -- no "n hidden" counter, no placeholder.
+%>
+<div class="container" style="max-width: 1200px; padding: 2rem 1rem;">
+
+  <div style="margin-bottom: 2rem;">
+    <a href="/browse" style="color: var(--primary-color); text-decoration: none; display: inline-flex; align-items: center; margin-bottom: 1rem;">
+      &larr; Browse recipes
+    </a>
+
+    <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: start; gap: 1rem; margin-bottom: 1rem;">
+      <div>
+        <h1 style="margin-bottom: 0.5rem;"><%= cookbook.title %></h1>
+        <p style="color: var(--text-muted);">
+          <%= recipes.length %> recipe<%= recipes.length !== 1 ? 's' : '' %>
+        </p>
+      </div>
+      <span class="cookbook-visibility-badge cookbook-visibility-public">Shared cookbook</span>
+    </div>
+  </div>
+
+  <% if (recipes.length === 0) { %>
+    <div class="empty-state">
+      <h3>Nothing to see here yet</h3>
+      <p>This cookbook doesn&rsquo;t have any Public recipes yet.</p>
+      <a href="/browse" class="btn btn-outline">Browse all recipes</a>
+    </div>
+  <% } else { %>
+    <div class="organization-card-grid">
+      <% recipes.forEach(recipe => { %>
+        <%- include('../partials/recipe-card', { recipe }) %>
+      <% }); %>
+    </div>
+  <% } %>
+
+  <% if (typeof user === 'undefined' || !user) { %>
+    <div class="signup-cta">
+      <h3>Want to build a cookbook like this?</h3>
+      <p>Create a free account to collect your own recipes and share them.</p>
+      <div class="signup-cta-actions">
+        <a href="/auth/register" class="btn btn-primary">Sign Up</a>
+        <a href="/auth/login" class="btn btn-outline">Login</a>
+      </div>
+    </div>
+  <% } %>
+
+</div>
