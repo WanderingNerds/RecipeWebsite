@@ -13,6 +13,7 @@ const organizationViews = [
   'views/cookbooks/public-view.ejs',
   'views/meal-plans/index.ejs',
   'views/meal-plans/view.ejs',
+  'views/meal-plans/public-view.ejs',
 ];
 
 test('all personal-organization card collections use the shared grid contract', async () => {

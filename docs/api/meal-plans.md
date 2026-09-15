@@ -1,7 +1,7 @@
-# Meal Plans (REW-63)
+# Meal Plans (REW-63, REW-69)
 
-**Feature:** REW-63 — Create and Manage Meal Plans
-**Component:** `src/routes/mealPlanRoutes.js`, `src/routes/mealPlanApiRoutes.js`, `src/utils/mealPlanUtils.js`, `views/meal-plans/*.ejs`, `views/partials/meal-plan-modal.ejs`, `public/js/meal-plans.js`, `database/migrations/011_create_meal_plans_table.sql`, `database/migrations/012_create_meal_plan_recipes_table.sql`
+**Feature:** REW-63 — Create and Manage Meal Plans; REW-69 — Add Meal Plan Sharing
+**Component:** `src/routes/mealPlanRoutes.js`, `src/routes/mealPlanApiRoutes.js`, `src/routes/publicRoutes.js` (REW-69 public surface), `src/utils/mealPlanUtils.js`, `views/meal-plans/*.ejs`, `views/partials/meal-plan-modal.ejs`, `public/js/meal-plans.js`, `public/js/meal-plan-share.js`, `database/migrations/011_create_meal_plans_table.sql`, `database/migrations/012_create_meal_plan_recipes_table.sql`, `database/migrations/020_add_meal_plan_sharing.sql`
 **Also covers:** REW-26 — Grocery list generation (`src/utils/groceryList.js`, `views/meal-plans/grocery-list.ejs`)
 **Last Updated:** 2026-09-14
 
@@ -11,7 +11,9 @@
 
 A meal plan is a private, per-user named collection of recipes scoped to a required start/end date range — in contrast to [Cookbooks](cookbooks.md) (REW-62), which are open-ended, undated collections. A meal plan belongs to exactly one user, requires a title and a valid date range (`end_date >= start_date`), and can hold any number of recipes; a single recipe can belong to any number of meal plans (and independently, any number of cookbooks — the two features don't interact). Users can create, rename/re-date, and delete meal plans (deleting a plan never deletes its recipes), and can add/remove recipes from a plan independently of the recipe's own draft/published lifecycle.
 
-Meal plans are **private by default and not visible or accessible to any other user** — there is no public/shared read policy on the `meal_plans` table, enforced at the database (RLS) layer, not just by hiding links in the UI.
+Meal plans are **private by default**, enforced at the database (RLS) layer rather than by hiding links in the UI. As of **REW-69**, an owner can additionally flip one plan at a time to **Public**, which makes it readable by anyone at `GET /m/:id`. Private remains the default for every new plan and for every plan that existed before migration `020`.
+
+Unlike Public cookbooks, a Public meal plan is **link-only**: it is never surfaced in site search. See "Public surfaces (REW-69)" below for why.
 
 **Key structural difference from Cookbooks:** Cookbooks only ever let an owner add their own recipes. This feature requires an "Add to Meal Plan" action on recipe cards and pages generally — including `/browse`, `/search`, and `/recipes/liked`, which display other users' published recipes. So a meal plan can contain **the owner's own recipe (any status) or any other user's *published* recipe** — the same visibility rule already used by `recipe_likes`. This rule is enforced at the RLS layer, not just in route handlers.
 
@@ -48,7 +50,7 @@ Creates a meal plan owned by the current user.
 
 ### `GET /meal-plans/:id`
 
-Meal plan detail: title, date range, and all recipes currently in it (most recently added first). Ownership is checked via `getOwnedMealPlan()` (`.eq("user_id", ...)` filter, belt-and-suspenders with the RLS policy itself) — a plan that doesn't exist, or belongs to another user, renders identically as "Meal plan not found" and redirects to `/meal-plans`, never leaking whether the ID exists.
+Meal plan detail: title, date range, and all recipes currently in it (most recently added first). As of REW-69 the render locals also include `appUrl: getAppUrl()` (`src/utils/authUtils.js`), used to build the share URL — never `req.headers.host` or `X-Forwarded-Host`. Ownership is checked via `getOwnedMealPlan()` (`.eq("user_id", ...)` filter, belt-and-suspenders with the RLS policy itself) — a plan that doesn't exist, or belongs to another user, renders identically as "Meal plan not found" and redirects to `/meal-plans`, never leaking whether the ID exists.
 
 ### `GET /meal-plans/:id/grocery-list` (REW-26)
 
@@ -69,6 +71,32 @@ Renders the rename/re-date form (`views/meal-plans/edit.ejs`) for an owned plan.
 ### `POST /meal-plans/:id/update`
 
 Renames and/or re-dates a meal plan. Same title/date-range validation as create. Ownership is enforced by an explicit `.eq("user_id", req.user.id)` filter on the update, in addition to the RLS UPDATE policy.
+
+### `POST /meal-plans/:id/visibility` (REW-69)
+
+Switches a meal plan between Private and Public. Owner-only.
+
+**Middleware:** `requireAuth`, then the existing `mealPlanLimiter` (30 requests/minute per user — no new limiter was added). Global CSRF protection applies; the form must carry a valid `_csrf` token.
+
+**Request:** `application/x-www-form-urlencoded`
+
+| Field | Values | Notes |
+|-------|--------|-------|
+| `_csrf` | token | Required. There is no CSRF exemption for this route |
+| `visibility` | `private` \| `public` | Follows the REW-85 recipe-visibility form convention. **Fails closed:** only the exact lowercase string `public` produces a Public meal plan |
+
+`visibility` is normalized by `normalizeMealPlanVisibility()` (`src/utils/mealPlanUtils.js`, alongside the exported frozen `MEAL_PLAN_VISIBILITY` constant) into the boolean stored in `meal_plans.is_public`. A missing field, an array (duplicated form inputs), a differently-cased value such as `PUBLIC`, the string `true`, `"published"`, a number, or an object all resolve to Private. A malformed or forged submission therefore cannot accidentally share a plan. The route does **not** accept a raw `isPublic=true|false`.
+
+**Behavior:**
+- `:id` is screened against the file's `UUID_PATTERN` before any query runs; a malformed ID flashes "Meal plan not found" and redirects to `/meal-plans` without touching the database.
+- The update is filtered on **both** `.eq("id", id)` and `.eq("user_id", req.user.id)` in application code, in addition to the RLS UPDATE policy — the belt-and-suspenders convention used by the rename and delete handlers. A non-existent plan and someone else's plan produce the same user-facing failure, so neither can be probed for.
+- A genuine database error and a not-found/not-owned result (`data === null`, `error === null`) are logged differently — only the former is logged as a database failure — but produce an identical flash message.
+
+**Response:** redirect to `/meal-plans/:id` with a flash message using Private/Public wording, never draft/published: *"This meal plan is now Public. Anyone with the link can view it."* or *"This meal plan is now Private. Its share link no longer works."*
+
+**Side effects it deliberately does not have:** it never writes `recipes.status`, never adds or removes `meal_plan_recipes` rows, never alters `start_date`/`end_date`, and never touches any other meal plan.
+
+The handler is exported as `handleMealPlanVisibilityUpdate(req, res, { createClient })` with an injectable Supabase client factory — the first named export in `mealPlanRoutes.js` — following the `handleCookbookVisibilityUpdate` precedent, so it can be unit-tested with a fake query builder.
 
 ### `POST /meal-plans/:id/delete`
 
@@ -93,11 +121,65 @@ Removes a recipe from a meal plan (deletes the `meal_plan_recipes` row only — 
 
 ---
 
+## Public surface (REW-69) — `src/routes/publicRoutes.js`
+
+This route is **unauthenticated**. Every query on it runs on the module-level **anon-key** Supabase client exported from `src/config/supabase.js` — never `createSupabaseClient(req.accessToken)`, never `req.cookies["sb-access-token"]`, and never any owner-scoped client, even when the person viewing is the plan's own owner. That is not a stylistic preference: under the anon key `auth.uid()` is null, so the `recipes` SELECT policy from migration `001` (owner **or** `status = 'published'`) can only ever return published recipes. Private-recipe privacy in a shared plan is therefore structural, not a filter a future edit could forget.
+
+The route is covered by the production-only `generalLimiter` in `src/app.js`, like every other public GET. `publicRoutes` is already mounted at `/` in `src/routes/index.js`, so no registration change was needed.
+
+### `GET /m/:id`
+
+Read-only public view of a Public meal plan. The plan's own UUID is the share identifier — there is no share token, slug, or `meal_plan_shares` table, matching the existing precedent at `GET /r/:id` (recipes) and `GET /c/:id` (cookbooks).
+
+**Auth:** none. Results are identical whether or not the visitor is signed in, and identical for the owner.
+
+**Behavior:**
+1. `:id` is screened against the file's UUID pattern; a malformed ID short-circuits to the not-found render without a query.
+2. The plan is fetched with `.eq("id", id).eq("is_public", true)`, selecting only `id, title, start_date, end_date`. `user_id` is deliberately **not** selected — it has no business being handed to the template.
+3. Its recipes are fetched by the module-local `getPublicMealPlanRecipes(mealPlanId)` helper from `meal_plan_recipes`, with an **inner-join embed** (`recipes!inner(id, title, author, prep_time, cook_time, servings, difficulty, thumbnail_url, created_at)`) plus an explicit `.eq("recipes.status", "published")`. The inner join drops membership rows whose recipe is RLS-invisible instead of returning them with a null embed; any null embed that still slips through (a delete racing the query) is filtered out defensively. Ordering is by the membership row's `created_at` descending, matching the owner view's `getMealPlanRecipes()`. A query error is logged and returns `[]` rather than failing the page.
+4. Renders `views/meal-plans/public-view.ejs` with `{ title, mealPlan, recipes }`.
+
+**Responses:**
+
+| Case | Response |
+|------|----------|
+| Public plan exists | 200, read-only page: title, formatted start–end date range, visible recipe count, published-recipe cards linking to `/r/:id` |
+| Public plan with no published recipes | 200, neutral empty state ("This meal plan doesn't include any Public recipes yet.") — deliberately no "n hidden" counter |
+| Plan is Private | **404**, `views/error.ejs`, message "That meal plan doesn't exist or isn't shared." |
+| Plan does not exist | **404**, identical status, template, and message |
+| `:id` is malformed | **404**, identical status, template, and message |
+
+The three 404 cases are intentionally indistinguishable — same status, same template, same string, and **no second query on the not-found branch** that could be timed — so a Private plan's existence can never be probed.
+
+**The page is read-only for everyone, including the owner.** There is no `isOwner` branch, no `<form>`, no `_csrf`, and no mutation affordance anywhere in the template — no edit, rename, re-date, delete, add-recipe, remove-from-plan, or grocery-list control. That is why the handler never needs to construct an owner-scoped client. Signed-out visitors additionally see a sign-up call to action.
+
+### Deliberate divergence from cookbook sharing: no search discoverability
+
+REW-19 made a Public cookbook both linkable **and** discoverable via the `search_cookbooks` RPC on `/search`. REW-69 deliberately does **not** do the equivalent for meal plans:
+
+- No `search_meal_plans` RPC, no `tsvector` column, no GIN/trigram index, no partial index.
+- No change to `GET /search` or `views/recipes/search.ejs`.
+
+A meal plan is a time-boxed personal schedule ("Week of Sept 20"), not browsable content. Indexing strangers' meal plans into a recipe search would be noise for searchers and a privacy surprise for owners, and the ticket asks only that another person can easily see what meals are planned. If discoverability is wanted later, it is a straightforward follow-up modeled on `search_cookbooks` — but it needs its own ticket and its own privacy decision.
+
+---
+
+## Owner-facing UI (REW-69)
+
+- **`views/meal-plans/view.ejs`** — a labelled plan-level visibility control (`.meal-plan-visibility-control`) in the existing header action row: a Private/Public state badge plus a "Make Public"/"Make Private" submit, posting `_csrf` and a `visibility` hidden field. It is deliberately structured as a labelled control with its own `.meal-plan-visibility-*` classes rather than reusing the per-recipe `badge-draft`/`badge-published` pills on the cards below, so "this plan is Public" cannot be misread as "this recipe is Public."
+- When the plan is Public, a `.meal-plan-share-panel` shows the full URL `<APP_URL>/m/<id>` in a readonly input with a **Copy link** button and an `aria-live` feedback span (`data-meal-plan-share*` hooks).
+- **Share URL origin comes from `getAppUrl()`** (`src/utils/authUtils.js`, the REW-57 helper), passed in by the route as the `appUrl` local — never from `req.headers.host` or `X-Forwarded-Host`. This string exists to be copied and re-shared by a human, so a header-derived origin would be a ready-made phishing vector. Both new locals are `typeof`-guarded (`mealPlan.is_public && typeof appUrl !== 'undefined' && appUrl`) so `src/views/recipeCard.test.js` and `src/views/groceryList.test.js`, which render this template directly with fixed fixtures, keep passing.
+- **`public/js/meal-plan-share.js`** — the Copy-link handler only, loaded with a page-local `<script src>` tag at the bottom of the view (not added to `views/layouts/main.ejs`). Uses `navigator.clipboard.writeText` with a visible confirmation and a select-the-text fallback when the Clipboard API is missing, blocked, or the page is not a secure context. CSP is `script-src 'self'`; there are no inline handlers, no inline script bodies, and no CSP changes. It is a deliberate ~45-line near-copy of `public/js/cookbook-share.js` rather than a generalization, to avoid editing a file whose contents three `cookbookSharing.test.js` assertions pin.
+- **`views/meal-plans/index.ejs`** — a small Public marker next to the existing recipe-count badge on shared plans, so an owner can see at a glance which plans are out in the world. Guarded on falsy/absent `is_public` so plans created before migration `020` render without `undefined`.
+- **`public/css/styles.css`** — `.meal-plan-visibility-*` and `.meal-plan-share-*` classes, grouped with their `.cookbook-*` equivalents so the visual language is identical.
+
+---
+
 ## JSON API (`src/routes/mealPlanApiRoutes.js`, mounted at `/api/meal-plans`)
 
 Backs the shared "Add to Meal Plan" modal (`views/partials/meal-plan-modal.ejs`, `public/js/meal-plans.js`), which is included once in the main layout and opened from a `.meal-plan-add-btn` on a recipe card, the owner's recipe view page (`/recipes/:id`), or the public recipe page (`/r/:id`) — for **any authenticated viewer**, not just the recipe's owner (unlike Cookbooks' "Save to Cookbook(s)" widget, which is owner-only).
 
-Every route in this file requires auth via a local `requireApiAuth` helper (duplicated from `likeRoutes.js`'s helper, per this repo's per-route-file convention) that returns a JSON `401` rather than redirecting — **there is no anonymous-GET case here**, unlike `likeRoutes.js`, because meal plans have no public/shared read at all.
+Every route in this file requires auth via a local `requireApiAuth` helper (duplicated from `likeRoutes.js`'s helper, per this repo's per-route-file convention) that returns a JSON `401` rather than redirecting — **there is no anonymous-GET case here**, unlike `likeRoutes.js`. REW-69 did not change that: this JSON API is entirely owner-scoped, and the public read of a shared plan lives only at `GET /m/:id` in `publicRoutes.js`. Making a plan Public grants no access to any `/api/meal-plans/*` route.
 
 Mutation routes (`POST`/`DELETE`) share a per-user rate limiter (`mealPlanApiLimiter`): **30 requests/minute, keyed on `req.user.id`**, mirroring `likeLimiter`.
 
@@ -169,10 +251,29 @@ This is a client-side/render-only integration — no new fields were added to an
 - **Auth:** Every `/meal-plans*` page route requires `requireAuth` (redirects to login); every `/api/meal-plans*` route requires the local `requireApiAuth` (JSON `401`), consistent with `/recipes*`/`/cookbooks*` and `/api/likes*` respectively.
 - **Authorization:** Double-layered on every route — RLS (`createSupabaseClient(req.accessToken)`, which runs queries as the authenticated user) **and** an explicit `.eq("user_id", req.user.id)` filter on plan reads/writes, matching the `cookbookRoutes.js`/`recipeRoutes.js` convention.
 - **Recipe-visibility enforcement is double-layered and intentionally different from Cookbooks:** both the page routes (bulk-add) and the JSON API (single add) check that a recipe is either the caller's own or published before inserting into `meal_plan_recipes`, **in addition to** the `meal_plan_recipes` RLS INSERT policy performing the identical check server-side. A user cannot add another user's *draft* recipe to their plan even if application code were buggy, because the RLS policy enforces it independently. This is the one place in this feature (and one of very few in the app, alongside `recipe_likes`) where authorization is *not* "owner only."
-- **Privacy is structural, not just UI-level:** because there is no public/shared SELECT RLS policy on `meal_plans`, a direct API/URL guess at another user's `/meal-plans/:id` (or `/api/meal-plans/:id/...`) returns nothing from Supabase regardless of route code.
+- **Privacy is structural, not just UI-level:** a Private meal plan has no RLS policy under which a non-owner can read it, so a direct API/URL guess at another user's `/meal-plans/:id` (or `/api/meal-plans/:id/...`) returns nothing from Supabase regardless of route code. REW-69's additional SELECT policy is scoped strictly to `is_public = true` rows and changes nothing for Private plans.
 - **Rate limiting:** 30 mutation requests/minute per user on both the page routes (`mealPlanLimiter`) and the JSON API (`mealPlanApiLimiter`).
 - **Input validation:** title required/trimmed/capped at 200 characters (`validateMealPlanTitle()`, unit-tested); date range required, must be real calendar dates, `end >= start` (`validateDateRange()`, unit-tested) — both enforced in `mealPlanUtils.js` and via DB `CHECK` constraints as defense in depth. Route/query UUIDs are validated against a pattern before any query runs.
-- **CSRF:** CSRF protection is currently disabled repo-wide (`src/app.js`, `doubleCsrfProtection` commented out, `res.locals.csrfToken` hard-coded to `''`) — pre-existing gap, not introduced or fixed here. Page-based forms include the CSRF hidden field for forward-compatibility. **The JSON API has no CSRF-token mechanism at all**, the same pre-existing gap as `likeRoutes.js`'s JSON endpoints — when CSRF is eventually re-enabled repo-wide, both will need client JS updated to read a token (e.g. from a `<meta>` tag) and send it as a header.
+- **CSRF:** CSRF protection **is enforced** globally via `csrfProtectionExceptMultipart` in `src/app.js`; `POST` is not in `ignoredMethods` and `res.locals.csrfToken` is populated for every render. Every meal plan form, including the REW-69 visibility form, carries a real `_csrf` token and is rejected without one. (An earlier revision of this page stated CSRF was disabled repo-wide — that was correct when REW-63 shipped and is no longer true. Corrected 2026-09-14.)
+
+### Sharing-specific (REW-69)
+
+- **Private-recipe leakage was the highest-risk item in this change.** A meal plan can contain the owner's Private (draft) recipes, because REW-63 deliberately made plan membership independent of publish status. The mitigations, in order of how much weight they carry:
+  1. `GET /m/:id` and `getPublicMealPlanRecipes()` use the anon-key client exclusively — the appearance of `createSupabaseClient(...)`, `req.accessToken`, or `req.cookies["sb-access-token"]` anywhere in either is a blocking review finding, and `src/routes/publicRoutes.test.js` asserts against it at the source level.
+  2. The `meal_plan_recipes` public SELECT policy requires **both** a Public parent plan and a `published` recipe, so a direct anon-key PostgREST read cannot enumerate the count, UUIDs, add-times, or `planned_servings` of a Public plan's Private membership edges. This is the REW-92 lesson already applied to `cookbook_recipes` in migration `019`.
+  3. An explicit `.eq("recipes.status", "published")` predicate in the query, as defence in depth.
+  - Deliberate consequence: a Public plan whose recipes are all Private renders as an empty plan to visitors. That is correct, and it has its own neutral empty state.
+- **Other users' recipes on a shared plan.** `meal_plan_recipes` rows can point at *other users'* published recipes (REW-63's divergence from cookbooks). Those are already world-readable at `/r/:id`, so surfacing them exposes nothing new — but it means a shared plan is not "the owner's recipes," which is why per-card `recipe.author` attribution matters here.
+- **Existence disclosure:** Private, nonexistent, and malformed plan IDs return byte-identical 404s at `/m/:id` — no distinct flash, no redirect to login, no extra query on the private branch.
+- **Fail-closed input:** `normalizeMealPlanVisibility()` returns `true` only for the exact string `"public"`. Everything else is Private.
+- **Rate limiting:** the visibility endpoint reuses the existing 30/minute-per-user `mealPlanLimiter` shared by every other meal plan mutation. No route-level bypass was added.
+- **No cached visibility:** `/m/:id` reads `is_public` from Postgres on every request. Nothing memoizes it, stores it in the session, or precomputes it into a view, which is what makes revocation immediate.
+- **No new redirect surface:** the share link is a fixed internal `/m/:id` path built from a database-stored UUID. Nothing user-supplied shapes it.
+- **Owner-only surfaces stay owner-only:** `/meal-plans/:id`, `/edit`, `/add-recipes`, `/grocery-list`, and every `/api/meal-plans/*` route keep `requireAuth` and their owner scoping. Public grants read access to `/m/:id` only.
+
+#### Accepted residual exposure (documented, not a defect)
+
+For a **Public** plan, a direct anon PostgREST read of `meal_plans` can see that row's `user_id`, `created_at`, and `updated_at` alongside the title and dates the page already shows — so a determined reader can correlate several of one owner's *Public* plans to the same owner UUID. This was raised by the Reviewer and accepted by design: it is identical to the pre-existing posture for published `recipes` and Public `cookbooks`, whose `user_id` is likewise anon-readable, and **no Private plan is exposed by it**. The route handler itself never selects `user_id`. Tightening this would mean column-level grants, which would be a new app-wide convention and belongs in its own ticket.
 
 ---
 
@@ -194,15 +295,30 @@ Neither item blocks this release; both are recommended for a small, low-risk fol
 - No request-level/integration tests exist for `mealPlanRoutes.js`/`mealPlanApiRoutes.js`, consistent with every other Supabase-backed route file in this codebase (no live-Supabase test harness exists anywhere).
 - **QA was intentionally skipped for this pipeline run** (explicit orchestrator instruction, not a QA rejection or omission). The acceptance-criteria checklist in `docs/plans/REW-63-create-and-manage-meal-plans.md` (19 items, including the "another user's session cannot view a meal plan via direct URL/ID" RLS check and the "cannot add another user's draft recipe" RLS check) has not been manually/QA-verified against a running app.
 
+### REW-69
+
+Automated coverage added with the change:
+
+- `src/utils/mealPlanUtils.test.js` (extended) — `normalizeMealPlanVisibility()` fail-closed cases (`"public"` → true; `"private"`, `undefined`, `null`, `""`, `"PUBLIC"`, `"Public"`, `"true"`, `"published"`, `["public"]`, `{}`, `42` → false).
+- `src/routes/mealPlanVisibilityRoutes.test.js` (new) — drives the exported handler with a fake query builder: the stored value flips in both directions against table `meal_plans`; both the `id` and `user_id` filters are applied on every call; malformed IDs never open a query and redirect to `/meal-plans`; an unknown/absent `visibility` fails closed to Private; a not-found row flashes identically to the non-owned case and is not logged as a DB error while a real error is; the success flash uses Private/Public and never matches `/draft|published/i`; and the route is registered for POST at `/:id/visibility` with a three-layer chain including `requireAuth`.
+- `src/routes/publicRoutes.test.js` (extended) — `/m/:id` filters on `id` and `is_public = true`, queries only `meal_plans` on the not-found branch, and renders the 404 path; Private, nonexistent, and malformed IDs produce one identical payload; source-level assertions that neither the handler nor `getPublicMealPlanRecipes` contains `createSupabaseClient`/`req.accessToken`/`sb-access-token` and that the fetcher contains `recipes!inner` and `.eq("recipes.status", "published")`; plus migration-content assertions against `020` (column definition present, exactly two `CREATE POLICY` statements, `AND EXISTS` with no `OR EXISTS`, no `MATERIALIZED VIEW`, no `DROP`/`ALTER POLICY` in executable SQL, and nothing touching `recipes`).
+- `src/views/mealPlanSharing.test.js` (new) — the shared page renders identically for `null`/owner/other-user `user` locals and contains no mutation link, no `<form`, no `_csrf`, and no `isOwner`/`accessToken`/`csrfToken`; title, date range, and card metadata are HTML-escaped; cards link to `/r/<id>`; the empty state renders and matches nothing like `/hidden|private recipe|draft|not shown/i`; the owner view posts `private|public` with a real CSRF token, shows the share link only while Public, still renders when `appUrl` is omitted, and loads `/js/meal-plan-share.js` as an external file with no inline handler.
+- `src/views/organizationCardGrid.test.js` (extended) — `views/meal-plans/public-view.ejs` added to the pinned `organizationViews` list.
+
+**Reviewer verdict: Approved, no blocking issues.** The residual `user_id` exposure on Public plans documented above was the Reviewer's one explicit note, accepted by design.
+
+**QA was deliberately skipped for REW-69 as well, and several acceptance criteria are unverified.** Nothing in this feature has been exercised against a live Supabase with migration `020` applied. Specifically unconfirmed against `docs/plans/meal-plan-sharing.md`: **AC3** (share URL origin unaffected by a spoofed `Host`/`X-Forwarded-Host`, and the Copy button actually working), **AC5** (zero trace of a Private recipe at `/m/:id` for visitor, other user, and owner), **AC6** (all-private empty state), **AC11** (direct PostgREST anon/cross-user reads of a Private plan's rows and a Public plan's Private membership edges), **AC12** (an other-user recipe switched back to Private disappears cleanly), **AC13** (toggling visibility changes no recipe status, membership, or dates), and **AC16** (30/min rate limiting on the visibility endpoint). The remaining criteria are supported by code review and the automated suite but have had no manual browser pass.
+
 ---
 
 ## Related documentation
 
 - [API Overview](README.md)
-- [Cookbooks API](cookbooks.md) — the structural precedent this feature extends/diverges from
-- Plan: `docs/plans/REW-63-create-and-manage-meal-plans.md`
-- `database/README.md` — `meal_plans` / `meal_plan_recipes` tables, RLS policies, indexes
-- Release notes: `docs/RELEASE_NOTES_REW-63.md`
+- [Cookbooks API](cookbooks.md) — the structural precedent this feature extends/diverges from, including REW-19 cookbook sharing
+- Plans: `docs/plans/REW-63-create-and-manage-meal-plans.md`, `docs/plans/meal-plan-sharing.md` (REW-69)
+- `database/README.md` — `meal_plans` / `meal_plan_recipes` tables, RLS policies, indexes, migration `020`
+- Release notes: `docs/RELEASE_NOTES_REW-63.md`, `docs/RELEASE_NOTES_REW-69.md`
+- Out of scope, possible follow-ups: search discoverability of Public meal plans; a grocery list on the shared page; copying a shared plan into your own account (the meal-plan analogue of [REW-91](https://wanderingnerds.atlassian.net/browse/REW-91))
 
 ---
 
@@ -210,5 +326,6 @@ Neither item blocks this release; both are recommended for a small, low-risk fol
 
 | Date | Change |
 |------|--------|
+| 2026-09-14 | REW-69 meal plan sharing: added `POST /meal-plans/:id/visibility`, the public `GET /m/:id` surface, owner-facing share UI, and sharing-specific security notes including the accepted `user_id` exposure on Public plans. Deliberately no search discoverability. Corrected the stale "CSRF is disabled repo-wide" claim in Security — CSRF is enforced. Reviewer-approved; QA not run. |
 | 2026-09-14 | Added `GET /meal-plans/:id/grocery-list` (REW-26) — read-only printable grocery list. No schema change; `planned_servings` still unused. |
 | 2026-09-08 | Page created documenting REW-63 (new feature — no prior version to reconcile). |

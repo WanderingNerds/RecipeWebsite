@@ -119,3 +119,32 @@ export function validateDateRange(startDate, endDate) {
 
   return { valid: true, startDate: trimmedStart, endDate: trimmedEnd, error: null };
 }
+
+/**
+ * The two meal plan visibility states (REW-69), using the same Private/Public
+ * vocabulary and the same `name="visibility"` form-field convention that
+ * RECIPE_VISIBILITY established for recipes in REW-85 and COOKBOOK_VISIBILITY
+ * reused for cookbooks in REW-19. Meal plans store this as a boolean
+ * (`meal_plans.is_public`) rather than a status string.
+ */
+export const MEAL_PLAN_VISIBILITY = Object.freeze({
+  PRIVATE: "private",
+  PUBLIC: "public",
+});
+
+/**
+ * Normalize a meal plan visibility value submitted from a form into the
+ * boolean stored in `meal_plans.is_public`.
+ *
+ * Shares normalizeCookbookVisibility()'s fail-closed posture: only the exact
+ * string "public" produces a Public meal plan. An array (duplicate form
+ * fields), a missing value, a differently-cased value, or any non-string all
+ * resolve to Private, so a malformed or forged submission can never
+ * accidentally share a meal plan.
+ *
+ * @param {*} value - raw value from req.body.visibility
+ * @returns {boolean} true only for the literal string "public"
+ */
+export function normalizeMealPlanVisibility(value) {
+  return value === MEAL_PLAN_VISIBILITY.PUBLIC;
+}

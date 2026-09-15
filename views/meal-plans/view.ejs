@@ -14,6 +14,26 @@
         <p style="color: var(--text-muted);"><%= recipes.length %> recipe<%= recipes.length !== 1 ? 's' : '' %></p>
       </div>
       <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+        <%#
+          REW-69 plan-level sharing control. Deliberately a labelled control
+          here in the header, NOT another bare badge, so it reads as distinct
+          from the per-recipe Private/Public pills on the cards below.
+          `visibility` follows the REW-85 private|public form convention and is
+          re-normalized fail-closed server side.
+        %>
+        <form class="meal-plan-visibility-control" action="/meal-plans/<%= mealPlan.id %>/visibility" method="POST">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <span class="meal-plan-visibility-label">Meal plan</span>
+          <% if (mealPlan.is_public) { %>
+            <span class="meal-plan-visibility-badge meal-plan-visibility-public">Public</span>
+            <input type="hidden" name="visibility" value="private">
+            <button type="submit" class="btn btn-outline" style="font-size: 0.875rem; padding: 0.5rem 1rem;">Make Private</button>
+          <% } else { %>
+            <span class="meal-plan-visibility-badge meal-plan-visibility-private">Private</span>
+            <input type="hidden" name="visibility" value="public">
+            <button type="submit" class="btn btn-outline" style="font-size: 0.875rem; padding: 0.5rem 1rem;">Make Public</button>
+          <% } %>
+        </form>
         <a href="/meal-plans/<%= mealPlan.id %>/add-recipes" class="btn btn-primary">Add Recipes</a>
         <% if (recipes.length > 0) { %>
           <a href="/meal-plans/<%= mealPlan.id %>/grocery-list" class="btn btn-outline">Grocery List</a>
@@ -26,6 +46,28 @@
       </div>
     </div>
   </div>
+
+  <%#
+    Share link, shown only while the meal plan is Public. `appUrl` comes from
+    getAppUrl() in the route -- never from the request Host header, because
+    this string exists to be copied and re-shared. Guarded with typeof so
+    templates rendered directly in tests (without appUrl) still render.
+  %>
+  <% if (mealPlan.is_public && typeof appUrl !== 'undefined' && appUrl) { %>
+    <div class="meal-plan-share-panel" data-meal-plan-share>
+      <p class="meal-plan-share-panel-label">Anyone with this link can view this meal plan and its Public recipes.</p>
+      <input
+        type="text"
+        class="meal-plan-share-url"
+        data-meal-plan-share-url
+        value="<%= appUrl %>/m/<%= mealPlan.id %>"
+        readonly
+        aria-label="Share link for this meal plan"
+      >
+      <button type="button" class="btn btn-outline" data-meal-plan-share-copy>Copy link</button>
+      <span class="meal-plan-share-feedback" data-meal-plan-share-feedback role="status" aria-live="polite"></span>
+    </div>
+  <% } %>
 
   <% if (recipes.length === 0) { %>
     <div class="empty-state">
@@ -86,3 +128,5 @@
   <% } %>
 
 </div>
+
+<script src="/js/meal-plan-share.js"></script>

@@ -1,7 +1,7 @@
 # OCR/PDF Text Parsing - Technical Documentation
 
-**Feature:** REW-12 File Import; OCR execution budget reworked in REW-93
-**Component:** `src/utils/recipeImporter.js`, `src/config/functionLimits.js`
+**Feature:** REW-12 File Import; image normalization added in REW-95
+**Component:** `src/utils/recipeImporter.js`
 **Last Updated:** 2026-09-14
 
 ---
@@ -17,6 +17,102 @@ Unlike JSON-LD imports which have well-defined schemas, OCR and PDF text extract
 1. **Section boundary detection** - Finding where ingredients and instructions sections start/end
 2. **Pattern matching** - Identifying content types through regex and heuristics
 3. **Fallback classification** - Line-by-line analysis when explicit sections are not found
+
+---
+
+## Image Normalization Before OCR (REW-95)
+
+**Status:** implemented on branch `REW-95-ocr-decoded-pixel-cap`, code-reviewed and approved
+(2 rounds). **Not QA-verified and not yet merged to `main`.**
+
+Before REW-95, `parseImage()` handed the raw uploaded buffer straight to `Tesseract.recognize()`.
+The only size bound anywhere in the chain was Multer's `limits.fileSize` (4MB), which bounds
+**encoded** bytes only. A highly compressible image — a large, mostly uniform PNG being the classic
+case — fits comfortably under 4MB and still decodes to a multi-gigabyte bitmap, so the memory and
+CPU ceiling on the OCR path was effectively unbounded (a decompression bomb).
+
+Every image now passes through `normalizeImageForOcr()` before OCR is attempted.
+
+### `normalizeImageForOcr(imageBuffer, options)`
+
+**Purpose:** Bound and standardize the bitmap handed to Tesseract.
+
+**Exported from:** `src/utils/recipeImporter.js`
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `imageBuffer` | Buffer | Raw uploaded image contents |
+| `options.maxInputPixels` | number | Decoded-pixel cap, defaults to `OCR_MAX_INPUT_PIXELS` |
+| `options.maxDimension` | number | Longest-edge cap, defaults to `OCR_MAX_DIMENSION` |
+
+**Returns:** `Promise<Buffer>` — a single-channel grayscale PNG.
+
+**Pipeline, in order:**
+
+1. `sharp(buffer, { limitInputPixels: maxInputPixels })` — rejects before decode if the image
+   exceeds the cap.
+2. `.rotate()` — applies EXIF orientation so OCR sees upright text.
+3. `.resize({ width, height, fit: "inside", withoutEnlargement: true })` — downscales to fit the
+   2000x2000 box, preserving aspect ratio; smaller images are never enlarged.
+4. `.grayscale()` + `.toColourspace("b-w")` — `grayscale()` alone still encodes three identical
+   sRGB channels, so the explicit colourspace conversion is what makes the output genuinely
+   single-channel.
+5. `.png()` — explicit output format. Without this, `toBuffer()` would echo the *input* format back
+   out, and a webp upload would hand webp to tesseract.js, which this repo does not exercise.
+
+The helper throws sharp's own error. Callers on the request path must map it to a generic message
+(see below); the `options` argument exists so tests can prove the rejection path against a small
+generated fixture instead of materializing a real gigapixel image.
+
+### Tuning constants
+
+| Constant | Value | Why |
+|----------|-------|-----|
+| `OCR_MAX_INPUT_PIXELS` | `40000000` (40MP) | Bounds the **decoded** side. sharp's own default is ~268MP, far too permissive, so this must be passed explicitly. A 40MP input decodes to RGB/RGBA *before* `grayscale()` runs, so peak resident pixel data is roughly 120MB (RGB) to 160MB (RGBA) plus libvips working memory — not the ~40MB a grayscale-only reading suggests. That peak still fits the function memory budget. |
+| `OCR_MAX_DIMENSION` | `2000` | Post-cap downscale box. A 2000x2000 grayscale bitmap is a few MB of pixel data, which keeps OCR cost predictable inside Vercel's function budget while staying legible for recipe-sized type. |
+
+Both are named exports, not inline literals, so future tuning has one source of truth.
+
+The Multer encoded-byte cap and this decoded-pixel cap are **complementary**. Neither substitutes
+for the other; do not relax the upload limit on the grounds that sharp now guards the path.
+
+### Error handling
+
+Normalization runs in its own `try`/`catch`, before the OCR timeout timer is even created. On any
+throw — including the `limitInputPixels` rejection — the real cause is logged server-side via
+`console.error` and a new `Error` is raised carrying the constant message:
+
+```
+Could not process image. Please try a different image.
+```
+
+This matters because `src/routes/importRoutes.js` returns `error.message` verbatim to the client.
+Sharp's own text (pixel counts, dimensions, library internals) must never reach the HTTP 400 body.
+The generic message also deliberately does **not** contain the substring `"timed out"`, so a
+rejected decode can never be misreported as `Image processing timed out. Try a clearer image.`
+
+### Other behaviour in this change
+
+- Normalization happens **outside** the `OCR_TIMEOUT_MS` window, on purpose, so that timer keeps
+  meaning "time spent in OCR". Total wall-clock per request grows slightly as a result.
+- The OCR timeout `setTimeout` handle is now captured and cleared in a `finally`. This is handle
+  cleanup only — `Promise.race` still does not cancel the Tesseract worker, which remains REW-93's
+  scope. (Side effect: the importer test file dropped from ~31s to under 0.5s, because every
+  `parseImage` call previously left a pending 30s timer holding the event loop open.)
+- Normalization applies **only** to the `image/*` branch, after `importRecipe`'s magic-number
+  validation. The JSON and PDF branches are untouched.
+- `OCR_TIMEOUT_MS` (30000), `SUPPORTED_MIME_TYPES`, the Multer allow-list and size cap, rate-limiter
+  values, and the middleware ordering on `POST /recipes/import/parse` are all unchanged.
+
+### Known limitations
+
+- **Accuracy at 2000px.** Downscaling a dense, high-resolution recipe photo could cost recognition
+  accuracy on small type. Accepted per the ticket; **not yet verified against a real phone photo**.
+- **Transparent PNGs.** Grayscaling a PNG with a transparent background can render text poorly
+  without a `flatten()` step first. Knowingly out of scope; revisit only if a regression appears.
+- **Recipe photo upload path is still unguarded.** `generateThumbnail()` and `optimizeImage()` in
+  `src/utils/imageUtils.js` still call `sharp(imageBuffer)` with no `limitInputPixels`. Same
+  decompression-bomb class, different route — tracked in **REW-96**.
 
 ---
 
@@ -345,11 +441,10 @@ return parseUnstructuredText(fullText, 0.6); // Base confidence 0.6
 ### OCR Import Flow
 
 ```javascript
-// In parseImage() - the OCR run is raced against the budget, and the worker is
-// terminated in a finally on every path. See "OCR execution budget" below.
-const worker = await createWorker("eng", undefined, { logger: () => {} });
-const result = await Promise.race([worker.recognize(imageBuffer), timeoutPromise]);
-const parsed = parseUnstructuredText(result.data.text, 0.4); // Base confidence 0.4
+// In parseImage() - REW-95 normalization runs first, outside the OCR timeout
+const normalizedBuffer = await normalizeImageForOcr(imageBuffer);
+const ocrResult = await Tesseract.recognize(normalizedBuffer, 'eng');
+const parsed = parseUnstructuredText(ocrResult.data.text, 0.4); // Base confidence 0.4
 parsed.warnings.push("Text was extracted from an image using OCR. Please verify accuracy.");
 return parsed;
 ```
@@ -497,4 +592,4 @@ Instructions
 | Date | Change |
 |------|--------|
 | 2026-08-16 | Initial documentation for REW-12 OCR/PDF parsing |
-| 2026-09-14 | REW-93: added the OCR execution budget and worker lifecycle section; corrected the stale `Tesseract.recognize` usage example |
+| 2026-09-14 | Added the REW-95 image-normalization section (decoded-pixel cap, downscale, grayscale, generic error mapping). Branch-only; reviewed, not QA-verified, not merged. |

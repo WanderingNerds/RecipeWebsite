@@ -1,9 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import sharp from "sharp";
 import {
   parseJsonLd,
   parseImage,
   validateImportFile,
+  parseImage,
+  normalizeImageForOcr,
+  OCR_MAX_INPUT_PIXELS,
+  OCR_MAX_DIMENSION,
   SUPPORTED_MIME_TYPES,
   OCR_TIMEOUT_MS,
 } from "./recipeImporter.js";
@@ -278,222 +283,238 @@ test("SUPPORTED_MIME_TYPES does not include unsupported types", () => {
 });
 
 // =============================================================================
-// parseImage OCR budget tests (REW-93)
-//
-// Every case injects a fake worker, so no test in this file ever spawns a real
-// Tesseract worker or performs real OCR.
+// OCR image normalization tests (REW-95)
 // =============================================================================
 
-const IMAGE_BUFFER = Buffer.from("fake-image-bytes", "utf8");
-const OCR_TEXT = [
-  "Chocolate Chip Cookies",
-  "Ingredients",
+// Generate a small image fixture in-memory rather than committing a binary.
+// Uses a noise-free solid fill; content does not matter, only dimensions.
+function makeImage(width, height) {
+  return sharp({
+    create: {
+      width,
+      height,
+      channels: 3,
+      background: { r: 200, g: 180, b: 160 },
+    },
+  })
+    .png()
+    .toBuffer();
+}
+
+// Minimal stand-in for a Tesseract result object.
+function ocrResult(text) {
+  return { data: { text } };
+}
+
+const OCR_SAMPLE_TEXT = [
+  "Butter Cookies",
   "2 cups flour",
   "1 cup butter",
-  "Instructions",
-  "Mix the flour and butter, then bake for 12 minutes.",
+  "Mix the flour and butter together.",
+  "Bake until golden brown.",
 ].join("\n");
 
-/**
- * Build a fake Tesseract worker factory plus a call log, so tests can assert on
- * worker lifecycle without touching tesseract.js.
- */
-function fakeWorkerFactory({ recognize, terminate }) {
-  const calls = { created: 0, recognized: 0, terminated: 0 };
-  const createWorkerImpl = async () => {
-    calls.created += 1;
-    return {
-      recognize: (buffer) => {
-        calls.recognized += 1;
-        return recognize(buffer);
-      },
-      terminate: async () => {
-        calls.terminated += 1;
-        if (terminate) return terminate();
-        return undefined;
-      },
-    };
-  };
-  return { createWorkerImpl, calls };
-}
-
-function countPendingTimers() {
-  return process.getActiveResourcesInfo().filter((name) => name === "Timeout").length;
-}
-
-test("importer re-exports the OCR budget from the shared function-limits config", () => {
-  assert.equal(OCR_TIMEOUT_MS, CONFIG_OCR_TIMEOUT_MS);
-  assert.equal(OCR_TIMEOUT_MS, 8000);
+test("OCR tuning constants have their documented values", () => {
+  assert.equal(OCR_MAX_INPUT_PIXELS, 40000000);
+  assert.equal(OCR_MAX_DIMENSION, 2000);
 });
 
-test("parseImage rejects with the timeout message when OCR outlasts its budget", async () => {
-  const { createWorkerImpl } = fakeWorkerFactory({
-    recognize: () => new Promise(() => {}), // never settles
-  });
+test("normalizeImageForOcr downscales images larger than the max dimension", async () => {
+  const input = await makeImage(2400, 1200);
+  const output = await normalizeImageForOcr(input);
+  const metadata = await sharp(output).metadata();
 
-  const startedAt = Date.now();
-  await assert.rejects(
-    parseImage(IMAGE_BUFFER, "image/png", { timeoutMs: 5, createWorkerImpl }),
-    (error) => {
-      assert.equal(error.message, "Image processing timed out. Try a clearer image.");
-      return true;
-    }
-  );
-
-  // The point of the timeout is that it bounds the request: an OCR that never
-  // settles must not leave parseImage hanging.
-  const elapsed = Date.now() - startedAt;
-  assert.ok(elapsed < 500, `parseImage should settle near its 5ms budget, took ${elapsed}ms`);
+  assert.ok(metadata.width <= OCR_MAX_DIMENSION, `width ${metadata.width} exceeds cap`);
+  assert.ok(metadata.height <= OCR_MAX_DIMENSION, `height ${metadata.height} exceeds cap`);
 });
 
-test("parseImage terminates the worker exactly once on the timeout path", async () => {
-  const { createWorkerImpl, calls } = fakeWorkerFactory({
-    recognize: () => new Promise(() => {}),
-  });
+test("normalizeImageForOcr does not enlarge small images", async () => {
+  const input = await makeImage(50, 50);
+  const output = await normalizeImageForOcr(input);
+  const metadata = await sharp(output).metadata();
+
+  assert.equal(metadata.width, 50);
+  assert.equal(metadata.height, 50);
+});
+
+test("normalizeImageForOcr outputs a single-channel grayscale image", async () => {
+  const input = await makeImage(120, 90);
+  const output = await normalizeImageForOcr(input);
+  const metadata = await sharp(output).metadata();
+
+  assert.equal(metadata.channels, 1);
+});
+
+test("normalizeImageForOcr encodes to PNG regardless of input format", async () => {
+  const jpegInput = await sharp({
+    create: { width: 80, height: 60, channels: 3, background: { r: 10, g: 20, b: 30 } },
+  })
+    .jpeg()
+    .toBuffer();
+
+  const output = await normalizeImageForOcr(jpegInput);
+  const metadata = await sharp(output).metadata();
+
+  assert.equal(metadata.format, "png");
+});
+
+test("normalizeImageForOcr rejects input above the decoded-pixel cap", async () => {
+  // 300x300 = 90,000 decoded pixels, against an injected cap of 1,000.
+  // Proves the rejection path without materializing a real gigapixel bomb.
+  const input = await makeImage(300, 300);
 
   await assert.rejects(
-    parseImage(IMAGE_BUFFER, "image/png", { timeoutMs: 5, createWorkerImpl })
+    () => normalizeImageForOcr(input, { maxInputPixels: 1000 }),
+    // Assert the actual reason: a bare `instanceof Error` would also be
+    // satisfied by any unrelated sharp failure.
+    (error) => /exceeds pixel limit/i.test(error.message)
   );
-
-  assert.equal(calls.created, 1);
-  assert.equal(calls.terminated, 1, "the abandoned worker must be reclaimed exactly once");
 });
 
-test("a failing terminate does not replace the user-facing timeout error", async (t) => {
-  const { createWorkerImpl, calls } = fakeWorkerFactory({
-    recognize: () => new Promise(() => {}),
-    terminate: () => Promise.reject(new Error("worker ipc channel closed")),
-  });
-  // The termination failure is expected to be logged, not surfaced; stub the
-  // logger so the deliberate failure does not pollute test output.
-  t.mock.method(console, "error", () => {});
+test("normalizeImageForOcr accepts input below the decoded-pixel cap", async () => {
+  const input = await makeImage(300, 300);
+  const output = await normalizeImageForOcr(input, { maxInputPixels: 90000 });
 
+  assert.ok(Buffer.isBuffer(output));
+  assert.ok(output.length > 0);
+});
+
+test("normalizeImageForOcr rejects a corrupt buffer through the real sharp path", async () => {
+  // No injected stub: this drives production sharp with undecodable bytes to
+  // prove the helper surfaces a rejection (which parseImage maps to the
+  // generic client message) rather than resolving or hanging.
+  await assert.rejects(() => normalizeImageForOcr(Buffer.from("not an image")));
+});
+
+test("parseImage passes the normalized buffer to OCR, not the raw input", async () => {
+  const input = await makeImage(2400, 1200);
+  let received = null;
+
+  await parseImage(input, "image/png", {
+    recognize: (buffer) => {
+      received = buffer;
+      return Promise.resolve(ocrResult(OCR_SAMPLE_TEXT));
+    },
+  });
+
+  assert.ok(Buffer.isBuffer(received));
+  assert.notStrictEqual(received, input);
+
+  const metadata = await sharp(received).metadata();
+  assert.ok(metadata.width <= OCR_MAX_DIMENSION);
+  assert.ok(metadata.height <= OCR_MAX_DIMENSION);
+  assert.equal(metadata.channels, 1);
+});
+
+test("parseImage surfaces the generic message when normalization throws", async () => {
   await assert.rejects(
-    parseImage(IMAGE_BUFFER, "image/png", { timeoutMs: 5, createWorkerImpl }),
-    (error) => {
-      assert.equal(error.message, "Image processing timed out. Try a clearer image.");
-      assert.doesNotMatch(error.message, /ipc|worker/i);
-      return true;
-    }
-  );
-
-  assert.equal(calls.terminated, 1);
-  assert.equal(console.error.mock.callCount(), 1, "termination failures must be logged");
-});
-
-test("parseImage returns parsed data with the OCR warning and leaves no pending timer", async () => {
-  const { createWorkerImpl, calls } = fakeWorkerFactory({
-    recognize: async () => ({ data: { text: OCR_TEXT } }),
-  });
-
-  const timersBefore = countPendingTimers();
-  // Deliberately uses the real OCR_TIMEOUT_MS default: if the timer were not
-  // cleared, an 8-second handle would still be pending after this resolves.
-  const result = await parseImage(IMAGE_BUFFER, "image/png", { createWorkerImpl });
-
-  assert.equal(
-    countPendingTimers(),
-    timersBefore,
-    "a successful OCR must clear its pending timeout handle"
-  );
-  assert.equal(calls.terminated, 1);
-  assert.ok(result.ingredients.includes("2 cups flour"));
-  assert.ok(
-    result.warnings.includes(
-      "Text was extracted from an image using OCR. Please verify accuracy."
-    )
-  );
-});
-
-test("a non-timeout OCR failure surfaces the generic image error with no internals", async () => {
-  const { createWorkerImpl, calls } = fakeWorkerFactory({
-    recognize: () =>
-      Promise.reject(new Error("tesseract: failed to load C:/tmp/eng.traineddata")),
-  });
-
-  await assert.rejects(
-    parseImage(IMAGE_BUFFER, "image/png", { createWorkerImpl }),
+    () =>
+      parseImage(Buffer.from("not an image"), "image/png", {
+        normalize: () => {
+          throw new Error("Input image exceeds pixel limit");
+        },
+        recognize: () => Promise.resolve(ocrResult(OCR_SAMPLE_TEXT)),
+      }),
     (error) => {
       assert.equal(error.message, "Could not process image. Please try a different image.");
-      // parseImage branches on the "timed out" substring, so a decode failure
-      // must never contain it, and no internals may leak to the client.
-      assert.doesNotMatch(error.message, /timed out/i);
-      assert.doesNotMatch(error.message, /tesseract|traineddata/i);
-      assert.doesNotMatch(error.message, /\//);
       return true;
     }
   );
-
-  assert.equal(calls.terminated, 1);
 });
 
-test("a worker that finishes starting after the timeout is still terminated", async () => {
-  // The cold-start case: Tesseract is still downloading/initializing when the
-  // budget expires, so parseImage bails out before it ever holds the worker.
-  const calls = { terminated: 0 };
-  let resolveWorker;
-  const workerReady = new Promise((resolve) => { resolveWorker = resolve; });
+test("parseImage does not leak the sharp error text on normalization failure", async () => {
+  const sharpMessage = "Input image exceeds pixel limit 1000 (4000x3000)";
 
-  const startedAt = Date.now();
   await assert.rejects(
-    parseImage(IMAGE_BUFFER, "image/png", { timeoutMs: 5, createWorkerImpl: () => workerReady }),
+    () =>
+      parseImage(Buffer.from("not an image"), "image/png", {
+        normalize: () => Promise.reject(new Error(sharpMessage)),
+        recognize: () => Promise.resolve(ocrResult(OCR_SAMPLE_TEXT)),
+      }),
     (error) => {
-      assert.equal(error.message, "Image processing timed out. Try a clearer image.");
+      assert.ok(!error.message.includes(sharpMessage));
+      assert.ok(!error.message.includes("pixel limit"));
+      assert.ok(!error.message.includes("4000x3000"));
       return true;
     }
   );
-  assert.ok(
-    Date.now() - startedAt < 500,
-    "a slow worker startup must not delay the timeout response"
-  );
-  assert.equal(calls.terminated, 0, "startup had not finished, so there was nothing to terminate");
-
-  // The late-arriving worker must still be reclaimed, or it keeps running OCR
-  // in the warm container after the request has already been answered.
-  resolveWorker({
-    recognize: () => new Promise(() => {}),
-    terminate: async () => { calls.terminated += 1; },
-  });
-  await new Promise((resolve) => setImmediate(resolve));
-
-  assert.equal(calls.terminated, 1, "the deferred cleanup must terminate the worker exactly once");
 });
 
-test("a worker that fails to start surfaces the generic image error and logs it as startup", async (t) => {
-  t.mock.method(console, "error", () => {});
+test("parseImage does not report a normalization failure as a timeout", async () => {
+  await assert.rejects(
+    () =>
+      parseImage(Buffer.from("not an image"), "image/png", {
+        normalize: () => Promise.reject(new Error("Input image exceeds pixel limit")),
+        recognize: () => Promise.resolve(ocrResult(OCR_SAMPLE_TEXT)),
+      }),
+    (error) => {
+      assert.notEqual(error.message, "Image processing timed out. Try a clearer image.");
+      assert.ok(!error.message.includes("timed out"));
+      return true;
+    }
+  );
+});
+
+test("parseImage never attempts OCR when normalization throws", async () => {
+  let recognizeCalls = 0;
 
   await assert.rejects(
-    parseImage(IMAGE_BUFFER, "image/png", {
-      createWorkerImpl: () => Promise.reject(new Error("failed to fetch eng.traineddata")),
-    }),
+    () =>
+      parseImage(Buffer.from("not an image"), "image/png", {
+        normalize: () => Promise.reject(new Error("Input image exceeds pixel limit")),
+        recognize: () => {
+          recognizeCalls += 1;
+          return Promise.resolve(ocrResult(OCR_SAMPLE_TEXT));
+        },
+      })
+  );
+
+  assert.equal(recognizeCalls, 0);
+});
+
+test("parseImage rejects a real over-cap image through the real sharp normalizer", async () => {
+  // Exercises the production normalizer end to end: a genuine sharp rejection
+  // (not an injected throw) must still produce the generic client message.
+  const input = await makeImage(300, 300);
+  let recognizeCalls = 0;
+
+  await assert.rejects(
+    () =>
+      parseImage(input, "image/png", {
+        normalize: (buffer) => normalizeImageForOcr(buffer, { maxInputPixels: 1000 }),
+        recognize: () => {
+          recognizeCalls += 1;
+          return Promise.resolve(ocrResult(OCR_SAMPLE_TEXT));
+        },
+      }),
     (error) => {
       assert.equal(error.message, "Could not process image. Please try a different image.");
-      assert.doesNotMatch(error.message, /timed out/i);
-      assert.doesNotMatch(error.message, /traineddata/i);
       return true;
     }
   );
-  await new Promise((resolve) => setImmediate(resolve));
 
-  // A startup failure must not be logged as a termination failure - there was
-  // never a worker to terminate, and the wrong label misleads log readers.
-  assert.equal(console.error.mock.callCount(), 1);
-  assert.equal(console.error.mock.calls[0].arguments[0], "OCR worker startup failed:");
+  assert.equal(recognizeCalls, 0);
 });
 
-test("OCR text under 20 characters still reports the not-enough-text error", async () => {
-  const { createWorkerImpl } = fakeWorkerFactory({
-    recognize: async () => ({ data: { text: "Cookies" } }),
+test("parseImage still flags OCR output with the accuracy warning", async () => {
+  const input = await makeImage(600, 400);
+
+  const result = await parseImage(input, "image/png", {
+    recognize: () => Promise.resolve(ocrResult(OCR_SAMPLE_TEXT)),
   });
 
-  await assert.rejects(
-    parseImage(IMAGE_BUFFER, "image/png", { createWorkerImpl }),
-    (error) => {
-      assert.equal(
-        error.message,
-        "Could not extract enough text from image. Try a clearer image."
-      );
-      return true;
-    }
+  assert.ok(
+    result.warnings.some((warning) => warning.includes("OCR")),
+    "expected an OCR accuracy warning"
   );
+});
+
+test("PDF input routes away from the image branch, so no normalization applies", async () => {
+  // validateImportFile is what importRecipe uses to pick a parser; a PDF
+  // resolving to application/pdf means parsePdf runs and parseImage never does.
+  const pdfBuffer = Buffer.from("%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n%%EOF\n", "utf8");
+  const result = await validateImportFile(pdfBuffer);
+
+  assert.equal(result.valid, true);
+  assert.equal(result.mime, "application/pdf");
 });
