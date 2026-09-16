@@ -43,6 +43,8 @@ Creates a cookbook owned by the current user.
 
 Cookbook detail: the cookbook's title plus all recipes currently in it (most recently added first). Ownership is checked via `getOwnedCookbook()` (RLS `.eq("user_id", ...)` filter, belt-and-suspenders with the RLS policy itself) — a cookbook that doesn't exist, or belongs to another user, renders identically as "Cookbook not found" and redirects to `/cookbooks`, never leaking whether the ID exists.
 
+**Widened in REW-88** to feed the shared standardized recipe card. The URL, middleware (`requireAuth`), auth rules, and redirect behavior are unchanged; only the shape of the data handed to the template changed. See the REW-88 section below.
+
 ### `GET /cookbooks/:id/edit`
 
 Renders the rename form (`views/cookbooks/edit.ejs`) for an owned cookbook.
@@ -144,6 +146,52 @@ reconcile the two rather than shipping both.**
 
 ---
 
+## Standardized cookbook card (REW-88) — `GET /cookbooks/:id`
+
+The cookbook detail page stopped hand-rolling its own recipe card and now renders the shared
+`views/partials/recipe-summary-card.ejs` with `surface: 'cookbook'`. Two route-level changes feed
+it. **Neither is a breaking change**: no route was added or renamed, no middleware changed, and no
+JSON response shape was touched.
+
+1. **`COOKBOOK_CARD_COLUMNS`** widens the nested `recipes(...)` select with `user_id`,
+   `original_author`, and the embedded `recipe_categories(categories(id, name, slug, icon))` /
+   `recipe_tags(tags(id, name, slug))` relations, mirroring `FAVORITE_CARD_COLUMNS` in
+   `src/routes/index.js` — both surfaces render the same partial, so both must feed it the same
+   shape. `getCookbookRecipes` is now exported, flattens the junction rows into flat
+   `categories` / `tags`, keeps its defensive drop of a null `recipes` embed, and keeps the junction
+   row's `created_at DESC` (added-to-cookbook) ordering. One query; a failed read returns `[]`.
+2. **`GET /:id` was extracted into an exported `handleCookbookView(req, res, { createClient })`**
+   with an injectable Supabase client factory, following the `handleCookbookVisibilityUpdate`
+   precedent, so the data contract is unit-testable without a live Supabase. It stamps `isLiked` per
+   recipe from a **single** batched `recipe_likes` query filtered by `.eq("user_id", req.user.id)`
+   and `.in("recipe_id", ids)` on the request-scoped client, skips that query entirely for an empty
+   cookbook, and logs-and-continues on failure (hearts render unfavorited) rather than failing the
+   page. The mounted route still runs behind `requireAuth`.
+
+Net cost: one cookbook read, one recipe read, one likes read, regardless of how many recipes the
+cookbook holds.
+
+`user_id` is fetched solely so the card can compute `isOwner` and decide whether to draw Edit and
+Delete. It is never rendered into the HTML, and it is never the authorization check — ownership is
+enforced independently by `/recipes/:id/edit`, `/:id/update`, and `/:id/delete`.
+
+**No migration.** Migration `001` already grants SELECT on own rows and on any published row, all
+columns; `005`/`006` grant owner SELECT on the junction tables (which is what makes chips readable
+on the owner's Private recipes); `013` adds published-recipe SELECT for `anon`/`authenticated` plus
+the matching `categories`/`tags` lookups.
+
+Covered by `src/routes/cookbookRoutes.test.js` (new, 10 cases). The full card contract, the shared
+partial's four-surface local-variable interface, the design decisions, and the open follow-ups are
+documented in [Cookbook Recipe Card](cookbook-card.md).
+
+**Branch-only: implemented and reviewer-approved on `REW-88-standardize-cookbook-recipe-card` with
+no blocking issues. QA was deliberately skipped, and the branch is unmerged and unpushed.** A manual
+smoke test against a live Supabase is specifically outstanding — `getCookbookRecipes` is the repo's
+first three-level PostgREST embed and returns `[]` on error, which renders as the empty state with
+no flash.
+
+---
+
 ## Public surfaces (REW-19) — `src/routes/publicRoutes.js`
 
 These two routes are **unauthenticated**. Every query on them runs on the module-level **anon-key** Supabase client exported from `src/config/supabase.js` — never `createSupabaseClient(req.accessToken)`, and never any owner-scoped client, even when the person viewing is the cookbook's own owner. That is not a stylistic preference: under the anon key `auth.uid()` is null, so the `recipes` SELECT policy from migration `001` (owner **or** `status = 'published'`) can only ever return published recipes. Draft privacy in a shared cookbook is therefore structural, not a filter a future edit could forget.
@@ -191,6 +239,12 @@ Each entry links to `/c/:id` and shows the title plus the RPC's published-only `
 ---
 
 ## Owner-facing UI (REW-19)
+
+> **Updated by REW-88:** the per-recipe Private/Public pills referred to below now live in
+> `views/partials/recipe-summary-card.ejs` rather than inline in `views/cookbooks/view.ejs`, and are
+> rendered **only to the recipe's owner**. The cookbook-level control described here is unchanged,
+> and the distinction it was designed to make — a labelled cookbook control that cannot be confused
+> with a per-recipe pill — is now asserted against rendered output rather than template source.
 
 - **`views/cookbooks/view.ejs`** — a labelled cookbook-level visibility control in the header action row (a Private/Public state badge plus a "Make Public"/"Make Private" submit), deliberately structured as a control rather than another bare badge so it reads as distinct from the per-recipe Private/Public pills on the cards below. When the cookbook is Public, a share panel shows the full URL in a read-only input with a **Copy link** button.
 - **Share URL origin comes from `getAppUrl()`** (`src/utils/authUtils.js`, the REW-57 helper), passed in by the route as the `appUrl` local — never from `req.headers.host` or `X-Forwarded-Host`. This string exists to be copied and re-shared by a human, so a header-derived origin would be a ready-made phishing vector. The local is guarded with `typeof` so templates rendered directly in tests without it still render.
@@ -258,7 +312,8 @@ Suite result: **355 tests, 353 passing.** The 2 failures are pre-existing enviro
 ## Related documentation
 
 - [API Overview](README.md)
-- Plans: `docs/plans/rew-62-cookbooks.md`, `docs/plans/rew-19-cookbook-sharing.md`
+- [Cookbook Recipe Card](cookbook-card.md) — the standardized card on `/cookbooks/:id`, the shared partial's four-surface contract, and the widened read behind it (REW-88)
+- Plans: `docs/plans/rew-62-cookbooks.md`, `docs/plans/rew-19-cookbook-sharing.md`, `docs/plans/rew-88-standardize-cookbook-card.md`
 - `database/README.md` — `cookbooks` / `cookbook_recipes` tables, the `search_cookbooks()` RPC, RLS policies, indexes
 - Release notes: `docs/RELEASE_NOTES_REW-62.md`, `docs/RELEASE_NOTES_REW-19.md`
 - Follow-up: [REW-91](https://wanderingnerds.atlassian.net/browse/REW-91) — cookbook-level cloning ("save this whole cookbook"), explicitly out of scope here
@@ -272,3 +327,4 @@ Suite result: **355 tests, 353 passing.** The 2 failures are pre-existing enviro
 | 2026-09-08 | Page created documenting REW-62 (new feature — no prior version to reconcile). |
 | 2026-09-14 | REW-19 cookbook sharing: added `POST /cookbooks/:id/visibility`, the public `GET /c/:id` surface, the `GET /search` Cookbooks section, owner-facing share UI, and sharing-specific security notes. Corrected the stale "CSRF is disabled repo-wide" claim in Security — CSRF is enforced. Reviewer-approved; QA not run. |
 | 2026-09-15 | REW-86: added the `/api/cookbooks` JSON API section (list-with-membership, quick-create, duplicate-safe add, remove) backing the `+ Cookbook` card action, plus its modal/JS client. No change to any existing `/cookbooks*` route, and no migration. Reviewer-approved; QA not run; branch not merged. |
+| 2026-09-15 | REW-88: `GET /cookbooks/:id` now renders the shared standardized recipe card. Documented the widened `getCookbookRecipes` select, the flattened categories/tags, the exported `handleCookbookView` and its batched `isLiked` query, and noted that the per-recipe status pill moved into the shared partial and is now owner-only. No new route, no migration. Reviewer-approved; **QA deliberately skipped**; branch unmerged. |

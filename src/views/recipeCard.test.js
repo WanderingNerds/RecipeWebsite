@@ -26,6 +26,16 @@ const renderFavorite = (overrides = {}, user = null) => ejs.renderFile(`${views}
   recipe: { ...favoriteRecipe, ...overrides }, surface: 'favorites', user, csrfToken: 'csrf-test',
 });
 
+// REW-88: Cookbook is the fourth surface. Ownership is uniform in practice
+// today (the RLS INSERT policy on cookbook_recipes still allows only your own
+// recipes in) but is computed per card, so the mixed shape REW-100 will
+// create is covered here already.
+const cookbookRecipe = { ...recipe, user_id: OWNER_ID };
+const renderCookbook = (overrides = {}, user = null, locals = {}) => ejs.renderFile(`${views}partials/recipe-summary-card.ejs`, {
+  recipe: { ...cookbookRecipe, ...overrides }, surface: 'cookbook', cookbookId: 'cookbook-1',
+  user, csrfToken: 'csrf-test', ...locals,
+});
+
 test('Both card surfaces render all core metadata in the same order with escaped text', async () => {
   for (const isPublic of [true, false]) {
     const html = await render(isPublic);
@@ -258,13 +268,130 @@ test('Cookbook and meal-plan index cards keep title navigation and editing witho
   assert.doesNotMatch(mealPlanIndex, />View<\/a>/);
 });
 
-test('Cookbook recipe cards expose the meal-plan trigger and preserve protected controls', async () => {
-  const html = await ejs.renderFile(`${views}cookbooks/view.ejs`, {
-    cookbook: { id: 'cookbook-1', title: 'Weeknight Favorites' },
-    recipes: [recipe],
-    user: { id: 'owner' },
-    csrfToken: 'csrf-test',
+test('REW-88 a cookbook recipe you own shows every standardized control plus Remove', async () => {
+  const html = await renderCookbook({}, { id: OWNER_ID });
+
+  // Title, heart, author, chips and the four Label: value fields -- the same
+  // content every other standardized surface shows.
+  assert.match(html, /<h3[^>]*>[\s\S]*href="\/recipes\/recipe-1"[\s\S]*Long &lt;title&gt;[\s\S]*<\/h3>/);
+  assert.match(html, /class="like-btn" data-recipe-id="recipe-1" data-liked="true"/);
+  assert.match(html, /By Chef &lt;script&gt;/);
+  assert.match(html, /class="tag-badge"/);
+  assert.match(html, /class="category-badge"/);
+  for (const label of ['Prep Time: 10 minutes', 'Cook Time: 30 minutes', 'Servings: 4', 'Difficulty: Easy']) {
+    assert.ok(html.includes(label), label);
+  }
+
+  // Shared actions.
+  assert.equal(mealPlanTriggers(html).length, 1);
+  assert.doesNotMatch(html, /meal-plan-add-btn-guest/);
+  assert.match(html, /class="btn btn-outline recipe-share-btn" disabled aria-disabled="true"/);
+  assert.match(html, /title="Sharing is coming soon"/);
+
+  // The page-specific Remove action, carried over intact.
+  assert.match(html, /action="\/cookbooks\/cookbook-1\/recipes\/recipe-1\/remove" method="POST"/);
+  assert.match(html, /name="returnTo" value="cookbook"/);
+  assert.match(html, /return confirm\('Remove this recipe from the cookbook\?/);
+  assert.match(html, />Remove<\/button>/);
+
+  // Owner controls, each with its own token and its own distinct confirm.
+  assert.ok(html.includes('/recipes/recipe-1/edit'), 'owner sees Edit');
+  assert.ok(html.includes('action="/recipes/recipe-1/delete" method="POST"'), 'owner sees the Delete form');
+  assert.match(html, /return confirm\('Are you sure you want to delete this recipe\?/);
+  assert.equal((html.match(/name="_csrf" value="csrf-test"/g) || []).length, 2);
+
+  // The recipe is already in a cookbook, and owners flip visibility from My
+  // Recipes -- neither control belongs on this surface.
+  assert.doesNotMatch(html, /cookbook-add-btn|\/visibility|Make Public|Make Private/);
+
+  // Edit physically separates "remove from cookbook" from "delete forever",
+  // and Delete is the last control and the only red one.
+  assert.ok(html.indexOf('/remove') < html.indexOf('/recipes/recipe-1/edit'), 'Remove comes before Edit');
+  assert.ok(html.indexOf('/recipes/recipe-1/edit') < html.indexOf('/recipes/recipe-1/delete'), 'Edit comes before Delete');
+  const withoutDelete = html.replace(/<form action="\/recipes\/recipe-1\/delete"[\s\S]*?<\/form>/, '');
+  assert.doesNotMatch(withoutDelete, /--error-color/);
+
+  assert.match(html, /class="recipe-card-actions recipe-summary-actions"[^>]*flex-wrap: wrap/);
+  assert.doesNotMatch(html, />View<\/a>/);
+});
+
+test('REW-88 a cookbook recipe you do not own keeps Remove but loses Edit, Delete and the pill', async () => {
+  // The post-REW-100 shape: signed in, but not the author of this recipe.
+  const html = await renderCookbook({}, { id: 'someone-else' });
+
+  assert.match(html, /class="like-btn" data-recipe-id="recipe-1" data-liked="true"/);
+  assert.equal(mealPlanTriggers(html).length, 1);
+  assert.match(html, /recipe-share-btn/);
+  // Remove is cookbook membership, not recipe ownership: it stays.
+  assert.match(html, /action="\/cookbooks\/cookbook-1\/recipes\/recipe-1\/remove" method="POST"/);
+  assert.equal((html.match(/name="_csrf" value="csrf-test"/g) || []).length, 1);
+
+  assert.doesNotMatch(html, /\/edit|\/delete|\/visibility|Make Public|Make Private|cookbook-add-btn/);
+  // No status claim about somebody else's recipe.
+  assert.doesNotMatch(html, /badge-published|badge-draft/);
+});
+
+test('REW-88 the owner-only pill and the heart render together, and Private disables the heart', async () => {
+  const draft = await renderCookbook({ status: 'draft' }, { id: OWNER_ID });
+  // /api/likes requires status = 'published', so the heart is disabled with
+  // an explanation rather than hidden -- same as My Recipes.
+  assert.match(draft, /class="like-btn" disabled aria-label="Make this recipe Public to add it to favorites"/);
+  assert.match(draft, /class="badge-draft badge-draft-sm">Private<\/span>/);
+
+  const published = await renderCookbook({}, { id: OWNER_ID });
+  assert.match(published, /class="like-btn" data-recipe-id="recipe-1" data-liked="true"/);
+  assert.match(published, /class="badge-published badge-published-sm">Public<\/span>/);
+
+  // Read-only pill only: this surface never offers the toggle.
+  assert.doesNotMatch(draft, /\/visibility|Make Public|Make Private/);
+  // A viewer who does not own the recipe is told nothing about its status.
+  const stranger = await renderCookbook({ status: 'draft' }, { id: 'someone-else' });
+  assert.doesNotMatch(stranger, /badge-draft|badge-published/);
+});
+
+test('REW-88 cookbook cards never leak user_id, never link chips, and degrade safely', async () => {
+  const owned = await renderCookbook({}, { id: OWNER_ID });
+  const notOwned = await renderCookbook({}, { id: 'someone-else' });
+  // A recipe row without user_id must be treated as NOT owned, never as owned.
+  const missingOwner = await renderCookbook({ user_id: null }, { id: OWNER_ID });
+
+  for (const html of [owned, notOwned, missingOwner]) {
+    assert.ok(!html.includes(OWNER_ID), 'recipe user_id must never be rendered');
+    // Chips are plain text: /recipes?category= filters YOUR recipes.
+    assert.doesNotMatch(html, /href="\/recipes\?/);
+    assert.match(html, /class="category-badge"/);
+    // Hostile title, author and tag all stay escaped on this branch too.
+    assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+    assert.doesNotMatch(html, /<script>/);
+  }
+  assert.doesNotMatch(missingOwner, /\/recipes\/recipe-1\/edit|\/recipes\/recipe-1\/delete/);
+
+  // A caller that forgets cookbookId gets no Remove button rather than a
+  // form posting to /cookbooks//recipes/...
+  const noCookbookId = await ejs.renderFile(`${views}partials/recipe-summary-card.ejs`, {
+    recipe: cookbookRecipe, surface: 'cookbook', user: { id: OWNER_ID }, csrfToken: 'csrf-test',
   });
+  assert.doesNotMatch(noCookbookId, />Remove<\/button>|\/remove/);
+  assert.equal(mealPlanTriggers(noCookbookId).length, 1);
+
+  // Sparse recipe: no stray label, no empty chip row, no undefined/null.
+  const sparse = await renderCookbook({
+    author: null, thumbnail_url: null, prep_time: null, cook_time: null,
+    servings: null, difficulty: null, tags: null, categories: null,
+  }, { id: OWNER_ID });
+  assert.doesNotMatch(sparse, /<img|By |Prep Time:|Cook Time:|Servings:|Difficulty:|tag-badge|category-badge|undefined|null/);
+});
+
+test('REW-88 the cookbook page renders standardized cards and keeps its page furniture', async () => {
+  const pageLocals = {
+    cookbook: { id: 'cookbook-1', title: 'Weeknight Favorites' },
+    user: { id: OWNER_ID },
+    csrfToken: 'csrf-test',
+  };
+  const html = await ejs.renderFile(`${views}cookbooks/view.ejs`, { ...pageLocals, recipes: [cookbookRecipe] });
+
+  assert.match(html, /class="organization-card-grid"/);
+  assert.equal((html.match(/feature-card recipe-summary-card/g) || []).length, 1);
   assert.equal(mealPlanTriggers(html).length, 1);
   assert.doesNotMatch(html, /meal-plan-add-btn-guest/);
   assert.match(html, /<h3[^>]*>[\s\S]*href="\/recipes\/recipe-1"[\s\S]*Long &lt;title&gt;[\s\S]*<\/h3>/);
@@ -274,7 +401,25 @@ test('Cookbook recipe cards expose the meal-plan trigger and preserve protected 
   assert.match(html, /name="returnTo" value="cookbook"/);
   assert.match(html, /return confirm\('Remove this recipe from the cookbook\?/);
   assert.match(html, />Remove<\/button>/);
-  assert.match(html, /class="recipe-card-actions"[^>]*flex-wrap: wrap/);
+  // The action row is the shared one now, so it carries both classes.
+  assert.match(html, /class="recipe-card-actions recipe-summary-actions"[^>]*flex-wrap: wrap/);
+  // No + Cookbook anywhere on the page: these recipes are already in one.
+  assert.doesNotMatch(html, /cookbook-add-btn/);
+  // Standardized metadata replaced the old hand-rolled labels.
+  assert.match(html, /Prep Time: 10 minutes/);
+  assert.match(html, /Difficulty: Easy/);
+  assert.doesNotMatch(html, /Prep: |Cook: |4 servings/);
+  assert.ok(!html.includes(OWNER_ID));
+
+  // Page furniture the swap must not disturb.
+  assert.match(html, /class="cookbook-visibility-control"/);
+  assert.match(html, /href="\/cookbooks\/cookbook-1\/add-recipes"/);
+  assert.match(html, /<script src="\/js\/cookbook-share\.js"><\/script>/);
+
+  const empty = await ejs.renderFile(`${views}cookbooks/view.ejs`, { ...pageLocals, recipes: [] });
+  assert.match(empty, /No recipes in this cookbook yet/);
+  assert.match(empty, /href="\/cookbooks\/cookbook-1\/add-recipes" class="btn btn-primary">Add Recipes<\/a>/);
+  assert.doesNotMatch(empty, /recipe-summary-card/);
 });
 
 test('Meal-plan recipe cards link their titles and preserve protected removal without View', async () => {

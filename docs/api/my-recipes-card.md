@@ -14,6 +14,13 @@
 My Recipes contains and completes the missing pieces: a card-level Private/Public control, a
 `+ Cookbook` action, an inert Share placeholder, and `Label: value` metadata.
 
+> **Superseded in part:** that partial now serves **four** surfaces, selected by a `surface` local
+> (`'browse'`, `'my-recipes'`, `'favorites'`, `'cookbook'`) that falls back to the legacy `isPublic`
+> boolean when omitted, so the two callers described here still work untouched. REW-87 added
+> Favorites and REW-88 added Cookbook. The full four-surface local-variable contract, including the
+> `cookbookId` local and the heart/status-pill split, lives in
+> [Cookbook Recipe Card](cookbook-card.md). The My Recipes card's own contract below is unchanged.
+
 The public/Browse branch of the partial gains **none** of the owner controls. Everything added
 here sits behind `isPublic === false`, including for a signed-in owner looking at their own
 recipe on `/browse`.

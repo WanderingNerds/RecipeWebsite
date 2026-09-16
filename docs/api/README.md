@@ -69,7 +69,7 @@ Favorite/like controls (`.like-btn`) call these endpoints from the recipe detail
 | GET | `/cookbooks` | List the current user's cookbooks with a per-cookbook recipe count |
 | GET | `/cookbooks/new` | Render the create-cookbook form |
 | POST | `/cookbooks` | Create a cookbook (title required, trimmed, max 200 chars) |
-| GET | `/cookbooks/:id` | View a cookbook and all recipes currently in it |
+| GET | `/cookbooks/:id` | View a cookbook and all recipes currently in it, rendered with the standardized recipe card (REW-88) |
 | GET | `/cookbooks/:id/edit` | Render the rename form |
 | POST | `/cookbooks/:id/update` | Rename a cookbook |
 | POST | `/cookbooks/:id/delete` | Delete a cookbook (never deletes the recipes in it) |
@@ -80,6 +80,8 @@ Favorite/like controls (`.like-btn`) call these endpoints from the recipe detail
 | POST | `/cookbooks/:id/visibility` | Switch a cookbook between Private and Public (`visibility=private\|public`, fails closed to Private) — REW-19 |
 
 All `/cookbooks*` routes require auth and act only on the caller's own cookbooks. Mutation endpoints share a 30-requests/minute-per-user rate limit. See [Cookbooks API](cookbooks.md) for full details, including the recipe-view integration and RLS enforcement.
+
+`GET /cookbooks/:id` was widened in REW-88 to feed the shared standardized recipe card: the same URL, middleware, auth, and redirects, but more recipe columns (`user_id`, `original_author`, embedded categories/tags flattened into `categories`/`tags`) and a batched `isLiked` flag per recipe. No route was added or renamed and no JSON response shape changed. See [Cookbook Recipe Card](cookbook-card.md). **Branch-only: implemented and reviewed on `REW-88-standardize-cookbook-recipe-card`; QA was skipped, and the branch is unmerged.**
 
 ### Cookbooks JSON API (REW-86)
 
@@ -196,6 +198,7 @@ All management routes require `requireAdmin` and use the request-scoped access t
 - [Recipe Photo Upload](recipe-photo-upload.md) - Photo size cap, upload rate limit, the flash-and-redirect error contract on `POST /recipes` and `POST /recipes/:id/update`, and the client-side pre-check (REW-94)
 - [Recipe Visibility](recipe-visibility.md) - Private/Public mapping, fail-closed inputs, cloning, and public read enforcement (REW-85), plus the card-level toggle `POST /recipes/:id/visibility` (REW-86)
 - [My Recipes Recipe Card](my-recipes-card.md) - the owner card contract, the card-level visibility toggle, the `/api/cookbooks` JSON API behind "+ Cookbook", the inert Share placeholder, and the shared `requireApiAuth` extraction (REW-86)
+- [Cookbook Recipe Card](cookbook-card.md) - the cookbook card surface, the shared card partial's full four-surface local-variable contract (including the new `cookbookId` local), and the widened `GET /cookbooks/:id` read with its batched favorite state (REW-88)
 - [Add Recipe / Cloning](recipe-cloning.md) - authenticated copy contract, immutable attribution, copied fields and relationship isolation (REW-84)
 - [Recipe Author Default](recipe-author-default.md) - Account-name defaulting on recipe create/import (REW-46)
 - [Required Prep Time / Total Time](recipe-required-times.md) - Required-field enforcement and the Cook Time → Total Time display rename (REW-52)
