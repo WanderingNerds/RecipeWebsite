@@ -133,13 +133,22 @@ test("the owner view survives callers that omit the new locals", async () => {
 });
 
 test("the cookbook-level control reads as distinct from the per-recipe badges", async () => {
-  const template = await readFile(`${views}cookbooks/view.ejs`, "utf8");
+  // REW-88 moved the per-recipe pill out of this template and into the shared
+  // recipe-summary-card partial, so the assertion moved from the template
+  // SOURCE to rendered OUTPUT. What it proves is unchanged -- and output is
+  // the stronger check, because it now covers both templates at once.
+  const html = await renderOwnerView({
+    recipes: [{ ...recipe, user_id: "owner", status: "draft" }],
+  });
+
   // Per-recipe pills keep their own classes; the cookbook control does not
   // reuse them, so "this cookbook is Public" cannot be confused for
   // "this recipe is Public".
-  assert.match(template, /class="badge-draft badge-draft-sm">Private</);
-  assert.match(template, /class="cookbook-visibility-badge cookbook-visibility-private">Private</);
-  assert.doesNotMatch(template, />Draft<\/span>|>Published<\/span>/);
+  assert.match(html, /class="badge-draft badge-draft-sm">Private</);
+  assert.match(html, /class="cookbook-visibility-badge cookbook-visibility-private">Private</);
+  const cookbookControl = html.match(/<form class="cookbook-visibility-control"[\s\S]*?<\/form>/)[0];
+  assert.doesNotMatch(cookbookControl, /badge-draft|badge-published/);
+  assert.doesNotMatch(html, />Draft<\/span>|>Published<\/span>/);
 });
 
 test("copy-link behavior ships as an external script, satisfying scriptSrc 'self'", async () => {

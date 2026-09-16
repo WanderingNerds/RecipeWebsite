@@ -95,7 +95,7 @@ recipe-website/
 │   │   ├── tagRoutes.js        # Tag API routes
 │   │   ├── likeRoutes.js       # Recipe favorite/like API routes (REW-21)
 │   │   ├── publicRoutes.js     # Unauthenticated pages: /browse, /search, /r/:id, /c/:id, /m/:id (anon-key client only)
-│   │   ├── cookbookRoutes.js   # Cookbook CRUD + recipe membership + visibility toggle (REW-62, REW-19)
+│   │   ├── cookbookRoutes.js   # Cookbook CRUD + recipe membership + visibility toggle (REW-62, REW-19); standardized-card read for the detail page (REW-88)
 │   │   ├── mealPlanRoutes.js   # Meal plan CRUD + bulk-add page routes + visibility toggle (REW-63, REW-69)
 │   │   ├── mealPlanApiRoutes.js # Meal plan JSON API backing the "Add to Meal Plan" modal (REW-63)
 │   │   ├── cookbookApiRoutes.js # Cookbook JSON API backing the "+ Cookbook" card modal (REW-86)
@@ -116,7 +116,7 @@ recipe-website/
 │   ├── partials/navbar.ejs     # Navigation bar
 │   ├── partials/meal-plan-modal.ejs # Shared "Add to Meal Plan" modal (REW-63)
 │   ├── partials/cookbook-modal.ejs  # Shared "Add to Cookbook" modal (REW-86)
-│   ├── partials/recipe-summary-card.ejs # Shared recipe card for My Recipes and Browse (REW-59, REW-86)
+│   ├── partials/recipe-summary-card.ejs # Shared recipe card; one `surface` local drives Browse, My Recipes, My Favorites and Cookbook (REW-59, REW-86, REW-87, REW-88)
 │   ├── auth/                   # Login/Register pages
 │   ├── recipes/                # Recipe views (index, new, edit, view)
 │   ├── cookbooks/               # Cookbook views (index, new, view, edit, add-recipes; public-view for shared cookbooks) (REW-62, REW-19)
@@ -202,6 +202,20 @@ Every card on **My Recipes** (`/recipes`) now carries the same content and the s
 - **No database migration.** Every action touches only the signed-in user's own rows and is already covered by existing RLS.
 
 See [My Recipes Recipe Card](docs/api/my-recipes-card.md) for the route contracts and `docs/RELEASE_NOTES_REW-86.md` for what was and wasn't verified. Known overlap: REW-59 is editing the same shared card partial on its own branch, so expect a merge conflict there and a probable duplicate cookbook API/modal.
+
+### Cookbook Recipe Cards (REW-88)
+
+*Implemented and code-reviewed on branch `REW-88-standardize-cookbook-recipe-card`; **QA was deliberately skipped on this run**, and the branch is unmerged and unpushed.*
+
+Recipe cards inside a cookbook (`/cookbooks/:id`) now match the rest of the site instead of using the page's own hand-rolled layout. Each card shows a clickable title, the favorite heart, author (and `Adapted from` attribution on clones), category and tag chips, and `Prep Time:` / `Cook Time:` / `Servings:` / `Difficulty:` metadata, plus `+ Meal Plan`, Share, Remove, and — only for a recipe the viewer owns — Edit and Delete.
+
+- **No `+ Cookbook` button here**, because the recipe is already in a cookbook.
+- **Remove is unchanged.** It still takes the recipe out of this cookbook only — never deletes it, never affects other cookbooks — and still has its own confirm wording. Edit sits between Remove and Delete so "take this out of the cookbook" and "delete this recipe forever" are never adjacent taps, and Delete remains the only red control.
+- **The owner still sees a read-only Private/Public pill** on each card. It is the only place the owner is told that a Private recipe will not appear to the people they share the cookbook with (REW-19). Nobody else sees it.
+- **Share is a placeholder, on purpose** — visible but inert, with no link and no request. Real sharing is [REW-18](https://wanderingnerds.atlassian.net/browse/REW-18).
+- **No database migration**, no new environment variable, and no new route. The cookbook page's existing read was widened to fetch the columns the card needs, and favorite state is loaded in a single batched query for the whole page.
+
+See [Cookbook Recipe Card](docs/api/cookbook-card.md) for the card contract and the shared partial's four-surface interface, and `docs/RELEASE_NOTES_REW-88.md` for what was and wasn't verified. **Before merge:** load a real cookbook against a live Supabase — the widened read is the repo's first three-level PostgREST embed and fails silently to the empty state.
 
 ### Favorites / Recipe Likes (REW-21, REW-55)
 - **Heart-Toggle Favoriting**: Authenticated users can like/unlike any **published** recipe from a heart-shaped `.like-btn` control with optimistic UI (instant toggle, reverts on a failed request) and an "Undo" toast after unliking (`public/js/likes.js`, backed by `POST`/`DELETE /api/likes/:recipeId`).
