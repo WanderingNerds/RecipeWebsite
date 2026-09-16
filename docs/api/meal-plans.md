@@ -2,8 +2,8 @@
 
 **Feature:** REW-63 — Create and Manage Meal Plans; REW-69 — Add Meal Plan Sharing
 **Component:** `src/routes/mealPlanRoutes.js`, `src/routes/mealPlanApiRoutes.js`, `src/routes/publicRoutes.js` (REW-69 public surface), `src/utils/mealPlanUtils.js`, `views/meal-plans/*.ejs`, `views/partials/meal-plan-modal.ejs`, `public/js/meal-plans.js`, `public/js/meal-plan-share.js`, `database/migrations/011_create_meal_plans_table.sql`, `database/migrations/012_create_meal_plan_recipes_table.sql`, `database/migrations/020_add_meal_plan_sharing.sql`
-**Also covers:** REW-26 — Grocery list generation (`src/utils/groceryList.js`, `views/meal-plans/grocery-list.ejs`)
-**Last Updated:** 2026-09-14
+**Also covers:** REW-26 — Grocery list generation (`src/utils/groceryList.js`, `views/meal-plans/grocery-list.ejs`); REW-89 — Standardized meal plan recipe cards (see [Meal Plan Recipe Card](meal-plan-card.md))
+**Last Updated:** 2026-09-15
 
 ---
 
@@ -51,6 +51,8 @@ Creates a meal plan owned by the current user.
 ### `GET /meal-plans/:id`
 
 Meal plan detail: title, date range, and all recipes currently in it (most recently added first). As of REW-69 the render locals also include `appUrl: getAppUrl()` (`src/utils/authUtils.js`), used to build the share URL — never `req.headers.host` or `X-Forwarded-Host`. Ownership is checked via `getOwnedMealPlan()` (`.eq("user_id", ...)` filter, belt-and-suspenders with the RLS policy itself) — a plan that doesn't exist, or belongs to another user, renders identically as "Meal plan not found" and redirects to `/meal-plans`, never leaking whether the ID exists.
+
+**Widened in REW-89 (no contract change).** The URL, middleware, auth, redirects and not-found behavior are all unchanged; only the shape of the data handed to the template changed. `GET /:id` was extracted into an exported `handleMealPlanView(req, res, { createClient } = {})` with an injectable Supabase client factory — following the `handleMealPlanVisibilityUpdate` precedent in the same file — so the data contract can be unit-tested without a live Supabase. `getMealPlanRecipes()` is now exported and selects `MEAL_PLAN_CARD_COLUMNS`, which adds `user_id` and `original_author` plus the embedded `recipe_categories(categories(...))` / `recipe_tags(tags(...))` relations, flattened into plain `categories` / `tags` arrays. The handler then stamps an `isLiked` flag per recipe from **one** batched `recipe_likes` query filtered to `req.user.id` and `.in()` the page's recipe ids — none at all for an empty plan, and a failure is logged and degrades to hearts rendering unfavorited rather than failing the page. Net: one plan read, one recipe read, one likes read, regardless of plan size. `getMealPlanRecipeIngredients()` (the grocery-list query, below) was deliberately left narrow and untouched. See [Meal Plan Recipe Card](meal-plan-card.md) for the card contract and the shared partial's five-surface local-variable interface.
 
 ### `GET /meal-plans/:id/grocery-list` (REW-26)
 
@@ -118,6 +120,8 @@ Bulk-adds selected recipes to a meal plan.
 ### `POST /meal-plans/:id/recipes/:recipeId/remove`
 
 Removes a recipe from a meal plan (deletes the `meal_plan_recipes` row only — **the recipe itself is never deleted or modified**, and it remains in any other meal plans or cookbooks it belonged to). Used by the meal plan detail page. Redirects back to `/meal-plans/:id`.
+
+As of REW-89 the form that posts here lives inside the shared card partial rather than in `views/meal-plans/view.ejs`, and is rendered only when the caller passes a `mealPlanId` local. Nothing changed server-side: the route keeps `requireAuth`, `mealPlanLimiter`, both UUID guards, and its plan-ownership check, and the form still carries its own `_csrf` hidden field. Unlike the cookbook equivalent it sends **no** `returnTo` field, because this route always redirects to `/meal-plans/:id`.
 
 ---
 
@@ -309,15 +313,30 @@ Automated coverage added with the change:
 
 **QA was deliberately skipped for REW-69 as well, and several acceptance criteria are unverified.** Nothing in this feature has been exercised against a live Supabase with migration `020` applied. Specifically unconfirmed against `docs/plans/meal-plan-sharing.md`: **AC3** (share URL origin unaffected by a spoofed `Host`/`X-Forwarded-Host`, and the Copy button actually working), **AC5** (zero trace of a Private recipe at `/m/:id` for visitor, other user, and owner), **AC6** (all-private empty state), **AC11** (direct PostgREST anon/cross-user reads of a Private plan's rows and a Public plan's Private membership edges), **AC12** (an other-user recipe switched back to Private disappears cleanly), **AC13** (toggling visibility changes no recipe status, membership, or dates), and **AC16** (30/min rate limiting on the visibility endpoint). The remaining criteria are supported by code review and the automated suite but have had no manual browser pass.
 
+### REW-89
+
+Automated coverage added with the change:
+
+- `src/routes/mealPlanRoutes.test.js` (new, 11 cases) — drives the exported `handleMealPlanView` and `getMealPlanRecipes` with a fake injected client, no live Supabase: the select asks for every column the standardized card needs and no body fields; junction embeds flatten to plain `categories`/`tags`, and missing links flatten to `[]` rather than `undefined`; ordering stays newest-added-first; a membership row whose `recipes` embed is null is dropped; a failed recipe read yields an empty plan rather than throwing; `isLiked` comes from exactly one `recipe_likes` query filtered to the caller; an empty plan issues no likes query at all; a likes error still renders the page with every heart unfavorited; the page stays plan-owner scoped and still passes its share-link locals; and a non-UUID `:id` and a plan the caller does not own both redirect with the same "Meal plan not found" flash.
+- `src/views/recipeCard.test.js` (updated) — six REW-89 cases replacing the previous thin meal-plan test, including the distinguishing assertion that this surface renders **zero** `+ Meal Plan` triggers while each of the other four still renders exactly one per card.
+- `src/views/mealPlanSharing.test.js` (updated) — the "plan-level control reads as distinct from the per-recipe badges" assertion moved from a template-source check to a rendered-output check, because the per-recipe pill literal now lives in the shared partial. Mirrors what REW-88 did to `cookbookSharing.test.js`; strengthened, not loosened.
+
+Suite result at hand-off: **526 tests, 524 passing, 2 failing** — both pre-existing, environmental `listen EACCES` unix-socket failures in `src/csrf.integration.test.js` on Windows (REW-98). No new failures.
+
+**Reviewer verdict: approved on round 1, no blocking issues.** Three non-blocking follow-ups were recorded rather than implemented: extracting the now-triplicated card query/flatten/likes code into `src/utils/recipeCardQuery.js`; two now-vacuous loop entries in `src/views/recipeVisibility.test.js`; and the `/m/:id` vs `/meal-plans/:id` `+ Meal Plan` inconsistency, which needs a Product decision.
+
+**The QA stage was deliberately excluded from this pipeline run** (Planner → Developer → Reviewer → Documentation). The reviewer ran the full suite, but no dedicated QA pass against the acceptance criteria and no browser or live-Supabase verification were performed. Unverified: a plan containing your own Public recipe, your own Private recipe and another user's Public recipe; mobile/desktop wrapping of the five-control action row; heart persistence across reload; `+ Cookbook` adding; Remove leaving the recipe intact; Delete confirming first. Do not describe REW-89 as QA-verified.
+
 ---
 
 ## Related documentation
 
 - [API Overview](README.md)
+- [Meal Plan Recipe Card](meal-plan-card.md) — the standardized card on `/meal-plans/:id`, the shared partial's full five-surface local-variable contract (including the new `mealPlanId` local), and the widened `GET /meal-plans/:id` read with its batched favorite state (REW-89)
 - [Cookbooks API](cookbooks.md) — the structural precedent this feature extends/diverges from, including REW-19 cookbook sharing
-- Plans: `docs/plans/REW-63-create-and-manage-meal-plans.md`, `docs/plans/meal-plan-sharing.md` (REW-69)
+- Plans: `docs/plans/REW-63-create-and-manage-meal-plans.md`, `docs/plans/meal-plan-sharing.md` (REW-69), `docs/plans/rew-89-standardize-meal-plan-recipe-card.md`
 - `database/README.md` — `meal_plans` / `meal_plan_recipes` tables, RLS policies, indexes, migration `020`
-- Release notes: `docs/RELEASE_NOTES_REW-63.md`, `docs/RELEASE_NOTES_REW-69.md`
+- Release notes: `docs/RELEASE_NOTES_REW-63.md`, `docs/RELEASE_NOTES_REW-69.md`, `docs/RELEASE_NOTES_REW-89.md`
 - Out of scope, possible follow-ups: search discoverability of Public meal plans; a grocery list on the shared page; copying a shared plan into your own account (the meal-plan analogue of [REW-91](https://wanderingnerds.atlassian.net/browse/REW-91))
 
 ---
@@ -326,6 +345,7 @@ Automated coverage added with the change:
 
 | Date | Change |
 |------|--------|
+| 2026-09-15 | REW-89 standardized meal plan recipe cards: `GET /meal-plans/:id` widened to feed the shared card partial (extracted `handleMealPlanView`, exported `getMealPlanRecipes`, `MEAL_PLAN_CARD_COLUMNS`, batched `isLiked`), and the Remove form moved into the partial. No migration, no route added or renamed, no JSON shape change. Reviewer-approved; **QA stage excluded from the run**. |
 | 2026-09-14 | REW-69 meal plan sharing: added `POST /meal-plans/:id/visibility`, the public `GET /m/:id` surface, owner-facing share UI, and sharing-specific security notes including the accepted `user_id` exposure on Public plans. Deliberately no search discoverability. Corrected the stale "CSRF is disabled repo-wide" claim in Security — CSRF is enforced. Reviewer-approved; QA not run. |
 | 2026-09-14 | Added `GET /meal-plans/:id/grocery-list` (REW-26) — read-only printable grocery list. No schema change; `planned_servings` still unused. |
 | 2026-09-08 | Page created documenting REW-63 (new feature — no prior version to reconcile). |

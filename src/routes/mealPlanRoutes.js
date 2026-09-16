@@ -55,15 +55,37 @@ async function getOwnedMealPlan(supabaseClient, mealPlanId, userId) {
   return data;
 }
 
+// Columns the standardized meal plan card needs (REW-89). Mirrors
+// COOKBOOK_CARD_COLUMNS in cookbookRoutes.js -- both surfaces render the same
+// partial, so they must feed it the same shape -- plus the two fields the old
+// lightweight meal plan card never fetched:
+//
+//   user_id         decides whether Edit/Delete are drawn. Presentational
+//                   only, never rendered into the HTML, and never the sole
+//                   authorization check: /recipes/:id/edit, /:id/update and
+//                   /:id/delete each enforce ownership themselves. It matters
+//                   more here than anywhere else so far: the RLS INSERT policy
+//                   on meal_plan_recipes (migration 012) allows your own
+//                   recipes OR anyone's published recipe, so this surface is
+//                   genuinely mixed-ownership in production today.
+//   original_author immutable "Adapted from" attribution.
+//
+// Body fields (instructions, notes) stay off a listing query --
+// getMealPlanRecipeIngredients() below is the one that reads ingredients, and
+// only for the grocery list.
+const MEAL_PLAN_CARD_COLUMNS =
+  "id, user_id, title, author, original_author, prep_time, cook_time, servings, difficulty, thumbnail_url, status, created_at, recipe_categories(categories(id, name, slug, icon)), recipe_tags(tags(id, name, slug))";
+
 /**
  * Fetch the recipes currently in a meal plan, most recently added first.
+ *
+ * Exported for handler-level tests; the meal plan view handler below is the
+ * only production caller.
  */
-async function getMealPlanRecipes(supabaseClient, mealPlanId) {
+export async function getMealPlanRecipes(supabaseClient, mealPlanId) {
   const { data, error } = await supabaseClient
     .from("meal_plan_recipes")
-    .select(
-      "recipe_id, created_at, recipes(id, title, author, prep_time, cook_time, servings, difficulty, thumbnail_url, status, created_at)"
-    )
+    .select(`recipe_id, created_at, recipes(${MEAL_PLAN_CARD_COLUMNS})`)
     .eq("meal_plan_id", mealPlanId)
     .order("created_at", { ascending: false });
 
@@ -75,9 +97,19 @@ async function getMealPlanRecipes(supabaseClient, mealPlanId) {
   // recipes(...) can be null if a row's recipe was deleted in the same
   // instant as this query (race), or if it's another user's recipe that
   // has since been unpublished -- filter defensively either way.
+  //
+  // One query, then flatten the embedded junction rows into the flat
+  // categories/tags the card expects -- the same mapping GET /browse,
+  // GET /recipes/liked and GET /cookbooks/:id use. The ordering above is on
+  // the junction row's created_at, i.e. added-to-plan order, newest first.
   return (data || [])
     .map((row) => row.recipes)
-    .filter(Boolean);
+    .filter(Boolean)
+    .map(({ recipe_categories, recipe_tags, ...recipe }) => ({
+      ...recipe,
+      categories: (recipe_categories ?? []).map((link) => link?.categories).filter(Boolean),
+      tags: (recipe_tags ?? []).map((link) => link?.tags).filter(Boolean),
+    }));
 }
 
 /**
@@ -642,8 +674,20 @@ router.get("/:id/grocery-list", requireAuth, async (req, res) => {
   }
 });
 
-// GET /meal-plans/:id - View a single meal plan and its recipes
-router.get("/:id", requireAuth, async (req, res) => {
+/**
+ * GET /meal-plans/:id - View a single meal plan and its recipes.
+ *
+ * Exported with an injectable client, following the
+ * handleMealPlanVisibilityUpdate precedent above and handleCookbookView in
+ * cookbookRoutes.js: the data contract the standardized REW-89 card depends on
+ * (widened columns, flattened categories/tags, batched like status) is worth
+ * testing without a live Supabase. Mounted below with requireAuth, unchanged.
+ */
+export async function handleMealPlanView(
+  req,
+  res,
+  { createClient = createSupabaseClient } = {}
+) {
   try {
     const { id } = req.params;
 
@@ -652,7 +696,7 @@ router.get("/:id", requireAuth, async (req, res) => {
       return res.redirect("/meal-plans");
     }
 
-    const supabaseClient = createSupabaseClient(req.accessToken);
+    const supabaseClient = createClient(req.accessToken);
     const mealPlan = await getOwnedMealPlan(supabaseClient, id, req.user.id);
 
     if (!mealPlan) {
@@ -662,10 +706,38 @@ router.get("/:id", requireAuth, async (req, res) => {
 
     const recipes = await getMealPlanRecipes(supabaseClient, id);
 
+    // REW-89: the card's favorite heart needs to know which of these the
+    // caller has already favorited. One batched query for the whole page
+    // (the REW-55 batching pattern, same as the My Recipes and cookbook
+    // handlers) rather than one per recipe, and none at all for an empty
+    // plan. Stays on the request-scoped client: recipe_likes is RLS-scoped to
+    // the caller, and the explicit user_id filter is belt and braces on top.
+    //
+    // A failure here is not worth failing the page over -- log it and let the
+    // hearts render unfavorited.
+    const recipeIds = recipes.map((recipe) => recipe.id);
+    let likedRecipeIds = new Set();
+    if (recipeIds.length) {
+      const { data: likedRows, error: likesError } = await supabaseClient
+        .from("recipe_likes")
+        .select("recipe_id")
+        .eq("user_id", req.user.id)
+        .in("recipe_id", recipeIds);
+
+      if (likesError) {
+        console.error("Error fetching like status:", likesError);
+      } else {
+        likedRecipeIds = new Set((likedRows || []).map((row) => row.recipe_id));
+      }
+    }
+
     res.render("meal-plans/view", {
       title: mealPlan.title,
       mealPlan,
-      recipes,
+      recipes: recipes.map((recipe) => ({
+        ...recipe,
+        isLiked: likedRecipeIds.has(recipe.id),
+      })),
       // REW-69: share-link origin comes from APP_URL/getAppUrl() only, never
       // from the request Host header -- this string exists to be copied and
       // re-shared by a human.
@@ -676,6 +748,9 @@ router.get("/:id", requireAuth, async (req, res) => {
     req.flash("error", "An unexpected error occurred");
     res.redirect("/meal-plans");
   }
-});
+}
+
+// GET /meal-plans/:id - View a single meal plan and its recipes
+router.get("/:id", requireAuth, (req, res) => handleMealPlanView(req, res));
 
 export default router;

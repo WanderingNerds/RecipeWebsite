@@ -110,7 +110,7 @@ Both run exclusively on the anon-key Supabase client, so a draft recipe inside a
 | GET | `/meal-plans` | List the current user's meal plans with a per-plan recipe count, marking Public plans |
 | GET | `/meal-plans/new` | Render the create-meal-plan form (title + start/end date) |
 | POST | `/meal-plans` | Create a meal plan (title required; start/end date required, `end >= start`) |
-| GET | `/meal-plans/:id` | View a meal plan and all recipes currently in it |
+| GET | `/meal-plans/:id` | View a meal plan and all recipes currently in it, rendered with the standardized recipe card (REW-89) |
 | GET | `/meal-plans/:id/edit` | Render the rename/re-date form |
 | POST | `/meal-plans/:id/update` | Rename and/or re-date a meal plan |
 | POST | `/meal-plans/:id/visibility` | Switch a meal plan between Private and Public (`visibility=private\|public`, fails closed to Private) — REW-69 |
@@ -124,6 +124,8 @@ Both run exclusively on the anon-key Supabase client, so a draft recipe inside a
 | DELETE | `/api/meal-plans/:id/recipes/:recipeId` | JSON: remove a recipe from a meal plan |
 
 All `/meal-plans*` page routes require auth and redirect to login if unauthenticated, consistent with `/cookbooks*`. All `/api/meal-plans*` routes require auth and return JSON `401` if unauthenticated, consistent with `/api/likes*` (there is no anonymous-GET case on that surface). Mutation endpoints on both surfaces share a 30-requests/minute-per-user rate limit. Meal plans are private by default and RLS-enforced; as of REW-69 an owner can opt one plan at a time into a Public share link (see below). Unlike Cookbooks' owner-only recipe rule, a meal plan can contain the owner's own recipes (any status) *or* any other user's published recipes, mirroring `recipe_likes`' visibility rule. See [Meal Plans API](meal-plans.md) for full details, including the RLS enforcement and two non-blocking reviewer-flagged follow-ups.
+
+`GET /meal-plans/:id` was widened in REW-89 to feed the shared standardized recipe card: the same URL, middleware, auth and redirects, but more recipe columns (`user_id`, `original_author`, embedded categories/tags flattened into `categories`/`tags`) and a batched `isLiked` flag per recipe. No route was added or renamed and no JSON response shape changed. Because meal plan membership is own-or-published, this is the first card surface where a recipe the viewer does not own is a normal case, so Edit/Delete owner-gating and the owner-only status pill are live protections rather than future-proofing. See [Meal Plan Recipe Card](meal-plan-card.md). **Branch-only: implemented and reviewed on `REW-89-standardize-meal-plan-recipe-card`; the QA stage was excluded from the run, and the change is uncommitted.**
 
 ### Public meal plan sharing (REW-69)
 
@@ -198,7 +200,8 @@ All management routes require `requireAdmin` and use the request-scoped access t
 - [Recipe Photo Upload](recipe-photo-upload.md) - Photo size cap, upload rate limit, the flash-and-redirect error contract on `POST /recipes` and `POST /recipes/:id/update`, and the client-side pre-check (REW-94)
 - [Recipe Visibility](recipe-visibility.md) - Private/Public mapping, fail-closed inputs, cloning, and public read enforcement (REW-85), plus the card-level toggle `POST /recipes/:id/visibility` (REW-86)
 - [My Recipes Recipe Card](my-recipes-card.md) - the owner card contract, the card-level visibility toggle, the `/api/cookbooks` JSON API behind "+ Cookbook", the inert Share placeholder, and the shared `requireApiAuth` extraction (REW-86)
-- [Cookbook Recipe Card](cookbook-card.md) - the cookbook card surface, the shared card partial's full four-surface local-variable contract (including the new `cookbookId` local), and the widened `GET /cookbooks/:id` read with its batched favorite state (REW-88)
+- [Cookbook Recipe Card](cookbook-card.md) - the cookbook card surface, the `cookbookId` local, and the widened `GET /cookbooks/:id` read with its batched favorite state (REW-88)
+- [Meal Plan Recipe Card](meal-plan-card.md) - the meal plan card surface, the shared card partial's **current five-surface** local-variable contract (including the new `mealPlanId` local and the `showMealPlanAdd` flag), the widened `GET /meal-plans/:id` read, and the mixed-ownership rules that make owner-gating load-bearing (REW-89)
 - [Add Recipe / Cloning](recipe-cloning.md) - authenticated copy contract, immutable attribution, copied fields and relationship isolation (REW-84)
 - [Recipe Author Default](recipe-author-default.md) - Account-name defaulting on recipe create/import (REW-46)
 - [Required Prep Time / Total Time](recipe-required-times.md) - Required-field enforcement and the Cook Time → Total Time display rename (REW-52)
