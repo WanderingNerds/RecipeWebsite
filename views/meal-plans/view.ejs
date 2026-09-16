@@ -78,51 +78,18 @@
   <% } else { %>
     <div class="organization-card-grid">
       <% recipes.forEach(function(recipe) { %>
-        <div class="feature-card" style="position: relative; display: flex; flex-direction: column;">
-          <% if (recipe.thumbnail_url) { %>
-            <a href="/recipes/<%= recipe.id %>" style="display: block; margin-bottom: 1rem;">
-              <div class="photo-placeholder" style="width: 100%; height: 200px; border-radius: var(--radius); overflow: hidden; display: flex; align-items: center; justify-content: center;">
-                <img src="<%= recipe.thumbnail_url %>" alt="<%= recipe.title %>" style="width: 100%; height: 100%; object-fit: cover;">
-              </div>
-            </a>
-          <% } %>
+        <%#
+          REW-89: the shared standardized card, fifth surface. This is the
+          first genuinely mixed-ownership card surface -- the RLS INSERT
+          policy on meal_plan_recipes (migration 012) admits your own recipes
+          OR anyone's published recipe -- so ownership is computed per card
+          from recipe.user_id, which is never rendered into the markup.
 
-          <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.5rem; gap: 0.5rem;">
-            <h3 style="margin: 0; flex: 1;">
-              <a href="/recipes/<%= recipe.id %>" style="color: inherit; text-decoration: none;">
-                <%= recipe.title %>
-              </a>
-            </h3>
-            <% if (recipe.status === 'draft') { %>
-              <span class="badge-draft badge-draft-sm">Private</span>
-            <% } else { %>
-              <span class="badge-published badge-published-sm">Public</span>
-            <% } %>
-          </div>
-
-          <% if (recipe.author) { %>
-            <p style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 0.5rem;">By <%= recipe.author %></p>
-          <% } %>
-
-          <div style="display: flex; gap: 1rem; flex-wrap: wrap; font-size: 0.875rem; color: var(--text-muted); margin-top: 0.5rem;">
-            <% if (recipe.prep_time) { %>
-              <span>Prep: <%= recipe.prep_time %></span>
-            <% } %>
-            <% if (recipe.cook_time) { %>
-              <span>Cook: <%= recipe.cook_time %></span>
-            <% } %>
-            <% if (recipe.servings) { %>
-              <span><%= recipe.servings %> servings</span>
-            <% } %>
-          </div>
-
-          <div style="display: flex; gap: 0.5rem; margin-top: auto; padding-top: 1rem; border-top: 1px solid var(--border-color);">
-            <form action="/meal-plans/<%= mealPlan.id %>/recipes/<%= recipe.id %>/remove" method="POST" style="margin: 0; flex: 1;" onsubmit="return confirm('Remove this recipe from the meal plan? The recipe itself will not be deleted.');">
-              <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-              <button type="submit" class="btn btn-outline" style="width: 100%; font-size: 0.875rem; padding: 0.5rem 1rem;">Remove</button>
-            </form>
-          </div>
-        </div>
+          `mealPlanId` is what lets the partial render this page's Remove
+          action; `user` and `csrfToken` reach it through res.locals, exactly
+          as they do on the other four surfaces.
+        %>
+        <%- include('../partials/recipe-summary-card', { recipe, surface: 'meal-plan', mealPlanId: mealPlan.id }) %>
       <% }); %>
     </div>
   <% } %>

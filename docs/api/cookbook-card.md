@@ -27,6 +27,13 @@ cookbook's id.
 `views/partials/recipe-summary-card.ejs` is the single card template for four surfaces. This is the
 part most likely to bite a future caller, so it is documented in full here.
 
+> **Superseded by REW-89.** The partial now has a **fifth** surface, `'meal-plan'`, plus a new
+> optional `mealPlanId` local and a new `showMealPlanAdd` flag (`!isMealPlan`), and `showStatusPill`
+> gained an `|| (isMealPlan && isOwner)` clause. The tables below remain accurate for the cookbook
+> surface, but the current, complete contract lives in
+> [Meal Plan Recipe Card](meal-plan-card.md#the-shared-partials-local-variable-contract). Nothing
+> about the cookbook surface's rendered output changed.
+
 ### Locals a caller passes
 
 | Local | Required | Notes |

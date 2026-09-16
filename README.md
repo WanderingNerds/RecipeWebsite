@@ -96,7 +96,7 @@ recipe-website/
 │   │   ├── likeRoutes.js       # Recipe favorite/like API routes (REW-21)
 │   │   ├── publicRoutes.js     # Unauthenticated pages: /browse, /search, /r/:id, /c/:id, /m/:id (anon-key client only)
 │   │   ├── cookbookRoutes.js   # Cookbook CRUD + recipe membership + visibility toggle (REW-62, REW-19); standardized-card read for the detail page (REW-88)
-│   │   ├── mealPlanRoutes.js   # Meal plan CRUD + bulk-add page routes + visibility toggle (REW-63, REW-69)
+│   │   ├── mealPlanRoutes.js   # Meal plan CRUD + bulk-add page routes + visibility toggle (REW-63, REW-69); standardized-card read for the detail page (REW-89)
 │   │   ├── mealPlanApiRoutes.js # Meal plan JSON API backing the "Add to Meal Plan" modal (REW-63)
 │   │   ├── cookbookApiRoutes.js # Cookbook JSON API backing the "+ Cookbook" card modal (REW-86)
 │   │   ├── helpFeedbackRoutes.js # Authenticated feedback routes (REW-70)
@@ -116,7 +116,7 @@ recipe-website/
 │   ├── partials/navbar.ejs     # Navigation bar
 │   ├── partials/meal-plan-modal.ejs # Shared "Add to Meal Plan" modal (REW-63)
 │   ├── partials/cookbook-modal.ejs  # Shared "Add to Cookbook" modal (REW-86)
-│   ├── partials/recipe-summary-card.ejs # Shared recipe card; one `surface` local drives Browse, My Recipes, My Favorites and Cookbook (REW-59, REW-86, REW-87, REW-88)
+│   ├── partials/recipe-summary-card.ejs # Shared recipe card; one `surface` local drives Browse, My Recipes, My Favorites, Cookbook and Meal Plan (REW-59, REW-86, REW-87, REW-88, REW-89)
 │   ├── auth/                   # Login/Register pages
 │   ├── recipes/                # Recipe views (index, new, edit, view)
 │   ├── cookbooks/               # Cookbook views (index, new, view, edit, add-recipes; public-view for shared cookbooks) (REW-62, REW-19)
@@ -216,6 +216,22 @@ Recipe cards inside a cookbook (`/cookbooks/:id`) now match the rest of the site
 - **No database migration**, no new environment variable, and no new route. The cookbook page's existing read was widened to fetch the columns the card needs, and favorite state is loaded in a single batched query for the whole page.
 
 See [Cookbook Recipe Card](docs/api/cookbook-card.md) for the card contract and the shared partial's four-surface interface, and `docs/RELEASE_NOTES_REW-88.md` for what was and wasn't verified. **Before merge:** load a real cookbook against a live Supabase — the widened read is the repo's first three-level PostgREST embed and fails silently to the empty state.
+
+### Meal Plan Recipe Cards (REW-89)
+
+*Implemented and code-reviewed on branch `REW-89-standardize-meal-plan-recipe-card`; **the QA stage was deliberately excluded from this run**, and the change is uncommitted.*
+
+Recipe cards inside a meal plan (`/meal-plans/:id`) now match the rest of the site instead of using the page's own hand-rolled layout, completing the card-standardization series across all five authenticated card surfaces. Each card shows a clickable title, the favorite heart, author (and `Adapted from` attribution on clones), category and tag chips, and `Prep Time:` / `Cook Time:` / `Servings:` / `Difficulty:` metadata, plus `+ Cookbook`, Share, Remove, and — only for a recipe the viewer owns — Edit and Delete.
+
+- **No `+ Meal Plan` button here**, because the recipe is already in a meal plan. `+ Cookbook` is present, since a planned recipe may well not be in a cookbook yet.
+- **This is the first card surface with genuinely mixed ownership.** A meal plan may contain your own recipes (any status) *or* any other user's Public recipe, so cards you don't own are normal. Those keep the title, heart, chips, metadata, `+ Cookbook`, Share and Remove, but show no Edit, no Delete, and no status pill — owner-gating here is a live protection, not future-proofing.
+- **Remove is unchanged.** It still takes the recipe out of this plan only — never deletes it, never affects other plans or cookbooks — and still has its own confirm wording. Edit sits between Remove and Delete so "take this out of the plan" and "delete this recipe forever" are never adjacent taps, and Delete remains the only red control.
+- **The Private/Public pill is now owner-only.** It used to show on every card, including other people's recipes. For the owner it still does its job: it is the only place they're told that a Private recipe will not appear to the people they share the plan with (REW-69).
+- **Share is a placeholder, on purpose** — visible but inert, with no link and no request. Real sharing is [REW-18](https://wanderingnerds.atlassian.net/browse/REW-18).
+- **No database migration**, no new environment variable, no new route, and no CSS or client-side JavaScript. The plan page's existing read was widened to fetch the columns the card needs, and favorite state is loaded in a single batched query for the whole page.
+- **Known, intentional scope boundary:** the public shared meal plan view `/m/:id` was left alone and still uses the older lightweight card — including a `+ Meal Plan` button. Reconciling the two needs a Product decision and its own ticket.
+
+See [Meal Plan Recipe Card](docs/api/meal-plan-card.md) for the card contract and the shared partial's five-surface interface, and `docs/RELEASE_NOTES_REW-89.md` for what was and wasn't verified. **Before merge:** load a real meal plan — ideally one containing another user's Public recipe — against a live Supabase; the widened read uses the same three-level PostgREST embed REW-88 introduced and fails silently to the empty state.
 
 ### Favorites / Recipe Likes (REW-21, REW-55)
 - **Heart-Toggle Favoriting**: Authenticated users can like/unlike any **published** recipe from a heart-shaped `.like-btn` control with optimistic UI (instant toggle, reverts on a failed request) and an "Undo" toast after unliking (`public/js/likes.js`, backed by `POST`/`DELETE /api/likes/:recipeId`).

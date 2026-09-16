@@ -2,8 +2,8 @@
   Shared recipe summary card.
 
   REW-59 built the Browse card, REW-86 added the My Recipes owner card,
-  REW-87 added My Favorites and REW-88 adds Cookbook. The four are described
-  by one `surface` local:
+  REW-87 added My Favorites, REW-88 added Cookbook and REW-89 adds Meal Plan.
+  The five are described by one `surface` local:
 
     'browse'     - public, non-actionable, read-only status pill
     'my-recipes' - uniformly owned by the viewer
@@ -12,6 +12,11 @@
     'cookbook'   - the recipes inside one cookbook. Owner-only today, MIXED
                    once REW-100 lands. Carries the page-specific Remove
                    action and is the one surface with no `+ Cookbook`.
+    'meal-plan'  - the recipes inside one meal plan. GENUINELY MIXED today:
+                   the RLS INSERT policy on meal_plan_recipes (migration 012)
+                   admits your own recipes OR anyone's published recipe.
+                   Carries the page-specific Remove action and is the one
+                   surface with no `+ Meal Plan`.
 
   `isPublic` used to encode "public surface" and "owner surface" as a single
   axis, which favorites breaks. Ownership is therefore decided per card via
@@ -34,12 +39,18 @@
   const isMyRecipes = cardSurface === 'my-recipes';
   const isFavorites = cardSurface === 'favorites';
   const isCookbook = cardSurface === 'cookbook';
+  const isMealPlan = cardSurface === 'meal-plan';
 
   // REW-88: the cookbook Remove form needs the id of the cookbook being
   // viewed. Optional and read through `typeof` like `surface` above, under a
   // distinct name so the const cannot shadow the local it reads. A caller
   // that forgets to pass it gets no Remove button rather than a broken URL.
   const cardCookbookId = typeof cookbookId !== 'undefined' && cookbookId ? cookbookId : null;
+
+  // REW-89: the same contract for the meal plan Remove form. A caller that
+  // forgets it gets no Remove button rather than a form posting to
+  // /meal-plans//recipes/...
+  const cardMealPlanId = typeof mealPlanId !== 'undefined' && mealPlanId ? mealPlanId : null;
 
   // Guarded on both sides: a recipe with no user_id (sparse fixture, or a
   // surface that simply does not fetch the column) is treated as NOT owned.
@@ -59,13 +70,24 @@
   // and REW-19 sharing hides those from the shared /c/:id view, so the pill
   // is the only place the owner is told that. They are therefore two
   // independent flags rendering into the same header row.
+  //
+  // REW-89 extends the pill to meal plans on exactly the same reasoning:
+  // REW-69 sharing hides Private recipes from the shared /m/:id view, so the
+  // pill is how the owner learns a Private recipe will not appear to the
+  // people they share the plan with. Owner-gated on both surfaces -- a viewer
+  // is never shown a status claim about somebody else's recipe.
   const showFavoriteHeart = !isBrowse;
-  const showStatusPill = isBrowse || (isCookbook && isOwner);
+  const showStatusPill = isBrowse || (isCookbook && isOwner) || (isMealPlan && isOwner);
   const showOwnerControls = isOwner && !isBrowse; // Edit + Delete
   // A cookbook recipe is already in a cookbook, so `+ Cookbook` is suppressed
   // there. Display rule only: POST /api/cookbooks/:id/recipes/:recipeId keeps
   // its auth, rate limiter and UUID guards whether or not a button is drawn.
   const showCookbookAdd = !isBrowse && !isCookbook;
+  // REW-89, the exact analogue: a meal plan recipe is already in a meal plan,
+  // so `+ Meal Plan` is suppressed there. Display rule only -- POST
+  // /api/meal-plans/:id/recipes/:recipeId keeps requireApiAuth,
+  // mealPlanApiLimiter and its UUID guards whether or not a button is drawn.
+  const showMealPlanAdd = !isMealPlan;
   const chipsAreLinks = isMyRecipes;              // /recipes?category= filters YOUR recipes
   const showAdaptedFrom = !isBrowse;
 %>
@@ -106,7 +128,9 @@
                 Cookbook (REW-88) shows it to the OWNER only: it is how the
                 owner learns that a Private recipe will not appear to the
                 people they share the cookbook with. A non-owner is never
-                shown a status claim about somebody else's recipe.
+                shown a status claim about somebody else's recipe. Meal plan
+                (REW-89) follows the same owner-only rule, for the same
+                reason -- /m/:id hides Private recipes exactly as /c/:id does.
               %>
               <% if (recipe.status === 'draft') { %>
                 <span class="badge-draft badge-draft-sm">Private</span>
@@ -178,7 +202,7 @@
 
           <% if (isBrowse) { %>
           <div class="recipe-card-actions" style="margin-top: auto; padding-top: 1rem; border-top: 1px solid var(--border-color);">
-            <button type="button" class="btn btn-outline meal-plan-add-btn<%= viewer ? '' : ' meal-plan-add-btn-guest' %>" data-recipe-id="<%= recipe.id %>" aria-label="<%= viewer ? 'Add to Meal Plan' : 'Log in to add to Meal Plan' %>">+ Meal Plan</button>
+            <% if (showMealPlanAdd) { %><button type="button" class="btn btn-outline meal-plan-add-btn<%= viewer ? '' : ' meal-plan-add-btn-guest' %>" data-recipe-id="<%= recipe.id %>" aria-label="<%= viewer ? 'Add to Meal Plan' : 'Log in to add to Meal Plan' %>">+ Meal Plan</button><% } %>
           </div>
           <% } else if (isFavorites) { %>
           <%#
@@ -198,7 +222,7 @@
             toggleCookbookMembership in public/js/cookbooks.js.
           %>
           <div class="recipe-card-actions recipe-summary-actions" style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: auto; padding-top: 1rem; border-top: 1px solid var(--border-color);">
-            <button type="button" class="btn btn-outline meal-plan-add-btn<%= viewer ? '' : ' meal-plan-add-btn-guest' %>" data-recipe-id="<%= recipe.id %>" aria-label="<%= viewer ? 'Add to Meal Plan' : 'Log in to add to Meal Plan' %>" style="flex: 1; font-size: 0.875rem; padding: 0.5rem 1rem;">+ Meal Plan</button>
+            <% if (showMealPlanAdd) { %><button type="button" class="btn btn-outline meal-plan-add-btn<%= viewer ? '' : ' meal-plan-add-btn-guest' %>" data-recipe-id="<%= recipe.id %>" aria-label="<%= viewer ? 'Add to Meal Plan' : 'Log in to add to Meal Plan' %>" style="flex: 1; font-size: 0.875rem; padding: 0.5rem 1rem;">+ Meal Plan</button><% } %>
             <% if (showCookbookAdd) { %><button type="button" class="btn btn-outline cookbook-add-btn<%= viewer ? '' : ' cookbook-add-btn-guest' %>" data-recipe-id="<%= recipe.id %>" aria-label="<%= viewer ? 'Add to Cookbook' : 'Log in to add to Cookbook' %>" style="flex: 1; font-size: 0.875rem; padding: 0.5rem 1rem;">+ Cookbook</button><% } %>
             <%#
               Same deliberately inert Share placeholder REW-86 ships: no href,
@@ -232,7 +256,7 @@
             line up across a grid row.
           %>
           <div class="recipe-card-actions recipe-summary-actions" style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: auto; padding-top: 1rem; border-top: 1px solid var(--border-color);">
-            <button type="button" class="btn btn-outline meal-plan-add-btn<%= viewer ? '' : ' meal-plan-add-btn-guest' %>" data-recipe-id="<%= recipe.id %>" aria-label="<%= viewer ? 'Add to Meal Plan' : 'Log in to add to Meal Plan' %>" style="flex: 1; font-size: 0.875rem; padding: 0.5rem 1rem;">+ Meal Plan</button>
+            <% if (showMealPlanAdd) { %><button type="button" class="btn btn-outline meal-plan-add-btn<%= viewer ? '' : ' meal-plan-add-btn-guest' %>" data-recipe-id="<%= recipe.id %>" aria-label="<%= viewer ? 'Add to Meal Plan' : 'Log in to add to Meal Plan' %>" style="flex: 1; font-size: 0.875rem; padding: 0.5rem 1rem;">+ Meal Plan</button><% } %>
             <%#
               The same deliberately inert Share placeholder REW-86 and REW-87
               ship: no href, no handler, no endpoint, no target URL. Real
@@ -258,6 +282,74 @@
               <button type="submit" class="btn btn-outline" style="width: 100%; font-size: 0.875rem; padding: 0.5rem 1rem;">Remove</button>
             </form>
             <% } %>
+            <% if (showOwnerControls) { %>
+            <a href="/recipes/<%= recipe.id %>/edit" class="btn btn-outline" style="flex: 1; text-align: center; font-size: 0.875rem; padding: 0.5rem 1rem;">Edit</a>
+            <form action="/recipes/<%= recipe.id %>/delete" method="POST" style="margin: 0; flex: 1;" onsubmit="return confirm('Are you sure you want to delete this recipe? This action cannot be undone.');">
+              <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+              <button type="submit" class="btn" style="width: 100%; background-color: var(--error-color); color: white; border-color: var(--error-color); font-size: 0.875rem; padding: 0.5rem 1rem;">Delete</button>
+            </form>
+            <% } %>
+          </div>
+          <% } else if (isMealPlan) { %>
+          <%#
+            REW-89 meal plan action row. Deliberately its own branch rather
+            than a parameterized merge with the cookbook branch above: the
+            consolidation is tempting, but the two differ in enough small ways
+            (which add-button is suppressed, the Remove URL, the confirm copy,
+            the absence of returnTo) that merging them would risk regressing
+            REW-88 for no user-visible gain. Explicit per-surface branches are
+            the established style here.
+
+            Differences from the cookbook row: `+ Meal Plan` is gone (this
+            recipe is already in a meal plan, see showMealPlanAdd above) and
+            `+ Cookbook` is present, because a meal plan recipe may well not be
+            in a cookbook yet.
+
+            The order is deliberate, and matches REW-88: Edit sits between
+            Remove and Delete so "take this out of the plan" and "destroy this
+            recipe forever" are never adjacent taps. Delete stays last, stays
+            the only red control, and the two confirm dialogs read differently.
+
+            `margin-top: auto` is carried here for the same reason as on
+            favorites and cookbook: there is no visibility control above it to
+            hold the card's bottom spacing, and without it the action rows
+            would not line up across a grid row.
+          %>
+          <div class="recipe-card-actions recipe-summary-actions" style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: auto; padding-top: 1rem; border-top: 1px solid var(--border-color);">
+            <% if (showCookbookAdd) { %><button type="button" class="btn btn-outline cookbook-add-btn<%= viewer ? '' : ' cookbook-add-btn-guest' %>" data-recipe-id="<%= recipe.id %>" aria-label="<%= viewer ? 'Add to Cookbook' : 'Log in to add to Cookbook' %>" style="flex: 1; font-size: 0.875rem; padding: 0.5rem 1rem;">+ Cookbook</button><% } %>
+            <%#
+              The same deliberately inert Share placeholder REW-86, REW-87 and
+              REW-88 ship: no href, no handler, no endpoint, no target URL.
+              Real sharing behavior is owned by REW-18. It must never link to
+              /r/:id, which would be wrong and misleading for a Private recipe
+              sitting in a meal plan.
+            %>
+            <button type="button" class="btn btn-outline recipe-share-btn" disabled aria-disabled="true" title="Sharing is coming soon" aria-label="Share (coming soon)" style="flex: 1; font-size: 0.875rem; padding: 0.5rem 1rem;">Share</button>
+            <%#
+              Remove is the page-specific action this surface has to preserve:
+              it is the only way to get a recipe back out of a meal plan, and
+              it never deletes the recipe itself. Rendered only when the caller
+              supplied a meal plan id, so a caller that forgets degrades to no
+              button rather than to a broken URL. No returnTo field, unlike the
+              cookbook form -- POST /meal-plans/:id/recipes/:recipeId/remove
+              always redirects back to /meal-plans/:id. Enforcement is
+              unchanged server side: that route keeps requireAuth,
+              mealPlanLimiter, its two UUID guards and its plan-owner check.
+            %>
+            <% if (cardMealPlanId) { %>
+            <form action="/meal-plans/<%= cardMealPlanId %>/recipes/<%= recipe.id %>/remove" method="POST" style="margin: 0; flex: 1;" onsubmit="return confirm('Remove this recipe from the meal plan? The recipe itself will not be deleted.');">
+              <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+              <button type="submit" class="btn btn-outline" style="width: 100%; font-size: 0.875rem; padding: 0.5rem 1rem;">Remove</button>
+            </form>
+            <% } %>
+            <%#
+              Owner-gated, and load-bearing in production TODAY rather than in
+              anticipation of REW-100: a meal plan can genuinely hold another
+              user's published recipe (migration 012's RLS INSERT policy), so
+              this is the first surface where a non-owned card is the normal
+              case. The flag is presentational; /recipes/:id/edit, /:id/update
+              and /:id/delete each enforce ownership themselves.
+            %>
             <% if (showOwnerControls) { %>
             <a href="/recipes/<%= recipe.id %>/edit" class="btn btn-outline" style="flex: 1; text-align: center; font-size: 0.875rem; padding: 0.5rem 1rem;">Edit</a>
             <form action="/recipes/<%= recipe.id %>/delete" method="POST" style="margin: 0; flex: 1;" onsubmit="return confirm('Are you sure you want to delete this recipe? This action cannot be undone.');">
@@ -305,7 +397,7 @@
             at the bottom of the card instead of being split by the gap.
           %>
           <div class="recipe-card-actions recipe-summary-actions" style="display: flex; flex-wrap: wrap; gap: 0.5rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
-            <button type="button" class="btn btn-outline meal-plan-add-btn<%= viewer ? '' : ' meal-plan-add-btn-guest' %>" data-recipe-id="<%= recipe.id %>" aria-label="<%= viewer ? 'Add to Meal Plan' : 'Log in to add to Meal Plan' %>" style="flex: 1; font-size: 0.875rem; padding: 0.5rem 1rem;">+ Meal Plan</button>
+            <% if (showMealPlanAdd) { %><button type="button" class="btn btn-outline meal-plan-add-btn<%= viewer ? '' : ' meal-plan-add-btn-guest' %>" data-recipe-id="<%= recipe.id %>" aria-label="<%= viewer ? 'Add to Meal Plan' : 'Log in to add to Meal Plan' %>" style="flex: 1; font-size: 0.875rem; padding: 0.5rem 1rem;">+ Meal Plan</button><% } %>
             <% if (showCookbookAdd) { %><button type="button" class="btn btn-outline cookbook-add-btn<%= viewer ? '' : ' cookbook-add-btn-guest' %>" data-recipe-id="<%= recipe.id %>" aria-label="<%= viewer ? 'Add to Cookbook' : 'Log in to add to Cookbook' %>" style="flex: 1; font-size: 0.875rem; padding: 0.5rem 1rem;">+ Cookbook</button><% } %>
             <%#
               REW-86 ships the Share control as a deliberately inert
