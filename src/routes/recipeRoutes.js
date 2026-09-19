@@ -968,8 +968,20 @@ router.post("/:id/visibility", requireAuth, csrfProtection, visibilityLimiter, (
   handleRecipeVisibilityUpdate(req, res)
 );
 
-// POST /recipes/:id/delete - Delete a recipe
-router.post("/:id/delete", requireAuth, async (req, res) => {
+// POST /recipes/:id/delete - Delete a recipe (REW-101 / REW-102).
+// csrfProtection is re-applied at the route level for the reason spelled out
+// on POST /:id/visibility above: the global csrfProtectionExceptMultipart in
+// app.js skips token validation for any multipart/form-data body, and this
+// handler reads no body fields, so a forged cross-site multipart POST would
+// otherwise reach it and run the delete. All five delete forms (recipe detail
+// page, My Recipes, My Favorites, Cookbook and Meal Plan cards) post
+// urlencoded with a hidden _csrf field, so this is transparent to them.
+// Ordering rule: requireAuth -> csrfProtection -> handler. If a rate limiter
+// is ever added it must go AFTER csrfProtection so a forged request cannot
+// burn the victim's limiter quota; recipeDeleteRoutes.test.js enforces this.
+// Do not add a Multer/body-parsing stage here: the route must keep rejecting
+// multipart bodies outright.
+router.post("/:id/delete", requireAuth, csrfProtection, async (req, res) => {
   try {
     const { id } = req.params;
     const supabaseClient = createSupabaseClient(req.accessToken);
