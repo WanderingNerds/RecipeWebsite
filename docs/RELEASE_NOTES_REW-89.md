@@ -214,7 +214,9 @@ Carried forward from earlier tickets in the series:
   disabled heart's "Make this recipe Public to add it to favorites" label is a status claim and
   should be gated on `isOwner` as part of that ticket.
 - [REW-102](https://wanderingnerds.atlassian.net/browse/REW-102) — route-level `csrfProtection` on
-  `POST /recipes/:id/delete`, now reachable from a fourth page.
+  `POST /recipes/:id/delete`, now reachable from a fourth page. *(Later note, 2026-09-19:
+  addressed by [REW-101](https://wanderingnerds.atlassian.net/browse/REW-101) on branch
+  `REW-101-recipe-delete-csrf-protection` — reviewed, QA skipped, not pushed or merged.)*
 - [REW-18](https://wanderingnerds.atlassian.net/browse/REW-18) — real Share behavior.
 - [REW-82](https://wanderingnerds.atlassian.net/browse/REW-82) — cross-surface card sizing; the
   action row now carries five `flex: 1` controls on two surfaces and is worth an eyeball at 375px.

@@ -178,9 +178,10 @@ holds. No N+1.
 
 - **`isOwner` is presentational only.** It decides whether Edit and Delete are *drawn*. Real
   enforcement is unchanged: `POST /recipes/:id/delete` filters `.eq("user_id", req.user.id)` on top
-  of owner-only RLS, and `GET /recipes/:id/edit` + `POST /:id/update` enforce ownership
-  independently. The card's flag must never become the only check. This matters more here than on
-  any previous surface, because non-owned cards are genuinely reachable.
+  of owner-only RLS (and, since REW-101, runs route-level `csrfProtection`), and
+  `GET /recipes/:id/edit` + `POST /:id/update` enforce ownership independently. The card's flag
+  must never become the only check. This matters more here than on any previous surface, because
+  non-owned cards are genuinely reachable.
 - **Fail closed on missing ownership data.** A recipe row with no `user_id` (a sparse fixture, or a
   surface that does not select the column) is treated as NOT owned.
 - **`recipe.user_id` is never rendered.** It is fetched solely to compute the flag; the view tests
@@ -207,10 +208,14 @@ holds. No N+1.
 - **Output escaping.** All card fields render through `<%= %>`; the tests use hostile title, author
   and tag fixtures to prove no raw `<script>` survives on the new branch.
 - **`appUrl` still comes from `getAppUrl()`**, never from the request Host header (REW-57).
-- **Pre-existing gap, deliberately not fixed here:** `POST /recipes/:id/delete` has no route-level
-  `csrfProtection`, so the global `csrfProtectionExceptMultipart` wrapper's `multipart/form-data`
-  skip leaves a forged cross-site multipart POST unchecked. REW-89 adds a Delete button to a fourth
-  page. Tracked as [REW-102](https://wanderingnerds.atlassian.net/browse/REW-102).
+- **Pre-existing gap, deliberately not fixed here — since closed:** when REW-89 shipped,
+  `POST /recipes/:id/delete` had no route-level `csrfProtection`, so the global
+  `csrfProtectionExceptMultipart` wrapper's `multipart/form-data` skip left a forged cross-site
+  multipart POST unchecked — and REW-89 put a Delete button on a fourth page. Tracked as
+  [REW-102](https://wanderingnerds.atlassian.net/browse/REW-102), which is linked in Jira as a
+  duplicate of [REW-101](https://wanderingnerds.atlassian.net/browse/REW-101). REW-101 added
+  route-level `csrfProtection` to the route (`requireAuth` → `csrfProtection` → handler) on branch
+  `REW-101-recipe-delete-csrf-protection` — reviewed, QA skipped, not pushed or merged.
 
 ---
 
@@ -347,7 +352,10 @@ first. **Do not describe this change as QA-verified.**
 - [REW-100](https://wanderingnerds.atlassian.net/browse/REW-100) — adding another user's recipe to a
   cookbook, which is what makes `+ Cookbook` on a non-owned meal-plan card actually work.
 - [REW-102](https://wanderingnerds.atlassian.net/browse/REW-102) — route-level `csrfProtection` on
-  `POST /recipes/:id/delete`.
+  `POST /recipes/:id/delete`. **Addressed by
+  [REW-101](https://wanderingnerds.atlassian.net/browse/REW-101)** (branch
+  `REW-101-recipe-delete-csrf-protection`, reviewed, QA skipped, unmerged); REW-102 is linked as its
+  duplicate.
 
 ---
 
