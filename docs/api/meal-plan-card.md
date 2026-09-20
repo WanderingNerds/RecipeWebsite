@@ -187,16 +187,32 @@ holds. No N+1.
 - **`recipe.user_id` is never rendered.** It is fetched solely to compute the flag; the view tests
   assert a distinctive owner-id string is absent from the HTML for owned, non-owned, and
   missing-owner cards.
-- **Remove stays plan-owner-scoped.** `POST /meal-plans/:id/recipes/:recipeId/remove` keeps its
-  `requireAuth`, `mealPlanLimiter`, two UUID guards, and plan-ownership check. Moving the form's
-  markup into a shared partial changed nothing server-side, and the interpolated `mealPlanId` stays
-  on escaped `<%= %>` output.
+- **Remove stays plan-owner-scoped, and is now CSRF-checked at the route level.**
+  `POST /meal-plans/:id/recipes/:recipeId/remove` keeps its `requireAuth`, `mealPlanLimiter`, two UUID
+  guards, and plan-ownership check. Moving the form's markup into a shared partial changed nothing
+  server-side, and the interpolated `mealPlanId` stays on escaped `<%= %>` output. **REW-102 inserted
+  route-level `csrfProtection` into the chain — it is now `requireAuth` → `csrfProtection` →
+  `mealPlanLimiter` → handler.** Until then this was the repo's one live destructive CSRF hole of the
+  REW-101 class: the global `csrfProtectionExceptMultipart` wrapper skips token validation for any
+  `multipart/form-data` body, and this handler reads **no** body fields (unlike its cookbook twin,
+  which reads `req.body.returnTo`), so a forged cross-site multipart POST reached it and deleted the
+  victim's `meal_plan_recipes` row. CSRF is placed ahead of the limiter so a forged request burns none
+  of the victim's 30/minute quota. The card's Remove form posts urlencoded with its hidden `_csrf`, so
+  the fix is transparent to it; a multipart POST is rejected with 403 even if it carries a valid
+  `_csrf` part, because the route has no Multer stage. Pinned by
+  `src/routes/mealPlanRecipeRemoveRoutes.test.js`.
 - **`+ Meal Plan` suppression is a display rule, not a security boundary.**
   `POST /api/meal-plans/:id/recipes/:recipeId` keeps `requireApiAuth`, `mealPlanApiLimiter`, its
-  UUID guards, and its own-or-published recipe check whether or not a button is drawn.
+  UUID guards, and its own-or-published recipe check whether or not a button is drawn. **REW-102 added
+  route-level `csrfProtection` here too** (`requireApiAuth` → `csrfProtection` →
+  `mealPlanApiLimiter`), matching its already-protected cookbook twin
+  `POST /api/cookbooks/:id/recipes/:recipeId`. The only caller is `fetch`, and `public/js/main.js`
+  already attaches `x-csrf-token` to every same-origin state-changing fetch, so the modal needed no
+  change. Pinned by `src/routes/mealPlanApiRoutes.test.js`.
 - **CSRF.** An owner's card now carries two POST forms (Remove and Delete), each with its own
   `_csrf` hidden field. The tests assert exactly two tokens for an owner and exactly one for a
-  non-owner.
+  non-owner. Both target routes now validate that token at the route level as well as globally
+  (Delete via REW-101, Remove via REW-102).
 - **No middleware was touched.** helmet, CORS, `csrf-csrf`, `express-rate-limit`, and the auth
   middleware are untouched. No new endpoint and no new rate limiter were added; the only route
   change is widening one read and extracting its handler.
@@ -208,14 +224,17 @@ holds. No N+1.
 - **Output escaping.** All card fields render through `<%= %>`; the tests use hostile title, author
   and tag fixtures to prove no raw `<script>` survives on the new branch.
 - **`appUrl` still comes from `getAppUrl()`**, never from the request Host header (REW-57).
-- **Pre-existing gap, deliberately not fixed here — since closed:** when REW-89 shipped,
+- **Pre-existing gap, deliberately not fixed here — now closed:** when REW-89 shipped,
   `POST /recipes/:id/delete` had no route-level `csrfProtection`, so the global
   `csrfProtectionExceptMultipart` wrapper's `multipart/form-data` skip left a forged cross-site
   multipart POST unchecked — and REW-89 put a Delete button on a fourth page. Tracked as
   [REW-102](https://wanderingnerds.atlassian.net/browse/REW-102), which is linked in Jira as a
   duplicate of [REW-101](https://wanderingnerds.atlassian.net/browse/REW-101). REW-101 added
-  route-level `csrfProtection` to the route (`requireAuth` → `csrfProtection` → handler) on branch
-  `REW-101-recipe-delete-csrf-protection` — reviewed, QA skipped, not pushed or merged.
+  route-level `csrfProtection` to the route (`requireAuth` → `csrfProtection` → handler) and **merged
+  to `main` in PR #62 (commit `f8673b1`)**; QA was skipped, so the manual delete pass across all five
+  card surfaces is still outstanding. The audit REW-101 started was completed under REW-102, which
+  also closed this page's **Remove** route — the one destructive hole the audit found still live. See
+  the [route-level CSRF audit](README.md#route-level-csrf-audit-rew-101--rew-105--rew-102).
 
 ---
 
@@ -352,10 +371,14 @@ first. **Do not describe this change as QA-verified.**
 - [REW-100](https://wanderingnerds.atlassian.net/browse/REW-100) — adding another user's recipe to a
   cookbook, which is what makes `+ Cookbook` on a non-owned meal-plan card actually work.
 - [REW-102](https://wanderingnerds.atlassian.net/browse/REW-102) — route-level `csrfProtection` on
-  `POST /recipes/:id/delete`. **Addressed by
-  [REW-101](https://wanderingnerds.atlassian.net/browse/REW-101)** (branch
-  `REW-101-recipe-delete-csrf-protection`, reviewed, QA skipped, unmerged); REW-102 is linked as its
-  duplicate.
+  `POST /recipes/:id/delete`. **Closed:** the delete route was fixed by
+  [REW-101](https://wanderingnerds.atlassian.net/browse/REW-101) (merged, PR #62 / `f8673b1`) and the
+  cookbook/meal-plan deletes by [REW-105](https://wanderingnerds.atlassian.net/browse/REW-105)
+  (merged, PR #63 / `28a0cf8`). REW-102 delivered the repo-wide audit and added route-level
+  `csrfProtection` to this page's **Remove** route plus `+ Meal Plan`'s JSON endpoint. Still open from
+  the audit: [REW-106](https://wanderingnerds.atlassian.net/browse/REW-106) (session-lifecycle
+  routes) and the [REW-99](https://wanderingnerds.atlassian.net/browse/REW-99) tripwire (the two
+  visibility routes and the cookbook Remove route).
 
 ---
 

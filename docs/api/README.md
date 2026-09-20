@@ -36,7 +36,7 @@ All API endpoints require authentication unless otherwise noted. Authentication 
 
 `POST /recipes/:id/visibility` is a urlencoded form post behind `requireAuth`, route-level `csrfProtection`, and a 60-per-15-minutes-per-IP limiter, in that order. It answers with a flash and a redirect to a server-rebuilt `/recipes` path — never a caller-supplied URL. See [My Recipes Recipe Card](my-recipes-card.md). **Branch-only: implemented and reviewed on `REW-86-standardize-my-recipes-card`, QA not run, not yet merged.**
 
-`POST /recipes/:id/delete` is a urlencoded form post behind `requireAuth` and route-level `csrfProtection`, in that order, with no per-route limiter (REW-101). The handler reads no body fields — only `req.params.id` and the caller's identity — which is exactly why it needed its own CSRF check: the global wrapper skips `multipart/form-data` bodies, so a forged cross-site multipart POST used to reach the handler and run the delete. It is the target of five delete forms (the recipe detail page, My Recipes, My Favorites, the Cookbook card and the Meal Plan card), all of which already carry the hidden `_csrf`. A request without a valid token — missing, tampered, issued for another session, or carried inside a multipart body, which nothing on this route parses — now gets the 403 error page before the handler runs. Success and failure redirects are unchanged. See the [Route-level CSRF audit](#route-level-csrf-audit-rew-101) below. **Branch-only: implemented and reviewed on `REW-101-recipe-delete-csrf-protection`; QA was skipped, the branch is not pushed, and there is no PR.**
+`POST /recipes/:id/delete` is a urlencoded form post behind `requireAuth` and route-level `csrfProtection`, in that order, with no per-route limiter (REW-101). The handler reads no body fields — only `req.params.id` and the caller's identity — which is exactly why it needed its own CSRF check: the global wrapper skips `multipart/form-data` bodies, so a forged cross-site multipart POST used to reach the handler and run the delete. It is the target of five delete forms (the recipe detail page, My Recipes, My Favorites, the Cookbook card and the Meal Plan card), all of which already carry the hidden `_csrf`. A request without a valid token — missing, tampered, issued for another session, or carried inside a multipart body, which nothing on this route parses — now gets the 403 error page before the handler runs. Success and failure redirects are unchanged. See the [Route-level CSRF audit](#route-level-csrf-audit-rew-101--rew-105--rew-102) below. **Merged to `main` in PR #62 (commit `f8673b1`).** QA was skipped on that run, so the five-surface manual delete pass (recipe detail page, My Recipes, My Favorites, a Cookbook page, a Meal Plan page) is still outstanding.
 
 `POST /recipes` and `POST /recipes/:id/update` are multipart form posts (`photo` field, optional, single file) behind `requireAuth`, the upload rate limiter, Multer, `handleRecipeImageUploadError`, and `csrfProtection`, in that order. Unlike the import endpoint they answer with a flash message and a redirect rather than JSON, because they are ordinary HTML form posts. See [Recipe Photo Upload](recipe-photo-upload.md) for the limits, the error contract, the redirect targets, and the client-side pre-check. **Branch-only: implemented and reviewed on `REW-94-recipe-image-upload-limit-vercel-cap`, not QA-verified, not yet merged.**
 
@@ -58,7 +58,7 @@ Image uploads on that endpoint are additionally capped at **40,000,000 decoded p
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/api/likes/:recipeId` | Get like status (if authenticated) and public like count for a recipe |
-| POST | `/api/likes/:recipeId` | Like a recipe (requires auth; recipe must be `status = 'published'`, otherwise `404`) |
+| POST | `/api/likes/:recipeId` | Like a recipe (requires auth; recipe must be `status = 'published'`, otherwise `404`; runs `requireApiAuth` → route-level `csrfProtection` → `likeLimiter`, in that order — REW-102) |
 | DELETE | `/api/likes/:recipeId` | Unlike a recipe (requires auth) |
 | GET | `/recipes/liked` | Display the current user's liked (published) recipes |
 
@@ -77,7 +77,7 @@ Favorite/like controls (`.like-btn`) call these endpoints from the recipe detail
 | POST | `/cookbooks/:id/delete` | Delete a cookbook (never deletes the recipes in it; urlencoded form post behind `requireAuth`, route-level `csrfProtection`, then `cookbookLimiter`, in that order — REW-105) |
 | GET | `/cookbooks/:id/add-recipes` | Render a checklist of the owner's recipes (draft + published) to add to a cookbook |
 | POST | `/cookbooks/:id/add-recipes` | Bulk-add selected recipes to a cookbook |
-| POST | `/cookbooks/:id/recipes/:recipeId` | Add a single recipe to a cookbook (used by the recipe view's "Save to Cookbook(s)" widget) |
+| POST | `/cookbooks/:id/recipes/:recipeId` | Add a single recipe to a cookbook (used by the recipe view's "Save to Cookbook(s)" widget; urlencoded form post behind `requireAuth`, route-level `csrfProtection`, then `cookbookLimiter`, in that order — REW-102) |
 | POST | `/cookbooks/:id/recipes/:recipeId/remove` | Remove a recipe from a cookbook (never deletes the recipe itself) |
 | POST | `/cookbooks/:id/visibility` | Switch a cookbook between Private and Public (`visibility=private\|public`, fails closed to Private) — REW-19 |
 
@@ -119,10 +119,10 @@ Both run exclusively on the anon-key Supabase client, so a draft recipe inside a
 | POST | `/meal-plans/:id/delete` | Delete a meal plan (never deletes the recipes in it; urlencoded form post behind `requireAuth`, route-level `csrfProtection`, then `mealPlanLimiter`, in that order — REW-105) |
 | GET | `/meal-plans/:id/add-recipes` | Render a checklist of the owner's own recipes (draft + published) to bulk-add to a plan |
 | POST | `/meal-plans/:id/add-recipes` | Bulk-add selected (owner's own) recipes to a meal plan |
-| POST | `/meal-plans/:id/recipes/:recipeId/remove` | Remove a recipe from a meal plan (never deletes the recipe itself) |
+| POST | `/meal-plans/:id/recipes/:recipeId/remove` | Remove a recipe from a meal plan (never deletes the recipe itself; urlencoded form post behind `requireAuth`, route-level `csrfProtection`, then `mealPlanLimiter`, in that order — REW-102) |
 | GET | `/api/meal-plans?recipeId=` | JSON: list the current user's meal plans, optionally flagging membership for `recipeId` |
 | POST | `/api/meal-plans` | JSON: quick-create a meal plan (backs the "Add to Meal Plan" modal) |
-| POST | `/api/meal-plans/:id/recipes/:recipeId` | JSON: add a recipe to a meal plan — allows the caller's own recipe (any status) or **any published recipe**, not owner-only |
+| POST | `/api/meal-plans/:id/recipes/:recipeId` | JSON: add a recipe to a meal plan — allows the caller's own recipe (any status) or **any published recipe**, not owner-only (runs `requireApiAuth` → route-level `csrfProtection` → `mealPlanApiLimiter`, in that order — REW-102) |
 | DELETE | `/api/meal-plans/:id/recipes/:recipeId` | JSON: remove a recipe from a meal plan |
 
 All `/meal-plans*` page routes require auth and redirect to login if unauthenticated, consistent with `/cookbooks*`. All `/api/meal-plans*` routes require auth and return JSON `401` if unauthenticated, consistent with `/api/likes*` (there is no anonymous-GET case on that surface). Mutation endpoints on both surfaces share a 30-requests/minute-per-user rate limit. Meal plans are private by default and RLS-enforced; as of REW-69 an owner can opt one plan at a time into a Public share link (see below). Unlike Cookbooks' owner-only recipe rule, a meal plan can contain the owner's own recipes (any status) *or* any other user's published recipes, mirroring `recipe_likes`' visibility rule. See [Meal Plans API](meal-plans.md) for full details, including the RLS enforcement and two non-blocking reviewer-flagged follow-ups.
@@ -314,35 +314,167 @@ All unsafe non-multipart requests require a CSRF token. For form submissions, in
 
 Same-origin JavaScript requests receive the token through the shared fetch wrapper's `x-csrf-token` header. Multipart routes bypass the pre-parser middleware and apply the same CSRF validation after Multer exposes `_csrf`; cross-origin requests do not receive a token.
 
-**Known gap (REW-99):** the global `csrfProtectionExceptMultipart` wrapper in `src/app.js` skips token validation for *any* `multipart/form-data` body, not just the Multer routes that need it. Newer state-changing routes therefore re-apply `csrfProtection` explicitly at the route level — `POST /recipes/:id/clone`, `POST /recipes/:id/visibility`, `POST /recipes/:id/delete` (REW-101), `POST /cookbooks/:id/delete` and `POST /meal-plans/:id/delete` (REW-105), and every `/api/cookbooks*` mutation do this — so a forged cross-site multipart POST cannot reach them unchecked. The central fix is tracked as [REW-99](https://wanderingnerds.atlassian.net/browse/REW-99) and was deliberately deferred rather than attempted inside a card-standardization ticket. On every one of these except `POST /recipes/:id/clone`, CSRF runs *before* the route's rate limiter, so a forged request cannot burn the victim's limiter quota — the two REW-105 delete routes are `requireAuth` → `csrfProtection` → limiter → handler, and `POST /recipes/:id/delete` has no per-route limiter at all. The clone route is the exception: its chain is `requireAuth` → `addRecipeLimiter` → `csrfProtection`, so a forged request there does consume quota before being rejected — an ordering nit tracked under REW-99. REW-101 shipped to `main` in PR #62 (commit `f8673b1`); REW-105 followed with the two delete routes above.
+**Known gap (REW-99):** the global `csrfProtectionExceptMultipart` wrapper in `src/app.js` skips token validation for *any* `multipart/form-data` body, not just the Multer routes that need it. Newer state-changing routes therefore re-apply `csrfProtection` explicitly at the route level — `POST /recipes/:id/clone`, `POST /recipes/:id/visibility`, `POST /recipes/:id/delete` (REW-101), `POST /cookbooks/:id/delete` and `POST /meal-plans/:id/delete` (REW-105), `POST /meal-plans/:id/recipes/:recipeId/remove`, `POST /cookbooks/:id/recipes/:recipeId`, `POST /api/meal-plans/:id/recipes/:recipeId` and `POST /api/likes/:recipeId` (REW-102), and every `/api/cookbooks*` mutation do this — so a forged cross-site multipart POST cannot reach them unchecked. The central fix is tracked as [REW-99](https://wanderingnerds.atlassian.net/browse/REW-99) and was deliberately deferred rather than attempted inside a card-standardization ticket. On every one of these except `POST /recipes/:id/clone`, CSRF runs *before* the route's rate limiter, so a forged request cannot burn the victim's limiter quota — `POST /recipes/:id/delete` has no per-route limiter at all, and the others are `requireAuth`/`requireApiAuth` → `csrfProtection` → limiter → handler. The clone route is the exception: its chain is `requireAuth` → `addRecipeLimiter` → `csrfProtection`, so a forged request there does consume quota before being rejected — an ordering nit tracked under REW-99. REW-101 shipped to `main` in PR #62 (commit `f8673b1`); REW-105 followed in PR #63 (commit `28a0cf8`); REW-102 published the full audit below and closed the four remaining content-route holes it found. Three session-lifecycle routes (`POST /auth/logout`, `POST /admin/logout`, `POST /admin/login`) are still forgeable and are tracked as [REW-106](https://wanderingnerds.atlassian.net/browse/REW-106).
 
-### Route-level CSRF audit (REW-101)
+### Route-level CSRF audit (REW-101 / REW-105 / REW-102)
 
-Every `router.post` / `router.delete` in `src/routes/` was audited on `main` at `8f6eb30` for [REW-101](https://wanderingnerds.atlassian.net/browse/REW-101) / [REW-102](https://wanderingnerds.atlassian.net/browse/REW-102) (there are no `put`/`patch` routes and no mutating routes outside the routers; 43 mutating routes in total). Two facts drive the *forgeable today* column:
+**This is the audit of record.** It replaces the REW-101-only version published here earlier, which
+carried four claims that were wrong or went stale — each is listed under
+[Corrections](#corrections-to-the-rew-101-audit) below, with the reason. The line-level working
+(every handler, file and line) lives in `docs/plans/rew-102-recipe-delete-csrf-audit.md`; line
+numbers are deliberately omitted here so this table does not rot on the next edit.
 
-- Express 5 leaves `req.body` **undefined** when no body parser matched, so a cross-site `multipart/form-data` form POST reaches a handler with no body. If the handler never reads `req.body` before mutating, the mutation runs. If it reads `req.body.x` first it throws a `TypeError` and nothing happens — incidental, not a control.
-- `DELETE`-verb routes are not reachable by the HTML-form vector at all: forms only send GET and POST, and a cross-origin `fetch` DELETE is preflighted and refused by the `cors` origin configuration.
+All **43 mutating handlers** in `src/routes/` are classified — 39 `router.post` plus 4
+`router.delete`. There are no `put`/`patch` routes, no mutating `app.*` routes, and
+`categoryRoutes.js` / `publicRoutes.js` contain no mutations. Three mechanics drive every verdict:
 
-**(a) Multipart routes, `csrfProtection` correctly placed after Multer:** `POST /recipes`, `POST /recipes/:id/update`, `POST /recipes/import/parse`.
+- The global `csrfProtectionExceptMultipart` wrapper (`src/app.js`) calls `next()` with **no token
+  validation at all** when `req.is("multipart/form-data")`. A plain HTML form on any origin can issue
+  such a POST with no JavaScript and no CORS preflight, because multipart is a CORS-safelisted
+  content type. (Whether the victim's cookies ride along is a separate question — see
+  [`SameSite=Lax`](#samesitelax--how-much-it-actually-blunts-corrected) below. The classification
+  here is about what the *server* accepts, which is what this app controls.)
+- Nothing on a non-upload route parses that body, and body-parser leaves `req.body`
+  **`undefined`** — not `{}` — when no parser matched. So a handler that reads no body field mutates
+  normally; a handler that reads `req.body.x` throws a `TypeError` that its own `catch` swallows
+  before the write. **The second case is an accident of the skip path, not a control** — see the
+  [REW-99 tripwire](#rew-99-regression-tripwire-read-this-before-touching-the-wrapper).
+- `DELETE`-verb routes are not reachable by this vector at all: HTML forms emit only GET and POST,
+  and a cross-origin `fetch` with method DELETE is preflighted and refused by the `cors` origin
+  allow-list.
 
-**(b) Non-multipart routes that re-apply `csrfProtection` at route level:** `POST /recipes/:id/clone` (limiter runs *before* CSRF — cosmetic ordering nit), `POST /recipes/:id/visibility`, `POST /api/cookbooks`, `POST /api/cookbooks/:id/recipes/:recipeId`, `DELETE /api/cookbooks/:id/recipes/:recipeId`, and — since REW-101 — `POST /recipes/:id/delete`, and — since REW-105 — `POST /cookbooks/:id/delete` and `POST /meal-plans/:id/delete`.
+#### (a) Route-level `csrfProtection` in place — 15 routes, no action
 
-**(c) Non-multipart mutating routes relying only on the global wrapper (the gap), by severity:**
+| Route | Chain | Added by |
+| --- | --- | --- |
+| `POST /recipes` | requireAuth → uploadLimiter → Multer → `handleRecipeImageUploadError` → csrfProtection | REW-94 (CSRF **after** Multer is correct here) |
+| `POST /recipes/:id/update` | same shape | REW-94 |
+| `POST /recipes/import/parse` | requireAuth → importLimiter → Multer → error handler → csrfProtection | REW-43 |
+| `POST /recipes/:id/clone` | requireAuth → addRecipeLimiter → csrfProtection | REW-84 — protected, but the limiter runs **before** CSRF, so a forged request still burns the victim's quota. Ordering nit, REW-99. |
+| `POST /recipes/:id/visibility` | requireAuth → csrfProtection → visibilityLimiter | REW-86 (the reference ordering) |
+| `POST /recipes/:id/delete` | requireAuth → csrfProtection | REW-101 |
+| `POST /cookbooks/:id/delete` | requireAuth → csrfProtection → cookbookLimiter | REW-105 |
+| `POST /meal-plans/:id/delete` | requireAuth → csrfProtection → mealPlanLimiter | REW-105 |
+| `POST /meal-plans/:id/recipes/:recipeId/remove` | requireAuth → csrfProtection → mealPlanLimiter | **REW-102** — was the one live destructive hole |
+| `POST /cookbooks/:id/recipes/:recipeId` | requireAuth → csrfProtection → cookbookLimiter | **REW-102** |
+| `POST /api/meal-plans/:id/recipes/:recipeId` | requireApiAuth → csrfProtection → mealPlanApiLimiter | **REW-102** |
+| `POST /api/likes/:recipeId` | requireApiAuth → csrfProtection → likeLimiter | **REW-102** |
+| `POST /api/cookbooks` | requireApiAuth → csrfProtection → cookbookApiLimiter | REW-86 |
+| `POST /api/cookbooks/:id/recipes/:recipeId` | same | REW-86 |
+| `DELETE /api/cookbooks/:id/recipes/:recipeId` | same | REW-86 |
 
-| Route | Chain today | Reads body before mutating? | Forgeable via cross-site multipart form today? | Severity / recommendation |
-| --- | --- | --- | --- | --- |
-| `POST /recipes/:id/delete` | requireAuth | No | **Yes — destructive** | **Fixed in REW-101** (chain is now requireAuth → csrfProtection → handler). |
-| `POST /cookbooks/:id/delete` | requireAuth → csrfProtection → cookbookLimiter | No | No — rejected with 403 before the handler | **Fixed in REW-105** (chain is now requireAuth → csrfProtection → limiter → handler). |
-| `POST /meal-plans/:id/delete` | requireAuth → csrfProtection → mealPlanLimiter | No | No — rejected with 403 before the handler | **Fixed in REW-105** (chain is now requireAuth → csrfProtection → limiter → handler). |
-| `POST /meal-plans/:id/recipes/:recipeId/remove` | requireAuth → mealPlanLimiter | No | Yes — removes a membership row | Medium. REW-99. |
-| `POST /cookbooks/:id/recipes/:recipeId` | requireAuth → cookbookLimiter | No | Yes — adds a membership row (owner-only both sides) | Low. REW-99. |
-| `POST /api/meal-plans/:id/recipes/:recipeId` | requireApiAuth → mealPlanApiLimiter | No | Yes — adds a membership row | Low. REW-99. |
-| `POST /api/likes/:recipeId` | requireApiAuth → likeLimiter | No | Yes — likes a published recipe as the victim | Low. REW-99. |
-| `POST /auth/logout`, `POST /admin/logout` | (none) | No | Yes — logs the victim out | Low (logout CSRF). REW-99. |
-| `POST /cookbooks/:id/recipes/:recipeId/remove`; `POST /cookbooks`, `/cookbooks/:id/update`, `/cookbooks/:id/visibility`, `/cookbooks/:id/add-recipes`; `POST /meal-plans`, `/meal-plans/:id/update`, `/meal-plans/:id/visibility`, `/meal-plans/:id/add-recipes`; `POST /api/meal-plans`; `POST /api/tags`; `POST /recipes/import/save`; `POST /help-feedback`; `POST /admin/feedback/:id`, `/admin/feedback/:id/comments`; `POST /admin/login` | requireAuth / requireApiAuth / requireAdmin (+ limiter) | Yes | No — the body read precedes the mutation and throws on an undefined body | Incidental, not a control. REW-99. |
-| `POST /auth/login`, `/register`, `/forgot-password`, `/resend-confirmation`, `/reset-password` | redirectIfAuthenticated / none | Yes | No | Login-CSRF class in principle. REW-99. |
-| `POST /auth/reset-password/session` | (none) | Tolerates an undefined body | Expected to fail validation on empty input — **not verified** in this audit | REW-99; verify when that ticket is worked. |
-| `POST /recipes/import/check-title` | requireAuth | Yes | Read-only lookup, not a mutation | Not a gap in substance. |
-| `DELETE /api/tags/:id`, `DELETE /api/likes/:recipeId`, `DELETE /api/meal-plans/:id/recipes/:recipeId` | requireAuth / requireApiAuth (+ limiter) | No | No — DELETE verb is not form-forgeable; cross-origin `fetch` is blocked by CORS | Structural only. REW-99. |
+On every one of these except `POST /recipes/:id/clone` and the three Multer routes, CSRF runs
+**before** the route's rate limiter, so a forged cross-site request is rejected without consuming any
+of the victim's quota. That ordering is a security property, not style, and the co-located tests pin
+it by comparing against the exact `csrfProtection` export rather than a function name.
 
-**Follow-ups.** The two equal-severity destructive routes were fixed in [REW-105](https://wanderingnerds.atlassian.net/browse/REW-105) (one-line fix per route, `csrfProtection` placed *ahead of* the existing limiter so a forged request cannot burn the victim's quota), pinned by `src/routes/cookbookDeleteRoutes.test.js` and `src/routes/mealPlanDeleteRoutes.test.js`. The remaining bodiless, non-destructive forgeable mutations — including `POST /meal-plans/:id/recipes/:recipeId/remove` — the clone-route ordering nit, and everything marked *Incidental* are [REW-99](https://wanderingnerds.atlassian.net/browse/REW-99)'s domain. The full per-route table with file and line locations lives in `docs/plans/rew-101-recipe-delete-csrf-protection.md`.
+#### (b) Still forgeable via the multipart bypass — 3 routes, all session-lifecycle
+
+These read **zero** body fields before mutating (or mutate *because* reading one throws), so
+`req.body === undefined` never stops them. REW-102 deliberately held them back: they span the admin
+auth boundary, and the right UX for a tokenless logout is a product decision, not something to settle
+inside an audit diff. Tracked as [REW-106](https://wanderingnerds.atlassian.net/browse/REW-106).
+
+| Route | Chain today | Effect of a forged cross-site multipart POST | Severity |
+| --- | --- | --- | --- |
+| `POST /auth/logout` | (none) | `logoutUser` signs the Supabase session out and clears both auth cookies → forced logout | Low (nuisance / session DoS) |
+| `POST /admin/logout` | (none) | Same, for an administrator session | Low |
+| `POST /admin/login` | limiter | **`req.body.email` throws on the unparsed body; the outer `catch { return deny(); }` swallows the `TypeError`, and `deny()`'s first statement is `clearAuthCookies(res)`.** So the forged request logs out *any* signed-in user, not just an admin, and consumes the victim IP's 10-per-15-minutes admin-login budget. The thrown `TypeError` does not prevent a mutation here — it causes one. | Low |
+
+#### (c) Not exploitable — 25 routes, grouped by *why* (the reasons are not equally durable)
+
+**c1. A real validator gates the mutation — safe on purpose (7 routes).** Each hands `req.body` to a
+validator that tolerates a missing or empty object and rejects it before any write:
+`POST /help-feedback` (`validateHelpFeedback(body = {})`), `POST /admin/feedback/:id`
+(`normalizeUpdate(body = {})` → empty `status` is not in `FEEDBACK_STATUSES`),
+`POST /admin/feedback/:id/comments` (`req.body?.commentText` → invalid → redirect),
+`POST /auth/reset-password/session` (`const body = req.body || {}`, then `type !== "recovery"` →
+`401` **before any cookie is set**, plus a mandatory same-origin Origin/Referer check),
+`POST /auth/reset-password` (requires the `recovery-session` marker cookie before the body is
+touched), and `POST /auth/login` / `/register` / `/forgot-password` / `/resend-confirmation`
+(`redirectIfAuthenticated` short-circuits a signed-in victim; a signed-out one has no session to
+abuse, and the attacker cannot place credentials in an unparsed body).
+
+**c2. Safe only because a property access on `undefined` throws — fragile, not a control
+(14 routes).** Each reads `req.body.<field>` with no optional chaining inside a `try`, before the
+write; the `TypeError` is swallowed by the handler's own `catch` and the user sees a flash or a 500:
+`POST /cookbooks`, `/cookbooks/:id/update`, `/cookbooks/:id/add-recipes`,
+`/cookbooks/:id/visibility`, `/cookbooks/:id/recipes/:recipeId/remove`; `POST /meal-plans`,
+`/meal-plans/:id/update`, `/meal-plans/:id/add-recipes`, `/meal-plans/:id/visibility`;
+`POST /api/meal-plans`; `POST /api/tags`; `POST /recipes/import/save`;
+`POST /recipes/import/check-title` (also read-only, so not a mutation in substance). Most of these
+have a c1-style validator behind the accident (`validateCookbookTitle`, `validateMealPlanTitle`,
+`normalizeRecipeIdSelection`) — belt **and** braces. **Three do not**, and those are the tripwire
+below.
+
+**c3. Verb not reachable by the vector (4 routes).** `DELETE /api/tags/:id`,
+`DELETE /api/likes/:recipeId`, `DELETE /api/meal-plans/:id/recipes/:recipeId` — and
+`DELETE /api/cookbooks/:id/recipes/:recipeId`, which carries route-level CSRF anyway. These rely on
+the global wrapper structurally, but are not forgeable this way. REW-102 deliberately did **not** add
+`csrfProtection` to them: it would be unverifiable scope creep.
+
+#### REW-99 regression tripwire (read this before touching the wrapper)
+
+Three c2 routes are safe today **only** because a property access on `undefined` throws, and they
+have **no validation gate behind that accident**. They fail closed the moment `req.body` becomes
+`{}`, or the wrapper starts parsing multipart bodies, or somebody "tidies" the read to
+`req.body?.x`. Whoever works [REW-99](https://wanderingnerds.atlassian.net/browse/REW-99) must add
+route-level `csrfProtection` to all three in the same change:
+
+| Route | What happens the moment `req.body` is `{}` |
+| --- | --- |
+| `POST /cookbooks/:id/visibility` (`cookbookRoutes.js:351` → `handleCookbookVisibilityUpdate`) | `normalizeCookbookVisibility(undefined)` is `value === "public"` → `false`. It **fails closed to Private with no validity check**, so the handler proceeds to `UPDATE cookbooks SET is_public = false` — silently un-sharing the victim's cookbook and breaking every share link they distributed. It can never force *Public*, so this is forced-state/availability, not disclosure. |
+| `POST /meal-plans/:id/visibility` (`mealPlanRoutes.js:416`) | Identical, via `normalizeMealPlanVisibility`. |
+| `POST /cookbooks/:id/recipes/:recipeId/remove` | `req.body.returnTo` is the **first** statement in the `try`, so today's `TypeError` lands before the delete. With `{}` it evaluates to `undefined`, falls through to the default redirect, and the `cookbook_recipes` delete runs — a destructive hole identical to the one REW-102 just closed on the meal-plan side. |
+
+**Pre-registered test consequence:** `src/routes/cookbookVisibilityRoutes.test.js` and
+`src/routes/mealPlanVisibilityRoutes.test.js` both assert `layer.route.stack.length === 3`. Adding
+`csrfProtection` to the visibility pair makes them fail. They must be **upgraded** to assert the
+exact `csrfProtection` export and its position (the pattern in `recipeVisibilityToggle.test.js`) —
+never relaxed, skipped or deleted.
+
+#### `SameSite=Lax` — how much it actually blunts (corrected)
+
+Both auth cookies are set with an **explicit** `sameSite: "lax"` (`src/utils/authUtils.js:10-23`).
+That matters more than earlier write-ups here implied, and the correction cuts both ways:
+
+- **A cross-site `multipart/form-data` POST does not carry those cookies in a current browser.** Lax
+  sends cookies on a top-level navigation only for *safe* methods, and the "Lax+POST" two-minute
+  grace window applies only to cookies with no `SameSite` attribute — not to one set explicitly. So
+  for every route that needs the victim's cookie **on the request**, real-world exploitation needs a
+  same-site attacker origin (any subdomain counts as same-site), a browser not enforcing Lax, or a
+  non-browser client already holding the cookies. The bare phrase "forged cross-site multipart POST"
+  used throughout this page is shorthand for the attack *shape*; it is not a claim that a stock
+  Chrome tab attaches the session.
+- **It does not blunt the REW-106 routes at all.** `POST /auth/logout`, `POST /admin/logout` and
+  `POST /admin/login` clear cookies on the **response**. They need no request cookie to do damage, so
+  a plain cross-site tokenless POST still forces a logout — and on `/admin/login` still burns the
+  victim IP's limiter quota. `SameSite` is irrelevant to that class.
+
+None of this downgrades a severity or makes any route-level check optional. `SameSite` is a browser
+behaviour this app does not control, it is defence in depth rather than the intended control, and the
+route-level `csrfProtection` in table (a) is what actually enforces request authenticity.
+
+#### Corrections to the REW-101 audit
+
+1. **The four routes REW-102 fixed were still listed as open holes assigned to REW-99.** They are
+   protected as of REW-102 and now appear in table (a).
+2. **`POST /admin/login` was classified safe ("body read precedes the mutation").** It is not. The
+   swallowed `TypeError` routes straight into `deny()`, whose first statement clears the auth
+   cookies — the exception *causes* the mutation rather than preventing it. Now in (b), tracked as
+   REW-106.
+3. **The visibility pair and `POST /cookbooks/:id/recipes/:recipeId/remove` were rated "Incidental —
+   body read precedes the mutation."** Right outcome, wrong reason: there is no validation behind the
+   thrown exception. Recorded as the REW-99 tripwire above.
+4. **`POST /auth/reset-password/session` was marked "not verified."** Verified safe:
+   `req.body || {}` then a `type !== "recovery"` → `401` before any cookie is set.
+5. **The "REW-101 is branch-only and unmerged" note was stale.** REW-101 merged to `main` in
+   `f8673b1` (PR #62); REW-105 followed in `28a0cf8` (PR #63).
+
+#### Residual risk after REW-102, stated plainly
+
+The three REW-106 session-lifecycle routes remain forgeable (forced logout). The three tripwire
+routes remain safe only by accident of body-parser's skip path. The global wrapper remains over-broad
+until REW-99. `POST /recipes/:id/clone` still runs its limiter before CSRF. Manual verification of
+REW-102 — and the five-surface delete pass still owed from REW-101 — has **not** been performed;
+the QA stage was skipped on all three of these tickets.

@@ -166,10 +166,17 @@ cookbook holds. No N+1.
 - **Remove stays cookbook-owner-scoped.** `POST /cookbooks/:id/recipes/:recipeId/remove` keeps its
   `requireAuth`, `cookbookLimiter`, UUID guard, and cookbook-owner check. Moving the form's markup
   into a shared partial changed nothing server-side, and the interpolated `cookbookId` stays on
-  escaped `<%= %>` output.
+  escaped `<%= %>` output. **This route still has no route-level `csrfProtection`** — it is safe
+  against the multipart bypass only because `req.body.returnTo` is the first statement in its `try`
+  and throws on an unparsed body. That is an accident, not a control: it becomes a destructive CSRF
+  hole the moment `req.body` is `{}` or the read gains a `?.`. Recorded as the REW-99 tripwire in the
+  [route-level CSRF audit](README.md#rew-99-regression-tripwire-read-this-before-touching-the-wrapper).
 - **`+ Cookbook` suppression is a display rule, not a security boundary.**
-  `POST /api/cookbooks/:id/recipes/:recipeId` keeps its auth, per-user limiter, UUID guards, and
-  duplicate-safe upsert.
+  `POST /api/cookbooks/:id/recipes/:recipeId` keeps its auth, route-level `csrfProtection`, per-user
+  limiter, UUID guards, and duplicate-safe upsert. Its form-based sibling on the recipe detail page,
+  `POST /cookbooks/:id/recipes/:recipeId`, gained the matching route-level `csrfProtection` in
+  REW-102 (`requireAuth` → `csrfProtection` → `cookbookLimiter` → handler), so the two add paths are
+  now consistent.
 - **No middleware was touched.** helmet, CORS, `csrf-csrf`, `express-rate-limit`, and the auth
   middleware are all untouched by this change. No new endpoint and no new rate limiter were added;
   the only route change is widening two reads.
@@ -177,14 +184,17 @@ cookbook holds. No N+1.
   would be wrong and misleading for a Private recipe sitting in a cookbook.
 - **The owner-only status pill is not a leak.** It renders only when `isOwner`, so a post-REW-100
   viewer is never shown a status claim about another user's recipe.
-- **Pre-existing gap, deliberately not fixed here — since closed:** when REW-88 shipped,
+- **Pre-existing gap, deliberately not fixed here — now closed:** when REW-88 shipped,
   `POST /recipes/:id/delete` had no route-level `csrfProtection`, unlike `/:id/visibility` and
   `/:id/clone`, so the global `csrfProtectionExceptMultipart` wrapper's `multipart/form-data` skip
   left a forged cross-site multipart POST unchecked — and REW-88 put a Delete button on a third
   page. Tracked as [REW-102](https://wanderingnerds.atlassian.net/browse/REW-102), which is linked in
   Jira as a duplicate of [REW-101](https://wanderingnerds.atlassian.net/browse/REW-101). REW-101
-  added route-level `csrfProtection` to the route (`requireAuth` → `csrfProtection` → handler) on
-  branch `REW-101-recipe-delete-csrf-protection` — reviewed, QA skipped, not pushed or merged.
+  added route-level `csrfProtection` to the route (`requireAuth` → `csrfProtection` → handler) and
+  **merged to `main` in PR #62 (commit `f8673b1`)**; QA was skipped on that run, so the manual
+  five-surface delete pass is still outstanding. REW-102 then published the repo-wide audit of all 43
+  mutating routes and closed the four remaining content-route holes it found — see the
+  [route-level CSRF audit](README.md#route-level-csrf-audit-rew-101--rew-105--rew-102).
 
 ---
 
@@ -285,10 +295,15 @@ keyboard reachability and focus visibility, and the crafted cross-user POST chec
   under [REW-100](https://wanderingnerds.atlassian.net/browse/REW-100); the reviewer recommended
   gating that branch on `isOwner` and folding the fix into REW-100.
 - [REW-102](https://wanderingnerds.atlassian.net/browse/REW-102) — route-level `csrfProtection` on
-  `POST /recipes/:id/delete`, deliberately out of scope for a card-layout ticket. **Addressed by
-  [REW-101](https://wanderingnerds.atlassian.net/browse/REW-101)** (branch
-  `REW-101-recipe-delete-csrf-protection`, reviewed, QA skipped, unmerged); REW-102 is linked as its
-  duplicate.
+  `POST /recipes/:id/delete`, deliberately out of scope for a card-layout ticket. **Closed:** the
+  delete route itself was fixed by [REW-101](https://wanderingnerds.atlassian.net/browse/REW-101)
+  (merged, PR #62 / `f8673b1`) and the cookbook and meal-plan deletes by
+  [REW-105](https://wanderingnerds.atlassian.net/browse/REW-105) (merged, PR #63 / `28a0cf8`);
+  REW-102 delivered the repo-wide audit plus route-level `csrfProtection` on the four remaining
+  forgeable content routes, including `POST /cookbooks/:id/recipes/:recipeId`. Still open from that
+  audit: [REW-106](https://wanderingnerds.atlassian.net/browse/REW-106) (session-lifecycle routes)
+  and the [REW-99](https://wanderingnerds.atlassian.net/browse/REW-99) tripwire, which includes this
+  page's Remove route.
 - [REW-18](https://wanderingnerds.atlassian.net/browse/REW-18) — real Share behavior.
 - [REW-82](https://wanderingnerds.atlassian.net/browse/REW-82) — cross-surface card sizing.
 - [REW-89](https://wanderingnerds.atlassian.net/browse/REW-89) — the Meal Plan card, which has the
