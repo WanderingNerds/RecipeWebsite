@@ -1,6 +1,7 @@
 import { Router } from "express";
 import rateLimit from "express-rate-limit";
 import { requireAuth } from "../middleware/authMiddleware.js";
+import { csrfProtection } from "../middleware/csrfMiddleware.js";
 import { createSupabaseClient } from "../config/supabase.js";
 import { getAppUrl } from "../utils/authUtils.js";
 import {
@@ -351,8 +352,20 @@ router.post("/:id/visibility", requireAuth, cookbookLimiter, (req, res) =>
   handleCookbookVisibilityUpdate(req, res)
 );
 
-// POST /cookbooks/:id/delete - Delete a cookbook (never deletes its recipes)
-router.post("/:id/delete", requireAuth, cookbookLimiter, async (req, res) => {
+// POST /cookbooks/:id/delete - Delete a cookbook (never deletes its recipes).
+// csrfProtection is re-applied at the route level (REW-105) for the reason
+// spelled out on POST /recipes/:id/delete in recipeRoutes.js: the global
+// csrfProtectionExceptMultipart in app.js skips token validation for any
+// multipart/form-data body, and this handler reads no body fields, so a
+// forged cross-site multipart POST would otherwise reach it and run the
+// delete. The delete form in views/cookbooks/view.ejs posts urlencoded with
+// a hidden _csrf field, so this is transparent to it.
+// Ordering rule: requireAuth -> csrfProtection -> cookbookLimiter -> handler.
+// CSRF runs BEFORE cookbookLimiter so a forged request cannot burn the
+// victim's limiter quota; cookbookDeleteRoutes.test.js enforces this.
+// Do not add a Multer/body-parsing stage here: the route must keep rejecting
+// multipart bodies outright.
+router.post("/:id/delete", requireAuth, csrfProtection, cookbookLimiter, async (req, res) => {
   try {
     const { id } = req.params;
 
