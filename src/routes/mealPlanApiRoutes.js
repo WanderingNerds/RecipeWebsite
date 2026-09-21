@@ -2,6 +2,7 @@ import { Router } from "express";
 import rateLimit from "express-rate-limit";
 import { createSupabaseClient } from "../config/supabase.js";
 import { createRequireApiAuth } from "../middleware/authMiddleware.js";
+import { csrfProtection } from "../middleware/csrfMiddleware.js";
 import { validateMealPlanTitle, validateDateRange } from "../utils/mealPlanUtils.js";
 
 const router = Router();
@@ -168,7 +169,27 @@ router.post("/", requireApiAuth, mealPlanApiLimiter, async (req, res) => {
 });
 
 // POST /api/meal-plans/:id/recipes/:recipeId - add a recipe to a meal plan
-router.post("/:id/recipes/:recipeId", requireApiAuth, mealPlanApiLimiter, async (req, res) => {
+// csrfProtection is re-applied at the route level (REW-102), mirroring the
+// policy comment on the cookbook API's mutations (cookbookApiRoutes.js:279-288)
+// and its already-protected twin POST /api/cookbooks/:id/recipes/:recipeId:
+// the global csrfProtectionExceptMultipart in app.js skips token validation for
+// any multipart/form-data body, and this handler reads no body fields, so a
+// forged cross-site multipart POST would otherwise reach it and upsert a
+// meal_plan_recipes row on the victim's behalf. No HTML form posts here -- the
+// only caller is fetch (public/js/meal-plans.js:241,298), and public/js/main.js
+// patches window.fetch to attach x-csrf-token from <meta name="csrf-token"> to
+// every same-origin state-changing request, which csrfMiddleware.js accepts as
+// an alternative to req.body._csrf. main.js loads before meal-plans.js in
+// views/layouts/main.ejs, so the patch is installed first.
+// Ordering rule: requireApiAuth -> csrfProtection -> mealPlanApiLimiter ->
+// handler. CSRF runs BEFORE the limiter so a forged cross-site request cannot
+// burn the victim's quota; mealPlanApiRoutes.test.js enforces this.
+// POST / (above) and DELETE /:id/recipes/:recipeId (below) are deliberately
+// left as they are in this ticket: POST / validates its body before any write
+// (an unparsed body fails validateMealPlanTitle), and a cross-origin DELETE is
+// not form-forgeable -- HTML forms emit only GET/POST, and a fetch with method
+// DELETE is preflighted and rejected by the CORS origin allow-list in app.js.
+router.post("/:id/recipes/:recipeId", requireApiAuth, csrfProtection, mealPlanApiLimiter, async (req, res) => {
   try {
     const { id, recipeId } = req.params;
 

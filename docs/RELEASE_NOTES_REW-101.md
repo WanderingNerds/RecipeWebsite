@@ -141,7 +141,13 @@ cross-origin `fetch` DELETE is preflighted and refused by CORS).
 
 The full per-route table with file and line locations lives in
 `docs/plans/rew-101-recipe-delete-csrf-protection.md`, on the Confluence plan page, and in
-[`docs/api/README.md`](api/README.md#route-level-csrf-audit-rew-101).
+[`docs/api/README.md`](api/README.md#route-level-csrf-audit-rew-101--rew-105--rew-102).
+
+**Superseded by REW-102 (2026-09-20).** The table above is kept for the historical record. Three of
+its classifications were wrong and one went stale; the corrected audit of record — covering all 43
+mutating handlers, with the REW-99 tripwire and the `SameSite=Lax` analysis — is the
+[route-level CSRF audit](api/README.md#route-level-csrf-audit-rew-101--rew-105--rew-102) in
+`docs/api/README.md` and `docs/plans/rew-102-recipe-delete-csrf-audit.md`.
 
 ---
 

@@ -2,6 +2,7 @@ import { Router } from "express";
 import { createSupabaseClient, supabase } from "../config/supabase.js";
 import rateLimit from "express-rate-limit";
 import { requireApiAuth } from "../middleware/authMiddleware.js";
+import { csrfProtection } from "../middleware/csrfMiddleware.js";
 
 const router = Router();
 
@@ -107,7 +108,26 @@ router.get("/:recipeId", async (req, res) => {
 });
 
 // POST /api/likes/:recipeId - Like a recipe
-router.post("/:recipeId", requireApiAuth, likeLimiter, async (req, res) => {
+// csrfProtection is re-applied at the route level (REW-102), mirroring the
+// policy comment on the cookbook API's mutations (cookbookApiRoutes.js:279-288):
+// the global csrfProtectionExceptMultipart in app.js skips token validation for
+// any multipart/form-data body, and this handler reads no body fields, so a
+// forged cross-site multipart POST would otherwise reach it and favorite a
+// published recipe as the victim. No HTML form posts here -- the only caller is
+// fetch (public/js/likes.js:34,123), and public/js/main.js patches window.fetch
+// to attach x-csrf-token from <meta name="csrf-token"> to every same-origin
+// state-changing request, which csrfMiddleware.js accepts as an alternative to
+// req.body._csrf. main.js loads before likes.js in views/layouts/main.ejs, so
+// the patch is installed first.
+// Ordering rule: requireApiAuth -> csrfProtection -> likeLimiter -> handler.
+// CSRF runs BEFORE likeLimiter so a forged cross-site request cannot burn the
+// victim's quota; likeRoutes.test.js enforces this.
+// GET /:recipeId above stays public and unchecked by design (it changes
+// nothing), and DELETE /:recipeId below is deliberately unchanged in this
+// ticket: a cross-origin DELETE is not form-forgeable -- HTML forms emit only
+// GET/POST, and a fetch with method DELETE is preflighted and rejected by the
+// CORS origin allow-list in app.js.
+router.post("/:recipeId", requireApiAuth, csrfProtection, likeLimiter, async (req, res) => {
   try {
     const { recipeId } = req.params;
 

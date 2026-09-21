@@ -533,7 +533,22 @@ router.post("/:id/add-recipes", requireAuth, cookbookLimiter, async (req, res) =
 
 // POST /cookbooks/:id/recipes/:recipeId - Add a single recipe to a cookbook
 // (used by the "Save to Cookbook(s)" widget on the recipe view page)
-router.post("/:id/recipes/:recipeId", requireAuth, cookbookLimiter, async (req, res) => {
+// csrfProtection is re-applied at the route level (REW-102) for the same
+// reason as POST /:id/delete above: the global csrfProtectionExceptMultipart
+// in app.js skips token validation for any multipart/form-data body, and this
+// handler reads no body fields, so a forged cross-site multipart POST would
+// otherwise reach it and upsert a cookbook_recipes row on the victim's behalf.
+// Additive rather than destructive, but its already-protected JSON twin
+// POST /api/cookbooks/:id/recipes/:recipeId (cookbookApiRoutes.js:293) carries
+// the check, so this is consistency, not new policy. The submitting form is the
+// "+ Add to <cookbook>" widget at views/recipes/view.ejs:97, which posts
+// urlencoded with a hidden _csrf field, so this is transparent to it.
+// Ordering rule: requireAuth -> csrfProtection -> cookbookLimiter -> handler.
+// CSRF runs BEFORE cookbookLimiter so a forged request cannot burn the
+// victim's limiter quota; cookbookRoutes.test.js enforces this.
+// Do not add a Multer/body-parsing stage here: the route must keep rejecting
+// multipart bodies outright.
+router.post("/:id/recipes/:recipeId", requireAuth, csrfProtection, cookbookLimiter, async (req, res) => {
   try {
     const { id, recipeId } = req.params;
 

@@ -35,6 +35,7 @@ This page documents the `/api/likes/:recipeId` endpoints that back the heart-sha
 ### `POST /api/likes/:recipeId`
 
 **Auth:** Required (`requireApiAuth` — validates the `sb-access-token` cookie via Supabase, returns JSON `401` rather than redirecting).
+**CSRF:** Required. Route-level `csrfProtection` runs between `requireApiAuth` and the limiter (REW-102), so the full chain is `requireApiAuth` → `csrfProtection` → `likeLimiter` → handler.
 **Rate limit:** 30 requests/minute, keyed by `user_id` (`likeLimiter`).
 
 Likes a recipe on behalf of the current user.
@@ -97,7 +98,7 @@ Because My Recipes, the recipe detail view, and `/recipes/liked` all read/write 
 - **Authorization:** RLS on `recipe_likes` (`user_id = auth.uid()` for SELECT/INSERT/DELETE) guarantees a user can only create/remove their own like rows, regardless of which UI surface issued the request.
 - **Rate limiting:** 30 like/unlike actions per minute per user (`likeLimiter`), shared across every page that renders `.like-btn`, including the new My Recipes surface.
 - **Input validation:** `recipeId` is validated against a UUID regex server-side before any query runs.
-- **CSRF:** CSRF protection is currently disabled repo-wide (`doubleCsrfProtection` commented out in `src/app.js`, `res.locals.csrfToken` hard-coded to `''`). This is a pre-existing, cross-cutting gap unrelated to REW-21/REW-55.
+- **CSRF:** CSRF protection **is enforced** — the "disabled repo-wide" claim that stood here was correct when REW-21/REW-55 shipped and is no longer true (corrected 2026-09-20 under REW-102). `csrfProtectionExceptMultipart` is mounted globally in `src/app.js` and `res.locals.csrfToken` is populated for every render. `POST /api/likes/:recipeId` additionally re-applies `csrfProtection` at the route level, ahead of `likeLimiter` (REW-102): the global wrapper skips token validation for any `multipart/form-data` body and this handler reads no body fields, so a forged cross-site multipart POST would otherwise favorite a published recipe as the victim. Placing CSRF before the limiter means forged requests consume none of the victim's 30/minute budget. The only caller is `fetch`, and `public/js/main.js` already attaches `x-csrf-token` from `<meta name="csrf-token">` to every same-origin state-changing request, so no client change was needed. `DELETE /api/likes/:recipeId` was deliberately left unchanged — HTML forms emit only GET/POST, and a cross-origin `fetch` with method DELETE is preflighted and refused by the CORS origin allow-list. `GET /api/likes/:recipeId` stays public and unchecked by design, since it changes nothing; `src/routes/likeRoutes.test.js` asserts both the POST chain and that the GET has no auth or CSRF middleware.
 
 ---
 

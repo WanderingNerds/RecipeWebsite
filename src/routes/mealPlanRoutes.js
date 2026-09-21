@@ -606,7 +606,21 @@ router.post("/:id/add-recipes", requireAuth, mealPlanLimiter, async (req, res) =
 // POST /meal-plans/:id/recipes/:recipeId/remove - Remove a recipe from a
 // meal plan (used by the plan detail page). This never deletes the recipe
 // itself, only its meal plan membership.
-router.post("/:id/recipes/:recipeId/remove", requireAuth, mealPlanLimiter, async (req, res) => {
+// csrfProtection is re-applied at the route level (REW-102) for the same
+// reason as POST /:id/delete above: the global csrfProtectionExceptMultipart
+// in app.js skips token validation for any multipart/form-data body, and this
+// handler reads NO body fields at all (unlike its cookbook twin
+// POST /cookbooks/:id/recipes/:recipeId/remove, which reads req.body.returnTo
+// and therefore throws on an unparsed body), so a forged cross-site multipart
+// POST would otherwise reach it and delete the membership row. The Remove form
+// on the meal plan card (views/partials/recipe-summary-card.ejs:340) posts
+// urlencoded with a hidden _csrf field, so this is transparent to it.
+// Ordering rule: requireAuth -> csrfProtection -> mealPlanLimiter -> handler.
+// CSRF runs BEFORE mealPlanLimiter so a forged request cannot burn the
+// victim's limiter quota; mealPlanRecipeRemoveRoutes.test.js enforces this.
+// Do not add a Multer/body-parsing stage here: the route must keep rejecting
+// multipart bodies outright.
+router.post("/:id/recipes/:recipeId/remove", requireAuth, csrfProtection, mealPlanLimiter, async (req, res) => {
   try {
     const { id, recipeId } = req.params;
 
