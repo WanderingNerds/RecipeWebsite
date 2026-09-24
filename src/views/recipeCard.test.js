@@ -26,10 +26,12 @@ const renderFavorite = (overrides = {}, user = null) => ejs.renderFile(`${views}
   recipe: { ...favoriteRecipe, ...overrides }, surface: 'favorites', user, csrfToken: 'csrf-test',
 });
 
-// REW-88: Cookbook is the fourth surface. Ownership is uniform in practice
-// today (the RLS INSERT policy on cookbook_recipes still allows only your own
-// recipes in) but is computed per card, so the mixed shape REW-100 will
-// create is covered here already.
+// REW-88: Cookbook is the fourth surface, and as of REW-100 a genuinely mixed
+// one -- migration 021 widened the RLS INSERT policy on cookbook_recipes to
+// admit your own recipes OR anyone's published recipe, so a card the viewer
+// does not own is a normal case here rather than a future possibility.
+// Ownership was already computed per card by REW-88, which is why REW-100
+// needed no structural view change, only the status-free disabled heart.
 const cookbookRecipe = { ...recipe, user_id: OWNER_ID };
 const renderCookbook = (overrides = {}, user = null, locals = {}) => ejs.renderFile(`${views}partials/recipe-summary-card.ejs`, {
   recipe: { ...cookbookRecipe, ...overrides }, surface: 'cookbook', cookbookId: 'cookbook-1',
@@ -357,6 +359,36 @@ test('REW-88 the owner-only pill and the heart render together, and Private disa
   // A viewer who does not own the recipe is told nothing about its status.
   const stranger = await renderCookbook({ status: 'draft' }, { id: 'someone-else' });
   assert.doesNotMatch(stranger, /badge-draft|badge-published/);
+});
+
+test('REW-100 a non-owner viewing a draft cookbook card gets a status-free disabled heart', async () => {
+  // The REW-88 documentation pass flagged the old label as a status claim:
+  // "Make this recipe Public to add it to favorites" tells a stranger that
+  // somebody else's recipe is Private. Not reachable through any UI path today
+  // (001's recipes SELECT policy hides another user's draft, getCookbookRecipes
+  // drops junction rows whose embedded recipe came back null, and
+  // /recipes/liked filters on status = 'published') -- this is defence in
+  // depth, pinned so it stays correct by construction.
+  const stranger = await renderCookbook({ status: 'draft' }, { id: 'someone-else' });
+
+  // Still rendered, still disabled: hiding it would shift the header row
+  // layout between cards, and a live-looking heart could never succeed.
+  assert.match(stranger, /class="like-btn" disabled aria-label="Favorites are unavailable for this recipe" title="Favorites are unavailable for this recipe"/);
+  assert.doesNotMatch(stranger, /data-recipe-id="recipe-1" data-liked=/);
+
+  // Neither accessible name says anything about visibility.
+  const labels = [
+    ...stranger.matchAll(/<button[^>]*class="like-btn"[^>]*>/g),
+  ].map(([tag]) => tag);
+  assert.equal(labels.length, 1, 'exactly one heart is rendered');
+  assert.doesNotMatch(labels[0], /Public|Private|draft|published|visibility|unpublished/i);
+
+  // And the pill absence from REW-88 still holds for this viewer.
+  assert.doesNotMatch(stranger, /badge-draft|badge-published/);
+  // The owner keeps the actionable explanation -- they can go flip it.
+  const owner = await renderCookbook({ status: 'draft' }, { id: OWNER_ID });
+  assert.match(owner, /class="like-btn" disabled aria-label="Make this recipe Public to add it to favorites"/);
+  assert.doesNotMatch(owner, /Favorites are unavailable for this recipe/);
 });
 
 test('REW-88 cookbook cards never leak user_id, never link chips, and degrade safely', async () => {

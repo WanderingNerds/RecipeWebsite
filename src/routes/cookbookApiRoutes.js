@@ -30,9 +30,10 @@ const cookbookApiLimiter = rateLimit({
  * log label is customized here.
  *
  * Every route in this file requires auth: the "+ Cookbook" card action only
- * ever operates on the caller's own cookbooks and own recipes, so there is
- * no anonymous read case to support here. The public cookbook read lives at
- * GET /c/:id in publicRoutes.js and is unaffected.
+ * ever operates on the caller's OWN cookbooks -- and, as of REW-100, on
+ * either the caller's own recipe (any status) or anyone's published recipe --
+ * so there is no anonymous read case to support here. The public cookbook
+ * read lives at GET /c/:id in publicRoutes.js and is unaffected.
  */
 const requireApiAuth = createRequireApiAuth({
   logLabel: "Cookbook API auth error:",
@@ -172,8 +173,10 @@ export async function handleCookbookCreate(
 
 /**
  * POST /api/cookbooks/:id/recipes/:recipeId - add a recipe to a cookbook.
- * Authorization reproduces POST /cookbooks/:id/recipes/:recipeId exactly:
- * the cookbook must be the caller's, and so must the recipe.
+ * The cookbook must be the caller's. The recipe must be either the caller's
+ * own (any status) or published by anyone (REW-100) -- deliberately wider
+ * than the two form-based routes in cookbookRoutes.js, which stay
+ * own-recipes-only because their only UI entry points are owner-gated.
  */
 export async function handleCookbookRecipeAdd(
   req,
@@ -194,19 +197,39 @@ export async function handleCookbookRecipeAdd(
       return res.status(404).json({ error: "Cookbook not found" });
     }
 
-    // Explicit recipe-ownership check, belt-and-suspenders alongside the RLS
-    // INSERT policy on cookbook_recipes (010_create_cookbook_recipes_table).
-    // Own-recipes-only is the correct rule for the My Recipes surface this
-    // powers; widening it to other people's Public recipes is REW-59's call,
-    // not this endpoint's.
+    // REW-100: the recipe rule is own-or-published -- the caller's own recipe
+    // at any status, or anyone's status = 'published' recipe. Migration 021
+    // widens the cookbook_recipes INSERT policy to match, using the same shape
+    // 012 already uses for meal_plan_recipes.
+    //
+    // The predicate is written out in JavaScript on purpose, rather than
+    // delegating to the `recipes` SELECT policy the way mealPlanApiRoutes.js
+    // does: the whole point of this lookup is to be an independent second
+    // layer, and an explicit check keeps rejecting non-owned drafts even if a
+    // future migration ever widens recipe visibility. Two columns are selected
+    // because they are exactly what the decision needs.
+    //
+    // Every reject path below -- lookup error, no row, another user's draft --
+    // returns the identical generic 404 and writes nothing, so the endpoint
+    // cannot be used to probe whether a recipe id exists.
     const { data: recipe, error: recipeError } = await supabaseClient
       .from("recipes")
-      .select("id")
+      .select("id, user_id, status")
       .eq("id", recipeId)
-      .eq("user_id", req.user.id)
       .maybeSingle();
 
     if (recipeError || !recipe) {
+      return res.status(404).json({ error: "Recipe not found" });
+    }
+
+    // The ownership half is type-guarded the way the card partial guards its
+    // own isOwner: a row with a missing/non-string user_id is treated as NOT
+    // owned rather than compared loosely. Identical behavior for real rows --
+    // this only closes a hypothetical sparse-row comparison.
+    const recipeIsAddable =
+      (typeof recipe.user_id === "string" && recipe.user_id === req.user.id) ||
+      recipe.status === "published";
+    if (!recipeIsAddable) {
       return res.status(404).json({ error: "Recipe not found" });
     }
 

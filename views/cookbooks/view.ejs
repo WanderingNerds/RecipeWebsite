@@ -74,10 +74,12 @@
       <% recipes.forEach(function(recipe) { %>
         <%#
           REW-88: the shared standardized card, fourth surface. Ownership is
-          uniform today (the RLS INSERT policy on cookbook_recipes still
-          allows only your own recipes) but is computed per card anyway from
-          recipe.user_id, which is never rendered into the markup -- REW-100
-          will make this page genuinely mixed without another view change.
+          NOT uniform here: since REW-100 widened the cookbook_recipes INSERT
+          policy (migration 021), this page can genuinely hold another user's
+          Public recipe. isOwner is therefore computed per card from
+          recipe.user_id -- which is never rendered into the markup -- and a
+          card the viewer does not own simply draws no owner-only
+          affordances. No further view change was needed to get there.
 
           `cookbookId` is what lets the partial render this page's Remove
           action; `user` and `csrfToken` reach it through res.locals, exactly

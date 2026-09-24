@@ -9,9 +9,13 @@
     'my-recipes' - uniformly owned by the viewer
     'favorites'  - MIXED ownership: mostly other people's published recipes,
                    sometimes the viewer's own
-    'cookbook'   - the recipes inside one cookbook. Owner-only today, MIXED
-                   once REW-100 lands. Carries the page-specific Remove
-                   action and is the one surface with no `+ Cookbook`.
+    'cookbook'   - the recipes inside one cookbook. GENUINELY MIXED as of
+                   REW-100: migration 021 widened the RLS INSERT policy on
+                   cookbook_recipes to admit your own recipes OR anyone's
+                   published recipe, so a card you do not own is a normal
+                   case here, not a future possibility. Carries the
+                   page-specific Remove action and is the one surface with
+                   no `+ Cookbook`.
     'meal-plan'  - the recipes inside one meal plan. GENUINELY MIXED today:
                    the RLS INSERT policy on meal_plan_recipes (migration 012)
                    admits your own recipes OR anyone's published recipe.
@@ -113,8 +117,38 @@
                 <button class="like-btn" data-recipe-id="<%= recipe.id %>" data-liked="<%= recipe.isLiked %>" aria-label="<%= recipe.isLiked ? 'Remove from favorites' : 'Favorite this recipe' %>">
                   <span class="like-btn-icon">&#9829;</span>
                 </button>
-              <% } else { %>
+              <% } else if (isOwner) { %>
+                <%#
+                  The explanatory label is a status claim ("Public"), so it is
+                  owner-only. The owner can act on it: flipping the recipe to
+                  Public from My Recipes is exactly what enables the heart.
+                %>
                 <button class="like-btn" disabled aria-label="Make this recipe Public to add it to favorites" title="Make this recipe Public to add it to favorites">
+                  <span class="like-btn-icon">&#9829;</span>
+                </button>
+              <% } else { %>
+                <%#
+                  REW-100: a non-owner looking at a recipe that is not
+                  published. /api/likes requires status = 'published', so the
+                  heart cannot work -- but the reason must not be told to
+                  someone who does not own the recipe, which is what the label
+                  above would do. Neutral, status-free wording instead: it
+                  names no visibility state and cannot be read as a claim
+                  about Public/Private.
+
+                  Kept rendered and `disabled` rather than hidden, so the
+                  header row keeps the same shape across every card in a grid,
+                  and rather than falling back to "Favorite this recipe",
+                  which would look live but could never succeed.
+
+                  Defence in depth, not a currently reachable UI state: under
+                  001's recipes SELECT policy another user's draft row is
+                  invisible, getCookbookRecipes drops junction rows whose
+                  embedded recipe came back null, and /recipes/liked filters on
+                  status = 'published'. This branch exists so that stays true
+                  by construction rather than by luck.
+                %>
+                <button class="like-btn" disabled aria-label="Favorites are unavailable for this recipe" title="Favorites are unavailable for this recipe">
                   <span class="like-btn-icon">&#9829;</span>
                 </button>
               <% } %>
@@ -216,10 +250,13 @@
             without it, action rows would not line up across a grid row.
 
             `+ Cookbook` is rendered for every favorite, owned or not, per the
-            ticket's acceptance criteria. Adding a recipe you do not own is
-            still rejected by the API and by RLS today; REW-100 lifts that.
-            The failure is already surfaced as an error toast by
-            toggleCookbookMembership in public/js/cookbooks.js.
+            ticket's acceptance criteria. As of REW-100 that add SUCCEEDS for a
+            recipe you do not own, because every recipe reachable from this
+            page is published and both layers now admit own-or-published: the
+            handler in cookbookApiRoutes.js and migration 021's
+            cookbook_recipes INSERT policy. Any remaining failure is still
+            surfaced as an error toast by toggleCookbookMembership in
+            public/js/cookbooks.js.
           %>
           <div class="recipe-card-actions recipe-summary-actions" style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: auto; padding-top: 1rem; border-top: 1px solid var(--border-color);">
             <% if (showMealPlanAdd) { %><button type="button" class="btn btn-outline meal-plan-add-btn<%= viewer ? '' : ' meal-plan-add-btn-guest' %>" data-recipe-id="<%= recipe.id %>" aria-label="<%= viewer ? 'Add to Meal Plan' : 'Log in to add to Meal Plan' %>" style="flex: 1; font-size: 0.875rem; padding: 0.5rem 1rem;">+ Meal Plan</button><% } %>
@@ -343,12 +380,13 @@
             </form>
             <% } %>
             <%#
-              Owner-gated, and load-bearing in production TODAY rather than in
-              anticipation of REW-100: a meal plan can genuinely hold another
-              user's published recipe (migration 012's RLS INSERT policy), so
-              this is the first surface where a non-owned card is the normal
-              case. The flag is presentational; /recipes/:id/edit, /:id/update
-              and /:id/delete each enforce ownership themselves.
+              Owner-gated, and load-bearing in production: a meal plan can
+              genuinely hold another user's published recipe (migration 012's
+              RLS INSERT policy), so this was the first surface where a
+              non-owned card is the normal case -- the cookbook surface above
+              joined it in REW-100 (migration 021). The flag is presentational;
+              /recipes/:id/edit, /:id/update and /:id/delete each enforce
+              ownership themselves.
             %>
             <% if (showOwnerControls) { %>
             <a href="/recipes/<%= recipe.id %>/edit" class="btn btn-outline" style="flex: 1; text-align: center; font-size: 0.875rem; padding: 0.5rem 1rem;">Edit</a>

@@ -2,8 +2,9 @@
 
 **Feature:** REW-86 — Standardize My Recipes Recipe Card Content & Actions
 **Component:** `views/partials/recipe-summary-card.ejs`, `views/recipes/index.ejs`, `views/partials/cookbook-modal.ejs`, `views/layouts/main.ejs`, `public/js/cookbooks.js`, `public/css/styles.css`, `src/routes/recipeRoutes.js`, `src/routes/cookbookApiRoutes.js`, `src/routes/index.js`, `src/middleware/authMiddleware.js`
-**Last Updated:** 2026-09-15
+**Last Updated:** 2026-09-23
 **Status:** implemented and reviewer-approved on branch `REW-86-standardize-my-recipes-card`. **QA was not run for this change** and the branch is not merged.
+**REW-100 update (2026-09-23):** the `/api/cookbooks` add endpoint documented below now accepts another user's Public recipe (own-or-published), backed by migration `021`. Reviewer-approved over two rounds; **QA did not run**, and **`021` is not applied to any Supabase project**. See `docs/RELEASE_NOTES_REW-100.md`.
 
 ---
 
@@ -120,7 +121,7 @@ the JSON surface behind the `+ Cookbook` modal; it does not replace the form-bas
 |--------|----------|-------------|
 | GET | `/api/cookbooks?recipeId=<uuid>` | List the caller's cookbooks (`id`, `title`), each flagged with `containsRecipe` for the given recipe |
 | POST | `/api/cookbooks` | Quick-create a cookbook from the modal's inline mini-form (`{ title }`) |
-| POST | `/api/cookbooks/:id/recipes/:recipeId` | Add an owned recipe to an owned cookbook |
+| POST | `/api/cookbooks/:id/recipes/:recipeId` | Add a recipe to an **owned** cookbook — the caller's own recipe at any status, or anyone's published recipe (REW-100) |
 | DELETE | `/api/cookbooks/:id/recipes/:recipeId` | Remove the membership row (never the recipe) |
 
 **Middleware:** every route runs behind `requireApiAuth` and answers `401` JSON rather than
@@ -131,16 +132,31 @@ it is non-mutating, and CSRF tokens protect state changes, not reads.
 **Rate limit:** `cookbookApiLimiter` — **30 mutations / minute, keyed on `req.user.id`**, mirroring
 `mealPlanApiLimiter`. Per-user keying is safe here because every route is behind auth.
 
-**Authorization** reproduces the existing form route exactly: the cookbook must belong to the
-caller (`getOwnedCookbook`, filtered by `id` + `user_id`), and so must the recipe (an explicit
-`recipes` lookup filtered by `id` + `user_id`) — belt-and-suspenders alongside the
-`cookbook_recipes` INSERT policy from migration `010`, which already requires ownership of both
-sides. A nonexistent cookbook and someone else's cookbook return the same `404`. A failed recipe
-lookup is reported exactly like a non-owned recipe.
+**Authorization (REW-100)** is **cookbook-ownership + own-or-published**, not owner-only on both
+sides. The cookbook must belong to the caller — unchanged, still `getOwnedCookbook`, filtered by
+`id` + `user_id`, alongside RLS. The **recipe** rule is wider: the caller's own recipe at any
+status, **or** any user's `status = 'published'` recipe. The `recipes` lookup therefore selects
+`id, user_id, status` and filters on **`id` only**; the decision is then made by an explicit
+in-handler predicate (own **or** published) rather than by the query's filters. At the database
+layer the same rule is enforced independently by migration `021`'s widened `cookbook_recipes`
+INSERT policy — the shape migration `012` already uses for `meal_plan_recipes` — which supersedes
+migration `010`'s own-recipes-only `WITH CHECK`. The cookbook-ownership half of that policy did not
+move, so a user still cannot insert into someone else's cookbook.
 
-**Owner-only, deliberately.** Adding *other* users' Public recipes to a cookbook is REW-59's
-policy-widening call, not this endpoint's. Every card on My Recipes is owned by the viewer, so the
-narrow rule is sufficient and requires no migration.
+The predicate is written out in JavaScript on purpose rather than delegated to the `recipes` SELECT
+policy: the lookup exists to be an independent second layer, so a future widening of recipe
+visibility cannot silently widen this endpoint.
+
+**Every reject path returns the same generic `404`, with no write.** A nonexistent cookbook and
+someone else's cookbook both return `404 {"error":"Cookbook not found"}`. A nonexistent recipe, a
+failed recipe lookup, and another user's **draft** recipe are all reported identically as
+`404 {"error":"Recipe not found"}` — there is deliberately no `403` and no "this recipe is private"
+message, so the endpoint is not an existence oracle for other users' recipe IDs.
+
+This makes the JSON API **wider** than the form-based `POST /cookbooks/:id/recipes/:recipeId` and
+`POST /cookbooks/:id/add-recipes`, which stay own-recipes-only by application check alone (their
+entry points are owner-gated). Narrower-than-RLS is safe; those filters are now load-bearing on
+their own and must not be removed on the assumption that RLS still covers them.
 
 **Idempotent add:** `upsert(..., { onConflict: "cookbook_id,recipe_id", ignoreDuplicates: true })`,
 so clicking Add twice (or a race between tabs) is a no-op rather than a composite-primary-key
@@ -194,14 +210,28 @@ reason `createRequireAdmin`'s is — so the token paths can be unit tested witho
 
 ## Database
 
-**No migration.** Every read and write on this card touches the signed-in user's own rows and is
-already permitted by existing RLS:
+**No migration for REW-86.** Every read and write on this card touches the signed-in user's own rows
+and is already permitted by existing RLS:
 
 - The visibility toggle updates an owned `recipes` row — migration `001`'s owner UPDATE policy,
   plus the route's own `user_id` filter.
 - `+ Cookbook` inserts an owned recipe into an owned cookbook — the narrowest case migration
   `010`'s INSERT policy already allows.
 - Favorite, meal-plan add, Edit, and Delete reuse existing policies unchanged.
+
+**REW-100 added one migration to this endpoint's story:
+`021_allow_published_recipes_in_cookbooks.sql`.** It widens the recipe half of the
+`cookbook_recipes` INSERT policy to `(recipes.user_id = auth.uid() OR recipes.status = 'published')`,
+leaving the cookbook-ownership half unchanged, so `+ Cookbook` also covers another user's Public
+recipe — which is what the My Favorites surface (REW-87) needs, since it renders that button on cards
+the viewer does not own. The bullet above therefore describes the *narrowest* case the policy allows,
+not its limit. Another user's Private recipe is still rejected at both layers.
+
+**Apply `021` before or together with the application deploy, never after it.** The handler now
+accepts another user's published recipe and hands it to the upsert, so an app-first deploy turns a
+clean `404 {"error":"Recipe not found"}` into `500 {"error":"Failed to add recipe to cookbook"}`.
+**`021` has not been applied to any Supabase project — `020` is still the highest applied
+migration.** Full detail in `database/README.md` and `docs/RELEASE_NOTES_REW-100.md`.
 
 ---
 
@@ -216,11 +246,13 @@ Added with this change:
   failure while reading identically to the user; Private/Public flash wording; filter round-trip;
   `buildRecipesListPath` rejects non-string and oversize values; and the route is asserted to be
   mounted behind `requireAuth`, `csrfProtection`, and a rate limiter.
-- `src/routes/cookbookApiRoutes.test.js` (new, 15 cases) — middleware composition per route
-  (including that `GET /` is intentionally not CSRF-checked), JSON `401`s, malformed-ID
-  short-circuits, owner scoping on list/add/remove, identical 404s for not-found vs. not-owned,
-  duplicate-safe add, a genuine write failure surfacing as `500` rather than a false success, and
-  quick-create stamping the caller's id.
+- `src/routes/cookbookApiRoutes.test.js` (new with REW-86 at 15 cases; **19 as of REW-100**) —
+  middleware composition per route (including that `GET /` is intentionally not CSRF-checked), JSON
+  `401`s, malformed-ID short-circuits, owner scoping on list/add/remove, identical 404s for
+  not-found vs. not-owned, duplicate-safe add, a genuine write failure surfacing as `500` rather
+  than a false success, and quick-create stamping the caller's id. REW-100 added the
+  published-accept, draft-reject and handler-decides cases plus a migration-`021`-content assertion,
+  and re-pointed one existing filter assertion; the middleware-order case was not modified.
 - `src/middleware/authMiddleware.test.js` (new) — `requireApiAuth` answers with JSON rather than a
   redirect, attaches the verified user and the caller's own token, logs unexpected failures under
   the caller's label, and keeps the function name route files assert on.
@@ -249,6 +281,10 @@ remain unverified.
   deliberately deferred rather than attempted inside this ticket.
 - [REW-98](https://wanderingnerds.atlassian.net/browse/REW-98) — the two Windows unix-socket test
   failures.
+- [REW-109](https://wanderingnerds.atlassian.net/browse/REW-109) — filed during REW-100. Now that
+  `+ Cookbook` can add another user's Public recipe, that author can later make it Private; the
+  membership row survives, the recipe drops out of `/cookbooks/:id`, but the `/cookbooks` recipe
+  count still includes it. Accepted and documented by REW-100, not fixed.
 - [REW-59](https://wanderingnerds.atlassian.net/browse/REW-59) — still In Progress on its own
   branch with its own edits to `views/partials/recipe-summary-card.ejs` and its own cookbook JSON
   API and modal. **A merge conflict on the card partial is expected, and a duplicate cookbook API
