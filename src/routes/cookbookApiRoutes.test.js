@@ -8,9 +8,17 @@
  * database. The router's own layer stack is still inspected separately,
  * because auth, rate limiting and CSRF are part of this endpoint's contract
  * rather than incidental wiring.
+ *
+ * REW-100 widens the RECIPE half of the add rule to own-or-published and
+ * leaves the cookbook-ownership half alone, at both layers. The cases below
+ * pin both sides of that: another user's PUBLISHED recipe is accepted with an
+ * unchanged upsert, another user's DRAFT recipe still gets the identical
+ * generic 404 with no write, and migration 021's SQL is asserted directly so
+ * the database layer cannot drift from the handler.
  */
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 
 process.env.SUPABASE_URL ||= "https://example.supabase.co";
 process.env.SUPABASE_ANON_KEY ||= "test-anon-key";
@@ -121,6 +129,21 @@ function fakeClient(results = {}) {
 }
 
 const ownedCookbook = { id: COOKBOOK_ID, title: "Weeknights" };
+
+// REW-100 recipe fixtures. The handler now selects id, user_id and status and
+// decides own-or-published itself, so every recipe row a test feeds in has to
+// carry the two columns that decision reads.
+const ownedDraftRecipe = { id: RECIPE_ID, user_id: "owner-1", status: "draft" };
+const otherUsersPublishedRecipe = {
+  id: RECIPE_ID,
+  user_id: "author-2",
+  status: "published",
+};
+const otherUsersDraftRecipe = {
+  id: RECIPE_ID,
+  user_id: "author-2",
+  status: "draft",
+};
 
 test("every cookbook API route requires auth; mutations add rate limiting and CSRF", () => {
   const readLayer = findLayer("/", "get");
@@ -299,7 +322,7 @@ test("removing from a cookbook the caller does not own is a 404 and deletes noth
   );
 });
 
-test("adding a recipe the caller does not own is a 404 and writes nothing", async () => {
+test("adding a recipe that cannot be read at all is a 404 and writes nothing", async () => {
   const client = fakeClient({
     cookbooks: { data: ownedCookbook, error: null },
     recipes: { data: null, error: null },
@@ -319,14 +342,187 @@ test("adding a recipe the caller does not own is a 404 and writes nothing", asyn
     ["cookbooks", "recipes"],
     "the membership insert must not run once the recipe check fails"
   );
+  // REW-100: the lookup is by id only now -- the own-or-published decision
+  // moved into the handler, so a user_id filter here would wrongly re-narrow
+  // it back to own-recipes-only.
   assert.deepEqual(
     client.calls.filter(([table, method]) => table === "recipes" && method === "eq"),
-    [
-      ["recipes", "eq", "id", RECIPE_ID],
-      ["recipes", "eq", "user_id", "owner-1"],
-    ],
-    "the recipe must be checked against the caller, not just fetched"
+    [["recipes", "eq", "id", RECIPE_ID]],
+    "the recipe lookup must filter on id alone, with no user_id filter"
   );
+});
+
+test("REW-100 another user's published recipe is accepted, with the upsert unchanged", async () => {
+  const client = fakeClient({
+    cookbooks: { data: ownedCookbook, error: null },
+    recipes: { data: otherUsersPublishedRecipe, error: null },
+    cookbook_recipes: { data: null, error: null },
+  });
+  const res = responseRecorder();
+
+  await handleCookbookRecipeAdd(
+    request({ params: { id: COOKBOOK_ID, recipeId: RECIPE_ID } }),
+    res,
+    client
+  );
+
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.body, {
+    added: true,
+    cookbookId: COOKBOOK_ID,
+    recipeId: RECIPE_ID,
+    cookbookTitle: "Weeknights",
+  });
+  // Byte-for-byte the same write the owned-recipe path has always issued.
+  assert.deepEqual(
+    client.calls.find(([table, method]) => table === "cookbook_recipes" && method === "upsert"),
+    [
+      "cookbook_recipes",
+      "upsert",
+      [{ cookbook_id: COOKBOOK_ID, recipe_id: RECIPE_ID }],
+      { onConflict: "cookbook_id,recipe_id", ignoreDuplicates: true },
+    ],
+    "widening the recipe rule must not change the membership write"
+  );
+  // The cookbook half of the rule is untouched: still scoped to the caller.
+  assert.deepEqual(
+    client.calls.filter(([table, method]) => table === "cookbooks" && method === "eq"),
+    [
+      ["cookbooks", "eq", "id", COOKBOOK_ID],
+      ["cookbooks", "eq", "user_id", "owner-1"],
+    ],
+    "cookbook ownership must still be enforced by an explicit owner filter"
+  );
+});
+
+test("REW-100 another user's draft recipe is still rejected with the generic 404", async () => {
+  const client = fakeClient({
+    cookbooks: { data: ownedCookbook, error: null },
+    recipes: { data: otherUsersDraftRecipe, error: null },
+  });
+  const res = responseRecorder();
+
+  await handleCookbookRecipeAdd(
+    request({ params: { id: COOKBOOK_ID, recipeId: RECIPE_ID } }),
+    res,
+    client
+  );
+
+  // Identical status and message to a nonexistent recipe and to a failed
+  // lookup: this endpoint must never become an existence oracle for another
+  // user's draft recipe ids.
+  assert.equal(res.statusCode, 404);
+  assert.deepEqual(res.body, { error: "Recipe not found" });
+  assert.deepEqual(
+    client.tables,
+    ["cookbooks", "recipes"],
+    "a non-owned draft must never reach cookbook_recipes"
+  );
+  assert.equal(
+    client.calls.some(([, method]) => method === "upsert" || method === "insert"),
+    false,
+    "no write of any kind may be issued for a non-owned draft"
+  );
+});
+
+test("REW-100 the handler, not the query, decides own-or-published", async () => {
+  // Identical lookups; only the returned row differs. If the decision had been
+  // delegated to the query (or to the recipes SELECT policy), these two could
+  // not diverge.
+  const outcomes = [];
+  for (const recipe of [
+    ownedDraftRecipe, // own recipe, any status -> allowed
+    otherUsersPublishedRecipe, // anyone's published recipe -> allowed
+    otherUsersDraftRecipe, // another user's draft -> rejected
+  ]) {
+    const client = fakeClient({
+      cookbooks: { data: ownedCookbook, error: null },
+      recipes: { data: recipe, error: null },
+      cookbook_recipes: { data: null, error: null },
+    });
+    const res = responseRecorder();
+
+    await handleCookbookRecipeAdd(
+      request({ params: { id: COOKBOOK_ID, recipeId: RECIPE_ID } }),
+      res,
+      client
+    );
+
+    // Same two columns fetched every time, and never a user_id filter.
+    assert.deepEqual(
+      client.calls.filter(([table, method]) => table === "recipes" && method === "select"),
+      [["recipes", "select", "id, user_id, status"]],
+      "the handler must fetch the columns its own predicate reads"
+    );
+    assert.deepEqual(
+      client.calls.filter(([table, method]) => table === "recipes" && method === "eq"),
+      [["recipes", "eq", "id", RECIPE_ID]]
+    );
+
+    outcomes.push(res.statusCode);
+  }
+
+  assert.deepEqual(
+    outcomes,
+    [200, 200, 404],
+    "own (any status) and anyone's published are added; another user's draft is not"
+  );
+});
+
+test("REW-100 migration 021 widens only the recipe half of the INSERT policy", async () => {
+  const migration = await readFile(
+    new URL(
+      "../../database/migrations/021_allow_published_recipes_in_cookbooks.sql",
+      import.meta.url
+    ),
+    "utf8"
+  );
+  // The header's ROLLBACK block legitimately contains DROP/CREATE POLICY text,
+  // so every structural assertion runs against executable SQL only -- the same
+  // approach publicRoutes.test.js uses for 019.
+  const statements = migration
+    .split("\n")
+    .filter((line) => !line.trimStart().startsWith("--"))
+    .join("\n");
+
+  // Drop-and-recreate, guarded so the file is re-runnable, keeping 010's name.
+  assert.match(
+    statements,
+    /DROP\s+POLICY\s+IF\s+EXISTS\s+"Users can insert own cookbook recipes"\s+ON\s+cookbook_recipes/i
+  );
+  assert.match(
+    statements,
+    /CREATE POLICY "Users can insert own cookbook recipes"[\s\S]*FOR\s+INSERT[\s\S]*WITH\s+CHECK/i
+  );
+  assert.doesNotMatch(statements, /ALTER\s+POLICY/i);
+
+  // Cookbook ownership survives, ANDed, against auth.uid().
+  assert.match(statements, /cookbooks\.user_id\s*=\s*auth\.uid\(\)/i);
+  assert.match(statements, /AND\s+EXISTS/i);
+  // The recipe half is the only thing widened, and the OR lives inside it.
+  assert.match(
+    statements,
+    /\(\s*recipes\.user_id\s*=\s*auth\.uid\(\)\s+OR\s+recipes\.status\s*=\s*'published'\s*\)/i
+  );
+  // Stated directly, not just implied by the AND above: the two EXISTS blocks
+  // are never joined by a top-level OR. `... ) OR EXISTS` would make cookbook
+  // ownership optional, i.e. let a caller insert into someone else's cookbook.
+  assert.doesNotMatch(statements, /\)\s*OR\s+EXISTS/i);
+
+  // Exactly one policy is created, and it is the INSERT one: 010's SELECT and
+  // DELETE policies and 019's two public SELECT policies must stay as they are.
+  assert.deepEqual(statements.match(/CREATE POLICY "([^"]+)"/g) || [], [
+    'CREATE POLICY "Users can insert own cookbook recipes"',
+  ]);
+  assert.doesNotMatch(statements, /FOR\s+SELECT/i);
+  assert.doesNotMatch(statements, /FOR\s+DELETE/i);
+  assert.doesNotMatch(statements, /FOR\s+UPDATE/i);
+
+  // No schema or privilege change anywhere, and nothing at all against recipes.
+  assert.doesNotMatch(statements, /ALTER\s+TABLE/i);
+  assert.doesNotMatch(statements, /GRANT/i);
+  assert.doesNotMatch(statements, /CREATE\s+(TABLE|INDEX|FUNCTION|TRIGGER)/i);
+  assert.doesNotMatch(statements, /DROP\s+(TABLE|INDEX|COLUMN)/i);
 });
 
 test("a failed recipe lookup is reported exactly like a non-owned recipe", async () => {
@@ -349,7 +545,9 @@ test("a failed recipe lookup is reported exactly like a non-owned recipe", async
 test("adding the same recipe twice is an idempotent no-op, not an error", async () => {
   const results = {
     cookbooks: { data: ownedCookbook, error: null },
-    recipes: { data: { id: RECIPE_ID }, error: null },
+    // Row shape follows the REW-100 lookup, which now selects user_id and
+    // status because the handler's own-or-published predicate reads them.
+    recipes: { data: ownedDraftRecipe, error: null },
     // ignoreDuplicates means the second upsert resolves without an error and
     // without returning a row, exactly like the first.
     cookbook_recipes: { data: null, error: null },
@@ -388,7 +586,7 @@ test("adding the same recipe twice is an idempotent no-op, not an error", async 
 test("a genuine write failure on add is a 500, not a false success", async () => {
   const client = fakeClient({
     cookbooks: { data: ownedCookbook, error: null },
-    recipes: { data: { id: RECIPE_ID }, error: null },
+    recipes: { data: ownedDraftRecipe, error: null },
     cookbook_recipes: { data: null, error: { message: "deadlock detected" } },
   });
   const res = responseRecorder();

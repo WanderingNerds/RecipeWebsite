@@ -483,9 +483,15 @@ router.post("/:id/add-recipes", requireAuth, cookbookLimiter, async (req, res) =
       return res.redirect(`/cookbooks/${id}/add-recipes`);
     }
 
-    // Explicit ownership check on the submitted recipe ids, belt-and-
-    // suspenders alongside the RLS INSERT policy's own recipe-ownership
-    // check on cookbook_recipes -- a user can only add their own recipes.
+    // Explicit ownership check on the submitted recipe ids: this bulk picker
+    // is own-recipes-only, and after REW-100 it is the ONLY thing enforcing
+    // that. Migration 021 widened the cookbook_recipes INSERT policy to
+    // own-or-published, so RLS no longer backs this check up -- it now admits
+    // strictly more than this route does. That is deliberate and safe (an
+    // application check narrower than RLS always is): the picker above lists
+    // only the caller's own recipes, so anything else arriving here is a
+    // tampered form post and must still be dropped. Do not delete this filter
+    // on the assumption that RLS covers it.
     const { data: ownedRecipes, error: ownedError } = await supabaseClient
       .from("recipes")
       .select("id")
@@ -550,8 +556,14 @@ router.post("/:id/recipes/:recipeId", requireAuth, cookbookLimiter, async (req, 
       return res.redirect(`/recipes/${recipeId}`);
     }
 
-    // Explicit recipe-ownership check, belt-and-suspenders alongside the
-    // RLS INSERT policy on cookbook_recipes.
+    // Explicit recipe-ownership check. This form route stays own-recipes-only:
+    // its only entry point is the "Save to Cookbook(s)" widget inside the
+    // `isOwner` branch of views/recipes/view.ejs. After REW-100 this filter is
+    // the ONLY thing enforcing that -- migration 021 widened the
+    // cookbook_recipes INSERT policy to own-or-published, so RLS now admits
+    // strictly more than this route does. Narrower than RLS is always safe, but
+    // it means the filter is load-bearing on its own. The widened rule is
+    // available deliberately, via POST /api/cookbooks/:id/recipes/:recipeId.
     const { data: recipe, error: recipeError } = await supabaseClient
       .from("recipes")
       .select("id")

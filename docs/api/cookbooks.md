@@ -1,14 +1,14 @@
 # Cookbooks (REW-62, REW-19)
 
 **Feature:** REW-62 — Create and Manage Cookbooks; REW-19 — Cookbook Sharing
-**Component:** `src/routes/cookbookRoutes.js`, `src/routes/publicRoutes.js` (REW-19 public surfaces), `src/utils/cookbookUtils.js`, `src/routes/recipeRoutes.js` (recipe-view integration), `views/cookbooks/*.ejs`, `views/recipes/view.ejs`, `views/recipes/search.ejs`, `public/js/cookbook-share.js`, `database/migrations/009_create_cookbooks_table.sql`, `database/migrations/010_create_cookbook_recipes_table.sql`, `database/migrations/019_add_cookbook_sharing.sql`
-**Last Updated:** 2026-09-14
+**Component:** `src/routes/cookbookRoutes.js`, `src/routes/cookbookApiRoutes.js` (JSON API), `src/routes/publicRoutes.js` (REW-19 public surfaces), `src/utils/cookbookUtils.js`, `src/routes/recipeRoutes.js` (recipe-view integration), `views/cookbooks/*.ejs`, `views/recipes/view.ejs`, `views/recipes/search.ejs`, `public/js/cookbook-share.js`, `database/migrations/009_create_cookbooks_table.sql`, `database/migrations/010_create_cookbook_recipes_table.sql`, `database/migrations/019_add_cookbook_sharing.sql`, `database/migrations/021_allow_published_recipes_in_cookbooks.sql`
+**Last Updated:** 2026-09-23
 
 ---
 
 ## Overview
 
-A cookbook is a per-user named collection of the owner's own recipes. Users can create, rename, and delete cookbooks, and add/remove recipes from a cookbook independently of the recipe's own lifecycle (draft or published). A cookbook belongs to exactly one user; a single recipe can belong to any number of cookbooks. Deleting a cookbook never deletes the recipes in it, and deleting a recipe removes it from any cookbooks it belonged to without error.
+A cookbook is a per-user named collection of recipes: the owner's own recipes at any status, plus — as of **REW-100** — any other user's **published** recipe. Users can create, rename, and delete cookbooks, and add/remove recipes from a cookbook independently of the recipe's own lifecycle (draft or published). A cookbook belongs to exactly one user; a single recipe can belong to any number of cookbooks. Deleting a cookbook never deletes the recipes in it, and deleting a recipe removes it from any cookbooks it belonged to without error.
 
 Cookbooks are **private by default**, enforced at the database (RLS) layer rather than by hiding links in the UI. As of **REW-19**, an owner can additionally flip one cookbook at a time to **Public**, which makes it readable by anyone at `GET /c/:id` and discoverable in site search. Private remains the default for every new cookbook and for every cookbook that existed before migration 019.
 
@@ -94,13 +94,13 @@ Renders a checklist of all of the owner's own recipes (draft **and** published �
 Bulk-adds selected recipes to a cookbook.
 
 - `recipeIds` is normalized from the form body via `normalizeRecipeIdSelection()` (handles the single-value-vs-array quirk of `express.urlencoded`, dedupes, drops malformed/non-UUID values).
-- Explicit recipe-ownership check (`.eq("user_id", req.user.id).in("id", recipeIds)`) before insert — belt-and-suspenders alongside the RLS INSERT policy's own recipe-ownership check on `cookbook_recipes`. A user can only add their own recipes, even if application code were buggy.
+- Explicit recipe-ownership check (`.eq("user_id", req.user.id).in("id", recipeIds)`) before insert. This bulk picker is deliberately own-recipes-only, and since **REW-100** (migration `021`) that check is the *only* thing enforcing it: the `cookbook_recipes` INSERT policy now admits own-or-published, so RLS permits strictly more than this route does. Narrower-than-RLS is always safe, but the filter is load-bearing on its own and must not be removed on the assumption that RLS still covers it. The widened rule is reachable deliberately, via the JSON API below.
 - Uses `upsert(..., { onConflict: "cookbook_id,recipe_id", ignoreDuplicates: true })` so re-submitting an already-checked recipe (or a race between two tabs) doesn't error on the composite primary key.
 - If none of the selected recipe IDs are owned by the requester, no rows are inserted and a flash error is shown; otherwise redirects to the cookbook detail page with a count of recipes added.
 
 ### `POST /cookbooks/:id/recipes/:recipeId`
 
-Adds a **single** recipe to a cookbook. Backs the "Save to Cookbook(s)" widget on the recipe detail page (`views/recipes/view.ejs`) — see "Recipe view integration" below. Same ownership checks and idempotent upsert behavior as the bulk endpoint. Redirects back to `/recipes/:recipeId`.
+Adds a **single** recipe to a cookbook. Backs the "Save to Cookbook(s)" widget on the recipe detail page (`views/recipes/view.ejs`) — see "Recipe view integration" below. Same ownership checks and idempotent upsert behavior as the bulk endpoint, and likewise still **own-recipes-only** after REW-100: its only entry point is inside the `isOwner` branch of that view. Redirects back to `/recipes/:recipeId`.
 
 ### `POST /cookbooks/:id/recipes/:recipeId/remove`
 
@@ -120,7 +120,7 @@ form-based routes, which are unchanged.
 |--------|----------|-------------|
 | GET | `/api/cookbooks?recipeId=<uuid>` | List the caller's cookbooks (`id`, `title`) with a `containsRecipe` flag per cookbook |
 | POST | `/api/cookbooks` | Quick-create a cookbook (`{ title }`, same `validateCookbookTitle()` rules) |
-| POST | `/api/cookbooks/:id/recipes/:recipeId` | Add an owned recipe to an owned cookbook, duplicate-safe |
+| POST | `/api/cookbooks/:id/recipes/:recipeId` | Add a recipe to an **owned** cookbook — the caller's own recipe at any status, or anyone's published recipe (REW-100) — duplicate-safe |
 | DELETE | `/api/cookbooks/:id/recipes/:recipeId` | Remove the membership row only |
 
 - **Auth:** `requireApiAuth` on every route — JSON `401`, never a login redirect. There is no
@@ -130,17 +130,36 @@ form-based routes, which are unchanged.
   not CSRF-checked, by design, since it changes nothing.
 - **Rate limit:** a dedicated `cookbookApiLimiter`, 30 mutations/minute keyed on `req.user.id` —
   separate from `cookbookLimiter` on the form routes, mirroring `mealPlanApiLimiter`.
-- **Authorization:** identical rules to `POST /cookbooks/:id/recipes/:recipeId` — the cookbook must
-  be the caller's and so must the recipe. Owner-only is the correct rule for the My Recipes surface
-  this powers; widening to other users' Public recipes remains REW-59's call. Not-found and
-  not-owned return the same `404`.
+- **Authorization (REW-100):** the cookbook must be the caller's — unchanged, still an explicit
+  `.eq("user_id", req.user.id)` filter alongside RLS. The **recipe** rule is own-or-published: the
+  caller's own recipe at any status, or any user's `status = 'published'` recipe. Enforced twice and
+  independently — in the handler as an explicit JavaScript predicate on a lookup that selects
+  `id, user_id, status` and filters on `id` only, and at the database layer by migration `021`'s
+  `cookbook_recipes` INSERT policy. The handler check is written out rather than delegated to the
+  `recipes` SELECT policy on purpose, so the two layers keep failing independently and a future
+  widening of recipe visibility cannot silently widen this endpoint. Another user's **draft** recipe
+  is rejected at both layers. A non-owned cookbook, a nonexistent cookbook, a nonexistent recipe, a
+  failed lookup and another user's draft all keep their existing generic responses — the recipe
+  rejects are all `404 {"error":"Recipe not found"}` with no write, so the endpoint is not an
+  existence oracle for other users' recipe ids. There is deliberately no `403` and no
+  "this recipe is private" message. This is now **wider** than the form-based
+  `POST /cookbooks/:id/recipes/:recipeId`, which stays own-recipes-only.
+- **Deploy-ordering gate (REW-100):** migration `021` must be applied **before or together with**
+  the application deploy, never after it. The handler now accepts another user's published recipe
+  and hands it to the `cookbook_recipes` upsert, so if the application ships while `021` is
+  unapplied, `010`'s still-in-force `WITH CHECK` rejects the insert and the caller gets
+  `500 {"error":"Failed to add recipe to cookbook"}` where they previously got a clean
+  `404 {"error":"Recipe not found"}`. No write happens in either case.
+  **`021` has not been applied to any Supabase project — `020` is still the highest applied
+  migration.**
 - **Idempotency:** `upsert(..., { onConflict: "cookbook_id,recipe_id", ignoreDuplicates: true })`,
   so a double click is a no-op rather than a primary-key error.
 - **Client:** `views/partials/cookbook-modal.ejs` (included once in the layout, gated on `user`) and
   `public/js/cookbooks.js` (external file — CSP is `script-src 'self'`; fetches inherit the
   `x-csrf-token` header from the `main.js` wrapper; titles render via `textContent`).
 
-Covered by `src/routes/cookbookApiRoutes.test.js` (15 cases). See
+Covered by `src/routes/cookbookApiRoutes.test.js` (19 cases as of REW-100, which added the
+published-accept, draft-reject, handler-decides and migration-`021`-content cases). See
 [My Recipes Recipe Card](my-recipes-card.md) for the full contract and response table.
 **Branch-only: implemented and reviewed on `REW-86-standardize-my-recipes-card`, QA not run, not
 yet merged. REW-59 has its own cookbook JSON API on its branch — whoever merges second must
@@ -270,9 +289,9 @@ This is a page-render enrichment only (an EJS local), not a JSON response — no
 ## Security
 
 - **Auth:** Every `/cookbooks*` route requires `requireAuth`; unauthenticated requests redirect to login, consistent with `/recipes*`.
-- **Authorization:** Double-layered on every route, matching the existing `recipeRoutes.js` convention — RLS (`createSupabaseClient(req.accessToken)`, which runs queries as the authenticated user) **and** an explicit `.eq("user_id", req.user.id)` filter on cookbook reads/writes, plus an explicit recipe-ownership check before any insert into `cookbook_recipes`.
+- **Authorization:** Double-layered on every route, matching the existing `recipeRoutes.js` convention — RLS (`createSupabaseClient(req.accessToken)`, which runs queries as the authenticated user) **and** an explicit `.eq("user_id", req.user.id)` filter on cookbook reads/writes, plus an explicit recipe check before any insert into `cookbook_recipes` — ownership on the two form routes, own-or-published on the JSON API (REW-100).
 - **Privacy is structural, not just UI-level:** a Private cookbook has no RLS policy under which a non-owner can read it, so a direct request for another user's `/cookbooks/:id` (or a direct Supabase query as another authenticated user) returns nothing, regardless of route code. REW-19's additional SELECT policy is scoped strictly to `is_public = true` rows and changes nothing for Private cookbooks.
-- **"Add from own recipes only" is enforced at the database layer too:** `cookbook_recipes`'s INSERT RLS policy requires the inserting user to own *both* the target cookbook and the recipe being added — not just application-layer validation.
+- **Cookbook ownership on insert is enforced at the database layer too:** `cookbook_recipes`'s INSERT RLS policy requires the inserting user to own the target cookbook. **Recipe ownership is no longer part of that policy.** REW-100's migration `021` widened the recipe half to `(recipes.user_id = auth.uid() OR recipes.status = 'published')`, the same clause `meal_plan_recipes` has had since `012`, superseding migration `010`'s header claim that own-recipes-only is guaranteed in the database. Two things did **not** move, and are what keep this safe: the cookbook-ownership `EXISTS` is unchanged (a user still cannot insert into someone else's cookbook), and another user's **draft** recipe is still rejected by the policy. The two form routes above remain own-recipes-only by application check alone.
 - **Rate limiting:** 30 mutation requests/minute per user (`cookbookLimiter`), shared across create/rename/delete/bulk-add/single-add/remove.
 - **Input validation:** cookbook title is required, trimmed, and capped at 200 characters both in `cookbookUtils.validateCookbookTitle()` (unit-tested) and via a DB `CHECK` constraint. Route params (`:id`, `:recipeId`) are validated against a UUID pattern before querying. Recipe-ID selections from bulk-add forms are normalized/deduped/filtered via `cookbookUtils.normalizeRecipeIdSelection()` (also unit-tested).
 - **CSRF:** CSRF protection **is enforced** globally via `csrfProtectionExceptMultipart` in `src/app.js`; `POST` is not in `ignoredMethods` and `res.locals.csrfToken` is populated for every render. Every cookbook form, including the REW-19 visibility form, carries a real `_csrf` token and is rejected without one. (An earlier revision of this page stated CSRF was disabled repo-wide — that was correct when REW-62 shipped and is no longer true. Corrected 2026-09-14.) **`POST /cookbooks/:id/delete` additionally re-applies `csrfProtection` at the route level, ahead of `cookbookLimiter` (REW-105):** the global wrapper skips multipart bodies, and that handler reads no body fields, so it was forgeable cross-site until the route-level check was added. Placing CSRF before the limiter also means forged requests consume none of the victim's quota.
@@ -315,10 +334,11 @@ Suite result: **355 tests, 353 passing.** The 2 failures are pre-existing enviro
 
 - [API Overview](README.md)
 - [Cookbook Recipe Card](cookbook-card.md) — the standardized card on `/cookbooks/:id`, the shared partial's four-surface contract, and the widened read behind it (REW-88)
-- Plans: `docs/plans/rew-62-cookbooks.md`, `docs/plans/rew-19-cookbook-sharing.md`, `docs/plans/rew-88-standardize-cookbook-card.md`
+- Plans: `docs/plans/rew-62-cookbooks.md`, `docs/plans/rew-19-cookbook-sharing.md`, `docs/plans/rew-88-standardize-cookbook-card.md`, `docs/plans/rew-100-cookbook-add-published-recipe.md`
 - `database/README.md` — `cookbooks` / `cookbook_recipes` tables, the `search_cookbooks()` RPC, RLS policies, indexes
-- Release notes: `docs/RELEASE_NOTES_REW-62.md`, `docs/RELEASE_NOTES_REW-19.md`
+- Release notes: `docs/RELEASE_NOTES_REW-62.md`, `docs/RELEASE_NOTES_REW-19.md`, `docs/RELEASE_NOTES_REW-100.md`
 - Follow-up: [REW-91](https://wanderingnerds.atlassian.net/browse/REW-91) — cookbook-level cloning ("save this whole cookbook"), explicitly out of scope here
+- Follow-up: [REW-109](https://wanderingnerds.atlassian.net/browse/REW-109) — the `/cookbooks` recipe count ignores recipe visibility, so a recipe made Private after being added is still counted there while `/cookbooks/:id` no longer renders it. Accepted and documented by REW-100, not fixed
 
 ---
 
@@ -330,4 +350,5 @@ Suite result: **355 tests, 353 passing.** The 2 failures are pre-existing enviro
 | 2026-09-14 | REW-19 cookbook sharing: added `POST /cookbooks/:id/visibility`, the public `GET /c/:id` surface, the `GET /search` Cookbooks section, owner-facing share UI, and sharing-specific security notes. Corrected the stale "CSRF is disabled repo-wide" claim in Security — CSRF is enforced. Reviewer-approved; QA not run. |
 | 2026-09-15 | REW-86: added the `/api/cookbooks` JSON API section (list-with-membership, quick-create, duplicate-safe add, remove) backing the `+ Cookbook` card action, plus its modal/JS client. No change to any existing `/cookbooks*` route, and no migration. Reviewer-approved; QA not run; branch not merged. |
 | 2026-09-20 | REW-105: `POST /cookbooks/:id/delete` now runs `requireAuth` → route-level `csrfProtection` → `cookbookLimiter` → handler, closing the multipart CSRF bypass on a destructive route (the global wrapper skips multipart bodies and this handler reads none). CSRF is placed ahead of the limiter so forged requests burn no quota. No handler, ownership-filter, view, or schema change; pinned by `src/routes/cookbookDeleteRoutes.test.js`. |
+| 2026-09-23 | REW-100: cookbook membership is no longer own-recipes-only. Migration `021` widens the `cookbook_recipes` INSERT policy's recipe half to own-or-published (the cookbook-ownership half is unchanged), and `POST /api/cookbooks/:id/recipes/:recipeId` enforces the same rule with an explicit in-handler predicate on a lookup filtered by `id` alone. Response shapes, middleware order, the upsert and every generic 404 are unchanged; another user's Private recipe is still rejected at both layers. The two form-based add routes deliberately stay own-recipes-only, so their ownership filters are now application-layer only. Reviewer-approved over two rounds; **QA was not run and `021` is unapplied** — see the deploy-ordering gate in the JSON API section. |
 | 2026-09-15 | REW-88: `GET /cookbooks/:id` now renders the shared standardized recipe card. Documented the widened `getCookbookRecipes` select, the flattened categories/tags, the exported `handleCookbookView` and its batched `isLiked` query, and noted that the per-recipe status pill moved into the shared partial and is now owner-only. No new route, no migration. Reviewer-approved; **QA deliberately skipped**; branch unmerged. |

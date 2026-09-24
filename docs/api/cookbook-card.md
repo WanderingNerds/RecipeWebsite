@@ -2,8 +2,9 @@
 
 **Feature:** REW-88 — Standardize Cookbook Recipe Card Content & Actions
 **Component:** `views/partials/recipe-summary-card.ejs`, `views/cookbooks/view.ejs`, `src/routes/cookbookRoutes.js`
-**Last Updated:** 2026-09-15
+**Last Updated:** 2026-09-23
 **Status:** implemented and reviewer-approved on branch `REW-88-standardize-cookbook-recipe-card`. **QA was deliberately skipped on this run**, and the branch is unmerged and unpushed.
+**REW-100 update (2026-09-23):** this page also records what [REW-100](https://wanderingnerds.atlassian.net/browse/REW-100) changed about this surface — the disabled heart's label, and the fact that a cookbook is now a genuinely mixed-ownership collection. That change was reviewer-approved over two rounds; **QA did not run**, migration `021` is **not applied anywhere**, and as of 2026-09-23 it is committed on branch `REW-100-add-published-recipe-to-cookbook` only (not pushed, no PR, not merged — a point-in-time statement, so re-check the branch rather than trusting this line later). See `docs/RELEASE_NOTES_REW-100.md`.
 
 ---
 
@@ -218,10 +219,12 @@ cookbook holds. No N+1.
 - **Remove was carried into the shared card rather than left beside it.** It is the only way to get
   a recipe out of a cookbook, and the ticket's last acceptance criterion asks for consistent
   formatting "while preserving these page-specific actions."
-- **Ownership is computed per card even though it is uniform today.** The `cookbook_recipes` INSERT
-  policy (migration `010`) still enforces own-recipes-only, so every recipe in a cookbook currently
-  belongs to the cookbook owner. REW-100 changes that; computing `isOwner` per card now means
-  REW-100 needs no view change at all.
+- **Ownership is computed per card, which is what made REW-100 cheap.** When REW-88 shipped, the
+  `cookbook_recipes` INSERT policy (migration `010`) enforced own-recipes-only, so every recipe in a
+  cookbook belonged to the cookbook owner and per-card `isOwner` was future-proofing. **That is no
+  longer true:** REW-100's migration `021` widened the policy to own-or-published, so a cookbook is
+  a genuinely mixed-ownership collection and a non-owned card is a normal case. Because ownership
+  was already per-card, REW-100 needed no structural view change — only one fix, below.
 - **Chips are static text, not links.** `/recipes?category=` filters *your own* recipes, so
   following one from a cookbook entry — especially a post-REW-100 non-owned one — would land on an
   unrelated, often empty list.
@@ -278,12 +281,18 @@ keyboard reachability and focus visibility, and the crafted cross-user POST chec
   should-fix precisely because QA was skipped.
 - **The owner-only status pill needs product sign-off**, since it is not in the ticket's
   acceptance-criteria list.
-- **The disabled heart's label is a status claim.** A non-owner viewing a `draft` recipe would get
-  a heart labelled "Make this recipe Public to add it to favorites", which contradicts the rule
-  that a non-owner is never shown a status claim about someone else's recipe. Unreachable today
-  (`cookbook_recipes` RLS is own-recipes-only and the page is cookbook-owner gated) but reachable
-  under [REW-100](https://wanderingnerds.atlassian.net/browse/REW-100); the reviewer recommended
-  gating that branch on `isOwner` and folding the fix into REW-100.
+- **The disabled heart's label was a status claim — FIXED in REW-100.** A non-owner viewing a
+  `draft` recipe used to get a heart labelled "Make this recipe Public to add it to favorites",
+  which contradicts the rule that a non-owner is never shown a status claim about someone else's
+  recipe. [REW-100](https://wanderingnerds.atlassian.net/browse/REW-100) gated that branch on
+  `isOwner` as the reviewer recommended: the owner keeps the actionable explanation, and everyone
+  else gets the same `disabled` heart with neutral, status-free copy in both `aria-label` and
+  `title` — "Favorites are unavailable for this recipe". The heart is still rendered rather than
+  hidden, so the header row keeps its shape across a grid. Note this remains **defence in depth**
+  rather than a reachable UI state even after REW-100: another user's draft row is invisible under
+  migration `001`'s SELECT policy, `getCookbookRecipes` drops junction rows whose embedded recipe
+  came back null, and `/recipes/liked` filters on `status = 'published'`. Pinned by a render case in
+  `src/views/recipeCard.test.js`.
 - [REW-102](https://wanderingnerds.atlassian.net/browse/REW-102) — route-level `csrfProtection` on
   `POST /recipes/:id/delete`, deliberately out of scope for a card-layout ticket. **Addressed by
   [REW-101](https://wanderingnerds.atlassian.net/browse/REW-101)** (branch
@@ -310,5 +319,5 @@ keyboard reachability and focus visibility, and the crafted cross-user POST chec
 - [My Recipes Recipe Card](my-recipes-card.md) — the REW-86 owner surface of the same partial
 - [Browse Recipes](browse-recipes.md) — the public surface of the same partial
 - [Recipe Likes API](recipe-likes.md) — the favorite heart and its published-only restriction
-- Plan: `docs/plans/rew-88-standardize-cookbook-card.md`
-- Release notes: `docs/RELEASE_NOTES_REW-88.md`
+- Plans: `docs/plans/rew-88-standardize-cookbook-card.md`, `docs/plans/rew-100-cookbook-add-published-recipe.md`
+- Release notes: `docs/RELEASE_NOTES_REW-88.md`, `docs/RELEASE_NOTES_REW-100.md`
